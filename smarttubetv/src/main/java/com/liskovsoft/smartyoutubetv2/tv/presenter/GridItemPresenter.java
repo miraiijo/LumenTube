@@ -2,19 +2,18 @@ package com.liskovsoft.smartyoutubetv2.tv.presenter;
 
 import android.content.res.Resources;
 import android.graphics.Color;
-import androidx.leanback.widget.Presenter;
-import androidx.core.content.ContextCompat;
 import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.TextView;
-
+import androidx.core.content.ContextCompat;
+import androidx.fragment.app.Fragment;
+import androidx.leanback.widget.Presenter;
 import com.liskovsoft.smartyoutubetv2.tv.R;
-import com.liskovsoft.smartyoutubetv2.tv.ui.browse.BrowseFragment;
 
 public class GridItemPresenter extends Presenter {
-    private final BrowseFragment mainFragment;
+    private final Fragment mainFragment;
 
-    public GridItemPresenter(BrowseFragment mainFragment) {
+    public GridItemPresenter(Fragment mainFragment) {
         this.mainFragment = mainFragment;
     }
 
