@@ -28,6 +28,7 @@ public class ChannelFragment extends MultipleRowsFragment implements ChannelView
     public void onActivityCreated(@Nullable Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
 
+        // Don't move to onCreateView
         mProgressBarManager.setRootView((ViewGroup) getActivity().findViewById(android.R.id.content).getRootView());
 
         mChannelPresenter.onInitDone();
