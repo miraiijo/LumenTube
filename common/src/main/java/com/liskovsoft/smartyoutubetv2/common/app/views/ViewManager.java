@@ -11,9 +11,9 @@ import androidx.annotation.NonNull;
 import com.liskovsoft.sharedutils.helpers.FileHelpers;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
+import com.liskovsoft.smartyoutubetv2.common.misc.MotherActivity;
 import com.liskovsoft.smartyoutubetv2.common.prefs.AppPrefs;
 import com.liskovsoft.youtubeapi.service.YouTubeMediaService;
-import com.liskovsoft.smartyoutubetv2.common.misc.MotherActivity;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,7 +26,7 @@ public class ViewManager {
     private final Context mContext;
     private final Map<Class<?>, Class<? extends Activity>> mViewMapping;
     private final Map<Class<? extends Activity>, Class<? extends Activity>> mParentMapping;
-    private final Stack<Activity> mActivityStack;
+    private final Stack<Class<?>> mActivityStack;
     private final AppPrefs mPrefs;
     private Class<?> mRootActivity;
     private Class<?> mDefaultTop;
@@ -67,7 +67,7 @@ public class ViewManager {
     public void unregister(Class<?> viewClass) {
         mViewMapping.remove(viewClass);
     }
-
+    
     public void startView(Class<?> viewClass) {
         startView(viewClass, false);
     }
@@ -96,9 +96,7 @@ public class ViewManager {
         if (activity.getIntent() != null) {
             removeTopActivity();
 
-            Activity topActivity = getTopActivity();
-
-            Class<?> parentActivity = topActivity != null ? topActivity.getClass() : null;
+            Class<?> parentActivity = getTopActivity();
 
             if (parentActivity == null && !mIsSinglePlayerMode) {
                 parentActivity = getDefaultParent(activity);
@@ -144,7 +142,7 @@ public class ViewManager {
         if (mDefaultTop != null) {
             lastActivity = mDefaultTop;
         } else if (!mActivityStack.isEmpty()) {
-            lastActivity = mActivityStack.peek().getClass();
+            lastActivity = mActivityStack.peek();
         } else {
             lastActivity = mRootActivity;
         }
@@ -179,9 +177,11 @@ public class ViewManager {
             return false;
         }
 
+        Class<?> activityClass = activity.getClass();
+
         // reorder activity
-        mActivityStack.remove(activity);
-        mActivityStack.push(activity);
+        mActivityStack.remove(activityClass);
+        mActivityStack.push(activityClass);
 
         return true;
     }
@@ -192,8 +192,8 @@ public class ViewManager {
         }
     }
 
-    private Activity getTopActivity() {
-        Activity result = null;
+    private Class<?> getTopActivity() {
+        Class<?> result = null;
 
         if (!mActivityStack.isEmpty()) {
             result = mActivityStack.peek();
@@ -242,6 +242,14 @@ public class ViewManager {
     }
 
     public void restartApp() {
+        //startView(SplashView.class);
+        //
+        //mMoveViewsToBack = true;
+        //
+        //persistState();
+        //
+        //System.exit(0);
+
         persistState();
 
         triggerRebirth3(mContext, mViewMapping.get(SplashView.class));
