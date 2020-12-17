@@ -11,7 +11,7 @@ import com.liskovsoft.smartyoutubetv2.tv.R;
  */
 public class ChannelAction extends Action {
     public ChannelAction(Context context) {
-        super(R.id.action_channel);
+        super(R.id.action_video_zoom);
         Drawable uncoloredDrawable = ContextCompat.getDrawable(context, R.drawable.action_channel);
 
         setIcon(uncoloredDrawable);
