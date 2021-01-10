@@ -42,8 +42,6 @@ public class PlayerSettingsPresenter extends BasePresenter<Void> {
         appendAutoFrameRateCategory(settingsPresenter);
         appendAutoFrameRatePauseCategory(settingsPresenter);
         appendVideoZoomCategory(settingsPresenter);
-        appendSubtitleLanguageCategory(settingsPresenter);
-        appendSubtitleStyleCategory(settingsPresenter);
         appendOKButtonCategory(settingsPresenter);
         appendUIAutoHideCategory(settingsPresenter);
         appendSeekingPreviewCategory(settingsPresenter);
