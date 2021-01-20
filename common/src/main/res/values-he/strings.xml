@@ -1,3 +1,7 @@
+<!-- 
+For hebrew, in particular, on some devices values-he is recognized. in some others it's values-iw.
+So, make a copy of values-he and name it values-iw. Keep both in your structure. 
+-->
 <resources>
     <string name="header_home">בית</string>
     <string name="title_search">חיפוש</string>
