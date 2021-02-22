@@ -3,7 +3,7 @@ package com.liskovsoft.smartyoutubetv2.common.exoplayer.selector;
 import com.google.android.exoplayer2.Format;
 
 public class TrackInfoFormatter {
-    public static String formatQualityLabel(Format format) {
+    public static String formatQualityLabel(Format format, float speed) {
         if (format == null) {
             return "none";
         }
@@ -34,7 +34,13 @@ public class TrackInfoFormatter {
             hdrStr = separator + "HDR";
         }
 
-        qualityString = String.format("%s%s%s%s", resolution, fps, codec, hdrStr);
+        String speedStr = "";
+
+        if (speed != 1.0f) {
+            speedStr = separator + speed + "x";
+        }
+
+        qualityString = String.format("%s%s%s%s%s", resolution, fps, codec, hdrStr, speedStr);
 
         return qualityString;
     }
