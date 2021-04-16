@@ -17,13 +17,9 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.browse.video.MultiVideoGridFragment;
 import com.liskovsoft.smartyoutubetv2.tv.ui.browse.video.VideoGridFragment;
 import com.liskovsoft.smartyoutubetv2.tv.ui.browse.video.VideoRowsFragment;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class CategoryFragmentFactory extends BrowseSupportFragment.FragmentFactory<Fragment> {
     private static final String TAG = CategoryFragmentFactory.class.getSimpleName();
     private final OnHeaderViewSelectedListener mViewSelectedListener;
-    private final List<VideoGroup> mCachedData;
     private Fragment mCurrentFragment;
     private int mFragmentType = Category.TYPE_GRID;
     private int mSelectedItemIndex = -1;
@@ -34,7 +30,6 @@ public class CategoryFragmentFactory extends BrowseSupportFragment.FragmentFacto
 
     public CategoryFragmentFactory(OnHeaderViewSelectedListener viewSelectedListener) {
         mViewSelectedListener = viewSelectedListener;
-        mCachedData = new ArrayList<>();
     }
 
     /**
@@ -76,8 +71,7 @@ public class CategoryFragmentFactory extends BrowseSupportFragment.FragmentFacto
             if (mViewSelectedListener != null) {
                 mViewSelectedListener.onHeaderSelected(null, row);
             }
-
-            updateCurrentFragmentFromCache();
+            
             setCurrentFragmentItemIndex(mSelectedItemIndex);
 
             return fragment;
@@ -113,14 +107,10 @@ public class CategoryFragmentFactory extends BrowseSupportFragment.FragmentFacto
             return;
         }
 
-        mCachedData.add(group);
-
         updateVideoFragment(mCurrentFragment, group);
     }
 
     public void clearCurrentFragment() {
-        mCachedData.clear();
-
         if (mCurrentFragment != null) {
             clearFragment(mCurrentFragment);
         }
@@ -160,16 +150,6 @@ public class CategoryFragmentFactory extends BrowseSupportFragment.FragmentFacto
             ((VideoCategoryFragment) fragment).update(group);
         } else {
             Log.e(TAG, "updateFragment: Page group fragment has incompatible type: " + fragment.getClass().getSimpleName());
-        }
-    }
-
-    private void updateCurrentFragmentFromCache() {
-        if (mCurrentFragment == null) {
-            return;
-        }
-
-        for (VideoGroup group : mCachedData) {
-            updateVideoFragment(mCurrentFragment, group);
         }
     }
 
