@@ -20,6 +20,12 @@ public class CustomHeadersSupportFragment extends HeadersSupportFragment {
         Helpers.setField(this, "mAdapterListener", mCustomAdapterListener);
     }
 
+    void updateAdapter() {
+        ItemBridgeAdapter adapter = getBridgeAdapter();
+        adapter.setAdapterListener(mCustomAdapterListener);
+        adapter.setWrapper(mCustomWrapper);
+    }
+
     private final ItemBridgeAdapter.AdapterListener mCustomAdapterListener =
             new ItemBridgeAdapter.AdapterListener() {
                 @Override
