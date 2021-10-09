@@ -1,9 +1,7 @@
 package com.liskovsoft.smartyoutubetv2.common.misc;
 
 import android.app.Notification;
-import android.app.NotificationManager;
 import android.app.Service;
-import android.content.Context;
 import android.content.Intent;
 import android.os.Build.VERSION;
 import android.os.IBinder;
@@ -33,7 +31,8 @@ public class RemoteControlService extends Service {
 
         // https://stackoverflow.com/questions/46445265/android-8-0-java-lang-illegalstateexception-not-allowed-to-start-service-inten
         if (VERSION.SDK_INT >= 26) {
-            Utils.cancelNotification(getApplicationContext(), NOTIFICATION_ID);
+            // NOTE: it's impossible to hide notification on Android 9 and above
+            // https://stackoverflow.com/questions/10962418/how-to-startforeground-without-showing-notification
             startForeground(NOTIFICATION_ID, createNotification());
         }
     }
@@ -45,11 +44,6 @@ public class RemoteControlService extends Service {
         PlaybackPresenter.instance(getApplicationContext()); // init RemoteControlListener
 
         return START_STICKY;
-    }
-
-    private void showNotification() {
-        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        notificationManager.notify(NOTIFICATION_ID, createNotification());
     }
 
     private Notification createNotification() {
