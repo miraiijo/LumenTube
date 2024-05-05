@@ -14,18 +14,17 @@ import io.reactivex.disposables.Disposable;
 
 public class SignInPresenter extends BasePresenter<SignInView> {
     private static final String TAG = SignInPresenter.class.getSimpleName();
+    //private static final String SIGN_IN_URL_SHORT = "https://yt.be/activate"; // doesn't support query params, no search history
+    //private static final String SIGN_IN_URL_FULL = "https://youtube.com/tv/activate"; // support query params, no search history
+    private static final String SIGN_IN_URL = "https://youtube.com/activate"; // supports search history
     @SuppressLint("StaticFieldLeak")
     private static SignInPresenter sInstance;
     private final MotherService mService;
-    private final BrowsePresenter mBrowsePresenter;
-    private final SplashPresenter mSplashPresenter;
     private Disposable mSignInAction;
 
     private SignInPresenter(Context context) {
         super(context);
         mService = YouTubeMotherService.instance();
-        mBrowsePresenter = BrowsePresenter.instance(context);
-        mSplashPresenter = SplashPresenter.instance(context);
     }
 
     public static SignInPresenter instance(Context context) {
@@ -64,7 +63,7 @@ public class SignInPresenter extends BasePresenter<SignInView> {
     private void updateUserCode() {
         mSignInAction = mService.getSignInService().signInObserve()
                 .subscribe(
-                        userCode -> getView().showCode(userCode),
+                        userCode -> getView().showCode(userCode, SIGN_IN_URL),
                         error -> Log.e(TAG, "Sign in error: %s", error.getMessage()),
                         () -> {
                             // Success
@@ -73,13 +72,6 @@ public class SignInPresenter extends BasePresenter<SignInView> {
                             }
 
                             AccountSelectionPresenter.instance(getContext()).show(true);
-
-                            //mBrowsePresenter.refresh();
-                            //mSplashPresenter.updateChannels();
-                            //
-                            //// Account history might be turned off (common issue).
-                            //GeneralData.instance(getContext()).enableHistory(true);
-                            //MediaServiceManager.instance().enableHistory(true);
                         }
                  );
     }
