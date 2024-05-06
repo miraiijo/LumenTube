@@ -6,13 +6,10 @@ import android.content.Context;
 import com.liskovsoft.googleapi.service.GoogleSignInService;
 import com.liskovsoft.sharedutils.mylogger.Log;
 import com.liskovsoft.sharedutils.rx.RxHelper;
-import com.liskovsoft.smartyoutubetv2.common.app.presenters.base.BasePresenter;
-import com.liskovsoft.smartyoutubetv2.common.app.views.SignInView;
-import com.liskovsoft.smartyoutubetv2.common.app.views.ViewManager;
 
 import io.reactivex.disposables.Disposable;
 
-public class GoogleSignInPresenter extends BasePresenter<SignInView> {
+public class GoogleSignInPresenter extends SignInPresenter {
     private static final String TAG = GoogleSignInPresenter.class.getSimpleName();
     @SuppressLint("StaticFieldLeak")
     private static GoogleSignInPresenter sInstance;
@@ -48,10 +45,12 @@ public class GoogleSignInPresenter extends BasePresenter<SignInView> {
 
     @Override
     public void onViewInitialized() {
+        super.onViewInitialized();
         RxHelper.disposeActions(mSignInAction);
         updateUserCode();
     }
 
+    @Override
     public void onActionClicked() {
         if (getView() != null) {
             getView().close();
@@ -76,13 +75,15 @@ public class GoogleSignInPresenter extends BasePresenter<SignInView> {
                  );
     }
 
+    @Override
     public void start() {
-        start(null);
+        super.start();
+        RxHelper.disposeActions(mSignInAction);
     }
 
     public void start(Runnable onSuccess) {
+        super.start();
         mCallback = onSuccess;
         RxHelper.disposeActions(mSignInAction);
-        ViewManager.instance(getContext()).startView(SignInView.class);
     }
 }
