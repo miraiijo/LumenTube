@@ -28,7 +28,6 @@ public class UpdateChannelsWorker extends Worker {
     private static final String TAG = UpdateChannelsWorker.class.getSimpleName();
     private static final String WORK_NAME = "Update channels";
     private final UpdateChannelsTask mTask;
-    private static long mPreviousRunTimeMS;
 
     public UpdateChannelsWorker(@NonNull Context context, @NonNull WorkerParameters workerParams) {
         super(context, workerParams);
@@ -50,7 +49,7 @@ public class UpdateChannelsWorker extends Worker {
     }
 
     public static void cancel(Context context) {
-        if (VERSION.SDK_INT >= 23 && GlobalPreferences.instance(context).isChannelsServiceEnabled()) {
+        if (VERSION.SDK_INT >= 23) {
             Log.d(TAG, "Unregistering Channels update job...");
 
             WorkManager workManager = WorkManager.getInstance(context);
