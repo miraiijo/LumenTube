@@ -15,32 +15,53 @@ import com.google.android.exoplayer2.source.sabr.manifest.SegmentBase.SingleSegm
 import com.google.android.exoplayer2.util.MimeTypes;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaFormat;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo;
+import com.liskovsoft.mediaserviceinterfaces.data.MediaSubtitle;
 import com.liskovsoft.sharedutils.helpers.Helpers;
+import com.liskovsoft.sharedutils.mylogger.Log;
+import com.liskovsoft.youtubeapi.formatbuilders.mpdbuilder.MediaFormatComparator;
 import com.liskovsoft.youtubeapi.formatbuilders.utils.ITagUtils;
 import com.liskovsoft.youtubeapi.formatbuilders.utils.MediaFormatUtils;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 public class SabrManifestParser {
+    private static final String TAG = SabrManifestParser.class.getSimpleName();
     private int mId;
     private static final String NULL_INDEX_RANGE = "0-0";
     private static final String NULL_CONTENT_LENGTH = "0";
     private static final int MAX_DURATION_SEC = 48 * 60 * 60;
     private MediaItemFormatInfo mFormatInfo;
+    private Set<MediaFormat> mMP4Videos;
+    private Set<MediaFormat> mWEBMVideos;
+    private Map<String, Set<MediaFormat>> mMP4Audios;
+    private Map<String, Set<MediaFormat>> mWEBMAudios;
+    private List<MediaSubtitle> mSubs;
 
     public SabrManifest parse(@NonNull MediaItemFormatInfo formatInfo) {
         mFormatInfo = formatInfo;
+        MediaFormatComparator comp = new MediaFormatComparator();
+        mMP4Videos = new TreeSet<>(comp);
+        mWEBMVideos = new TreeSet<>(comp);
+        mMP4Audios = new HashMap<>();
+        mWEBMAudios = new HashMap<>();
+        mSubs = new ArrayList<>();
         return parseSabrManifest(formatInfo);
     }
 
     private SabrManifest parseSabrManifest(MediaItemFormatInfo formatInfo) {
-        long availabilityStartTime = formatInfo.getStartTimeMs();
+        long availabilityStartTime = C.TIME_UNSET;
         long durationMs = getDurationMs(formatInfo);
-        long minBufferTimeMs = C.TIME_UNSET;
+        long minBufferTimeMs = 1500; // "PT1.500S"
         long timeShiftBufferDepthMs = C.TIME_UNSET;
         long suggestedPresentationDelayMs = C.TIME_UNSET;
-        long publishTimeMs = formatInfo.getStartTimeMs();
+        long publishTimeMs = C.TIME_UNSET;
+        boolean dynamic = false;
+        long minUpdateTimeMs = 3155690800000L; // "P100Y" no refresh (there is no dash url)
 
         List<Period> periods = new ArrayList<>();
         long nextPeriodStartMs = 0;
@@ -55,6 +76,8 @@ public class SabrManifestParser {
                 availabilityStartTime,
                 durationMs,
                 minBufferTimeMs,
+                dynamic,
+                minUpdateTimeMs,
                 timeShiftBufferDepthMs,
                 suggestedPresentationDelayMs,
                 publishTimeMs,
@@ -63,7 +86,7 @@ public class SabrManifestParser {
 
     private static long getDurationMs(MediaItemFormatInfo formatInfo) {
         long lenSeconds = Helpers.parseLong(formatInfo.getLengthSeconds());
-        return lenSeconds != -1 ? lenSeconds * 1_000 : C.TIME_UNSET;
+        return lenSeconds > 0 ? lenSeconds * 1_000 : C.TIME_UNSET;
     }
 
     private Pair<Period, Long> parsePeriod(MediaItemFormatInfo formatInfo, long nextPeriodStartMs) {
@@ -73,59 +96,74 @@ public class SabrManifestParser {
         List<AdaptationSet> adaptationSets = new ArrayList<>();
 
         for (MediaFormat format : formatInfo.getAdaptiveFormats()) {
-            adaptationSets.add(parseAdaptationSet(format));
+            append(format);
+        }
+
+        if (formatInfo.getSubtitles() != null) {
+            append(formatInfo.getSubtitles());
+        }
+
+        // MXPlayer fix: write high quality formats first
+        if (!mMP4Videos.isEmpty()) {
+            adaptationSets.add(parseAdaptationSet(mMP4Videos, C.TRACK_TYPE_VIDEO));
+        }
+        if (!mWEBMVideos.isEmpty()) {
+            adaptationSets.add(parseAdaptationSet(mWEBMVideos, C.TRACK_TYPE_VIDEO));
+        }
+
+        for (Set<MediaFormat> formats : mMP4Audios.values()) {
+            adaptationSets.add(parseAdaptationSet(formats, C.TRACK_TYPE_AUDIO));
+        }
+
+        for (Set<MediaFormat> formats : mWEBMAudios.values()) {
+            adaptationSets.add(parseAdaptationSet(formats, C.TRACK_TYPE_AUDIO));
+        }
+
+        if (!mSubs.isEmpty()) {
+            adaptationSets.add(parseAdaptationSet(mSubs));
         }
 
         return Pair.create(new Period(id, startMs, adaptationSets), durationMs);
     }
 
-    private AdaptationSet parseAdaptationSet(MediaFormat format) {
+    private AdaptationSet parseAdaptationSet(List<MediaSubtitle> formats) {
+        int contentType = C.TRACK_TYPE_TEXT;
         int id = mId++;
-        int contentType = C.TRACK_TYPE_UNKNOWN;
-        String mimeType = MediaFormatUtils.extractMimeType(format);
-        String codecs = MediaFormatUtils.extractCodecs(format);
-        int width = format.getWidth();
-        int height = format.getHeight();
-        float frameRate = Helpers.parseFloat(format.getFps(), Format.NO_VALUE);
-        int audioChannels = Format.NO_VALUE;
-        int audioSamplingRate = Helpers.parseInt(ITagUtils.getAudioRateByTag(format.getITag()), Format.NO_VALUE);
-        int bandwidth = Helpers.parseInt(format.getBitrate(), Format.NO_VALUE);
-        String language = format.getLanguage();
         String label = null;
         String drmSchemeType = null;
         ArrayList<SchemeData> drmSchemeDatas = new ArrayList<>();
         List<RepresentationInfo> representationInfos = new ArrayList<>();
 
-        String baseUrl = format.getUrl();
-
-        SegmentBase segmentBase = null;
-
-        if (MediaFormatUtils.isLiveMedia(format)) {
-            segmentBase = parseSegmentTemplate(format);
-        } else if (format.getSegmentUrlList() != null) {
-            segmentBase = parseSegmentList(format);
-        } else if (format.getIndex() != null &&
-                !format.getIndex().equals(NULL_INDEX_RANGE)) { // json format fix: index is null
-            segmentBase = parseSegmentBase(format);
+        for (MediaSubtitle format : formats) {
+            RepresentationInfo representationInfo = parseRepresentation(format);
+            representationInfos.add(representationInfo);
         }
 
-        segmentBase = segmentBase != null ? segmentBase : new SingleSegmentBase();
+        // Build the representations.
+        List<Representation> representations = new ArrayList<>(representationInfos.size());
+        for (int i = 0; i < representationInfos.size(); i++) {
+            representations.add(
+                    buildRepresentation(
+                            representationInfos.get(i),
+                            label,
+                            drmSchemeType,
+                            drmSchemeDatas));
+        }
 
-        RepresentationInfo representationInfo =
-                parseRepresentation(
-                        id,
-                        bandwidth,
-                        baseUrl,
-                        mimeType,
-                        codecs,
-                        width,
-                        height,
-                        frameRate,
-                        audioChannels,
-                        audioSamplingRate,
-                        language,
-                        segmentBase);
-        representationInfos.add(representationInfo);
+        return new AdaptationSet(id, contentType, representations);
+    }
+
+    private AdaptationSet parseAdaptationSet(Set<MediaFormat> formats, int contentType) {
+        int id = mId++;
+        String label = null;
+        String drmSchemeType = null;
+        ArrayList<SchemeData> drmSchemeDatas = new ArrayList<>();
+        List<RepresentationInfo> representationInfos = new ArrayList<>();
+
+        for (MediaFormat format : formats) {
+            RepresentationInfo representationInfo = parseRepresentation(format);
+            representationInfos.add(representationInfo);
+        }
 
         // Build the representations.
         List<Representation> representations = new ArrayList<>(representationInfos.size());
@@ -177,7 +215,8 @@ public class SabrManifestParser {
         long startNumber = mFormatInfo.getStartSegmentNum();
         long endNumber = C.INDEX_UNSET;
         UrlTemplate mediaTemplate = UrlTemplate.compile(format.getUrl() + "&sq=$Number$");
-        UrlTemplate initializationTemplate = UrlTemplate.compile(format.getOtfInitUrl()); // ?
+        //UrlTemplate initializationTemplate = UrlTemplate.compile(format.getOtfInitUrl()); // ?
+        UrlTemplate initializationTemplate = null; // ?
 
         RangedUri initialization = parseRangedUrl(format.getSourceUrl(), format.getInit());
 
@@ -296,25 +335,25 @@ public class SabrManifestParser {
                 indexLength);
     }
 
-    private RepresentationInfo parseRepresentation(
-            int id,
-            int bandwidth,
-            String baseUrl,
-            String mimeType,
-            String codecs,
-            int width,
-            int height,
-            float frameRate,
-            int audioChannels,
-            int audioSamplingRate,
-            String language,
-            SegmentBase segmentBase) {
+    private RepresentationInfo parseRepresentation(MediaFormat mediaFormat) {
+        String id = mediaFormat.isDrc() ? mediaFormat.getITag() + "-drc" : mediaFormat.getITag();
+        int bandwidth = Helpers.parseInt(mediaFormat.getBitrate(), Format.NO_VALUE);
+        String mimeType = MediaFormatUtils.extractMimeType(mediaFormat);
+        String codecs = MediaFormatUtils.extractCodecs(mediaFormat);
+        int width = mediaFormat.getWidth();
+        int height = mediaFormat.getHeight();
+        float frameRate = Helpers.parseFloat(mediaFormat.getFps(), Format.NO_VALUE);
+        int audioChannels = Format.NO_VALUE;
+        int audioSamplingRate = Helpers.parseInt(ITagUtils.getAudioRateByTag(mediaFormat.getITag()), Format.NO_VALUE);
+        String language = mediaFormat.getLanguage();
+        String baseUrl = mediaFormat.getUrl();
+        String label = null;
         String drmSchemeType = null;
         ArrayList<SchemeData> drmSchemeDatas = new ArrayList<>();
 
         Format format =
                 buildFormat(
-                        String.valueOf(id),
+                        id,
                         mimeType,
                         width,
                         height,
@@ -324,6 +363,53 @@ public class SabrManifestParser {
                         bandwidth,
                         language,
                         codecs);
+
+        SegmentBase segmentBase = null;
+
+        if (MediaFormatUtils.isLiveMedia(mediaFormat)) {
+            segmentBase = parseSegmentTemplate(mediaFormat);
+        } else if (mediaFormat.getSegmentUrlList() != null) {
+            segmentBase = parseSegmentList(mediaFormat);
+        } else if (mediaFormat.getIndex() != null &&
+                !mediaFormat.getIndex().equals(NULL_INDEX_RANGE)) { // json mediaFormat fix: index is null
+            segmentBase = parseSegmentBase(mediaFormat);
+        }
+
+        segmentBase = segmentBase != null ? segmentBase : new SingleSegmentBase();
+
+        return new RepresentationInfo(format, baseUrl, segmentBase, drmSchemeType, drmSchemeDatas, Representation.REVISION_ID_DEFAULT);
+    }
+
+    private RepresentationInfo parseRepresentation(MediaSubtitle sub) {
+        String id = String.valueOf(mId++);
+        int bandwidth = 268;
+        String mimeType = sub.getMimeType();
+        String codecs = sub.getCodecs();
+        int width = Format.NO_VALUE;
+        int height = Format.NO_VALUE;
+        float frameRate = Format.NO_VALUE;
+        int audioChannels = Format.NO_VALUE;
+        int audioSamplingRate = Format.NO_VALUE;
+        String language = sub.getName() == null ? sub.getLanguageCode() : sub.getName();
+        String baseUrl = sub.getBaseUrl();
+        String label = null;
+        String drmSchemeType = null;
+        ArrayList<SchemeData> drmSchemeDatas = new ArrayList<>();
+
+        Format format =
+                buildFormat(
+                        id,
+                        mimeType,
+                        width,
+                        height,
+                        frameRate,
+                        audioChannels,
+                        audioSamplingRate,
+                        bandwidth,
+                        language,
+                        codecs);
+
+        SegmentBase segmentBase = new SingleSegmentBase();
 
         return new RepresentationInfo(format, baseUrl, segmentBase, drmSchemeType, drmSchemeDatas, Representation.REVISION_ID_DEFAULT);
     }
@@ -490,6 +576,74 @@ public class SabrManifestParser {
                 }
             }
         }
+    }
+
+    private void append(List<MediaSubtitle> subs) {
+        mSubs.addAll(subs);
+    }
+
+    private void append(MediaSubtitle sub) {
+        mSubs.add(sub);
+    }
+
+    private void append(MediaFormat mediaItem) {
+        if (!MediaFormatUtils.checkMediaUrl(mediaItem)) {
+            Log.e(TAG, "Media item doesn't contain required url field!");
+            return;
+        }
+
+        // NOTE: FORMAT_STREAM_TYPE_OTF not supported
+        if (!MediaFormatUtils.isDash(mediaItem)) {
+            return;
+        }
+
+        //fixOTF(mediaItem);
+
+        Set<MediaFormat> placeholder = null;
+        String mimeType = MediaFormatUtils.extractMimeType(mediaItem);
+        if (mimeType != null) {
+            switch (mimeType) {
+                case MediaFormatUtils.MIME_MP4_VIDEO:
+                    placeholder = mMP4Videos;
+                    break;
+                case MediaFormatUtils.MIME_WEBM_VIDEO:
+                    placeholder = mWEBMVideos;
+                    break;
+                case MediaFormatUtils.MIME_MP4_AUDIO:
+                    placeholder = getMP4Audios(mediaItem.getLanguage());
+                    break;
+                case MediaFormatUtils.MIME_WEBM_AUDIO:
+                    placeholder = getWEBMAudios(mediaItem.getLanguage());
+                    break;
+            }
+        }
+
+        if (placeholder != null) {
+            placeholder.add(mediaItem); // NOTE: reverse order
+        }
+    }
+
+    private Set<MediaFormat> getMP4Audios(String language) {
+        return getFormats(mMP4Audios, language);
+    }
+
+    private Set<MediaFormat> getWEBMAudios(String language) {
+        return getFormats(mWEBMAudios, language);
+    }
+
+    private static Set<MediaFormat> getFormats(Map<String, Set<MediaFormat>> formatMap, String language) {
+        if (language == null) {
+            language = "default";
+        }
+
+        Set<MediaFormat> mediaFormats = formatMap.get(language);
+
+        if (mediaFormats == null) {
+            mediaFormats = new TreeSet<>(new MediaFormatComparator());
+            formatMap.put(language, mediaFormats);
+        }
+
+        return mediaFormats;
     }
 
     /** A parsed Representation element. */
