@@ -12,15 +12,21 @@ import com.google.android.exoplayer2.source.sabr.parser.models.InitializedFormat
 import com.google.android.exoplayer2.source.sabr.parser.models.Segment;
 import com.google.android.exoplayer2.source.sabr.parser.models.VideoSelector;
 import com.google.android.exoplayer2.source.sabr.parser.parts.FormatInitializedSabrPart;
+import com.google.android.exoplayer2.source.sabr.parser.parts.MediaSeekSabrPart;
 import com.google.android.exoplayer2.source.sabr.parser.parts.MediaSegmentDataSabrPart;
 import com.google.android.exoplayer2.source.sabr.parser.parts.MediaSegmentEndSabrPart;
 import com.google.android.exoplayer2.source.sabr.parser.parts.MediaSegmentInitSabrPart;
 import com.google.android.exoplayer2.source.sabr.parser.parts.PoTokenStatusSabrPart;
 import com.google.android.exoplayer2.source.sabr.parser.parts.PoTokenStatusSabrPart.PoTokenStatus;
+import com.google.android.exoplayer2.source.sabr.parser.parts.SabrPart;
 import com.google.android.exoplayer2.source.sabr.protos.videostreaming.ClientAbrState;
 import com.google.android.exoplayer2.source.sabr.protos.videostreaming.FormatInitializationMetadata;
 import com.google.android.exoplayer2.source.sabr.protos.videostreaming.LiveMetadata;
 import com.google.android.exoplayer2.source.sabr.protos.videostreaming.MediaHeader;
+import com.google.android.exoplayer2.source.sabr.protos.videostreaming.NextRequestPolicy;
+import com.google.android.exoplayer2.source.sabr.protos.videostreaming.SabrContextSendingPolicy;
+import com.google.android.exoplayer2.source.sabr.protos.videostreaming.SabrContextUpdate;
+import com.google.android.exoplayer2.source.sabr.protos.videostreaming.SabrSeek;
 import com.google.android.exoplayer2.source.sabr.protos.videostreaming.StreamProtectionStatus;
 import com.google.android.exoplayer2.source.sabr.protos.videostreaming.StreamProtectionStatus.Status;
 import com.google.android.exoplayer2.source.sabr.protos.videostreaming.TimeRange;
@@ -28,7 +34,9 @@ import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.mylogger.Log;
 
 import java.io.ByteArrayInputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class SabrProcessor {
@@ -47,7 +55,10 @@ public class SabrProcessor {
     private VideoSelector videoFormatSelector;
     private AudioSelector audioFormatSelector;
     private CaptionSelector captionFormatSelector;
-    private int totalDurationMs;
+    private long totalDurationMs;
+    private NextRequestPolicy nextRequestPolicy;
+    private final Map<Integer, SabrContextUpdate> sabrContextUpdates;
+    private final List<Integer> sabrContextsToSend;
 
     public SabrProcessor() {
         this(NO_VALUE, NO_VALUE, null, null, null);
@@ -71,6 +82,8 @@ public class SabrProcessor {
         audioFormatSelector = audioSelection;
         videoFormatSelector = videoSelection;
         captionFormatSelector = captionSelection;
+        sabrContextsToSend = new ArrayList<>();
+        sabrContextUpdates = new HashMap<>();
         initializeClientAbrState();
     }
 
@@ -462,6 +475,123 @@ public class SabrProcessor {
         }
 
         return result;
+    }
+
+    public void processNextRequestPolicy(NextRequestPolicy nextRequestPolicy) {
+        this.nextRequestPolicy = nextRequestPolicy;
+        Log.d(TAG, "Registered new NextRequestPolicy: %s", nextRequestPolicy);
+    }
+
+    public ProcessLiveMetadataResult processLiveMetadata(LiveMetadata liveMetadata) {
+        this.liveMetadata = liveMetadata;
+
+        if (liveMetadata.hasHeadSequenceTimeMs()) {
+            totalDurationMs = liveMetadata.getHeadSequenceTimeMs();
+        }
+
+        // If we have a head sequence number, we need to update the total sequences for each initialized format
+        // For livestreams, it is not available in the format initialization metadata
+        if (liveMetadata.hasHeadSequenceNumber()) {
+            for (InitializedFormat izf : initializedFormats.values()) {
+                izf.totalSegments = liveMetadata.getHeadSequenceNumber();
+            }
+        }
+
+        ProcessLiveMetadataResult result = new ProcessLiveMetadataResult();
+
+        // If the current player time is less than the min dvr time, simulate a server seek to the min dvr time.
+        // The server SHOULD send us a SABR_SEEK part in this case, but it does not always happen (e.g. ANDROID_VR)
+        // The server SHOULD NOT send us segments before the min dvr time, so we should assume that the player time is correct.
+        int minSeekableTimeMs = Utils.ticksToMs(liveMetadata.hasMinSeekableTimeTicks() ? liveMetadata.getMinSeekableTimeTicks() : -1,
+                liveMetadata.hasMinSeekableTimescale() ? liveMetadata.getMinSeekableTimescale() : -1);
+        if (minSeekableTimeMs != -1 && clientAbrState.hasPlayerTimeMs() && clientAbrState.getPlayerTimeMs() < minSeekableTimeMs) {
+            Log.d(TAG, "Player time %s is less than min seekable time %s, simulating server seek",
+                    clientAbrState.getPlayerTimeMs(), minSeekableTimeMs);
+            clientAbrState = clientAbrState.toBuilder().setPlayerTimeMs(minSeekableTimeMs).build();
+            for (InitializedFormat izf : initializedFormats.values()) {
+                izf.currentSegment = null; // Clear the current segment as we expect segments to no longer be in order.
+                result.seekSabrParts.add(
+                        new MediaSeekSabrPart(
+                                MediaSeekSabrPart.Reason.SERVER_SEEK,
+                                izf.formatId,
+                                izf.formatSelector
+                        )
+                );
+            }
+        }
+
+        return result;
+    }
+
+    public ProcessSabrSeekResult processSabrSeek(SabrSeek sabrSeek) {
+        int seekTo = Utils.ticksToMs(sabrSeek.hasSeekTimeTicks() ? sabrSeek.getSeekTimeTicks() : -1, sabrSeek.hasTimescale() ? sabrSeek.getTimescale() : -1);
+        if (seekTo == -1) {
+            throw new SabrStreamError(String.format("Server sent a SabrSeek part that is missing required seek data: %s", sabrSeek));
+        }
+        Log.d(TAG, "Seeking to %sms", seekTo);
+        clientAbrState = clientAbrState.toBuilder().setPlayerTimeMs(seekTo).build();
+
+        ProcessSabrSeekResult result = new ProcessSabrSeekResult();
+
+        // Clear latest segment of each initialized format
+        // as we expect them to no longer be in order.
+        for (InitializedFormat initializedFormat : initializedFormats.values()) {
+            initializedFormat.currentSegment = null;
+            result.seekSabrParts.add(
+                    new MediaSeekSabrPart(
+                            MediaSeekSabrPart.Reason.SERVER_SEEK,
+                            initializedFormat.formatId,
+                            initializedFormat.formatSelector
+                    )
+            );
+        }
+        return result;
+    }
+
+    public void processSabrContextUpdate(SabrContextUpdate sabrCtxUpdate) {
+        if (!sabrCtxUpdate.hasType() || !sabrCtxUpdate.hasValue() || !sabrCtxUpdate.hasWritePolicy()) {
+            Log.w(TAG, "Received an invalid SabrContextUpdate, ignoring");
+            return;
+        }
+
+        if (sabrCtxUpdate.getWritePolicy() == SabrContextUpdate.SabrContextWritePolicy.SABR_CONTEXT_WRITE_POLICY_KEEP_EXISTING
+                && sabrContextUpdates.containsKey(sabrCtxUpdate.getType())) {
+            Log.d(TAG, "Received a SABR Context Update with write_policy=KEEP_EXISTING" +
+                    " matching an existing SABR Context Update. Ignoring update");
+            return;
+        }
+
+        Log.w(TAG, "Received a SABR Context Update. YouTube is likely trying to force ads on the client. " +
+                "This may cause issues with playback.");
+
+        sabrContextUpdates.put(sabrCtxUpdate.getType(), sabrCtxUpdate);
+        if (sabrCtxUpdate.hasSendByDefault()) {
+            sabrContextsToSend.add(sabrCtxUpdate.getType());
+        }
+        Log.d(TAG, "Registered SabrContextUpdate %s", sabrCtxUpdate);
+    }
+
+    public void processSabrContextSendingPolicy(SabrContextSendingPolicy sabrCtxSendingPolicy) {
+        for (int startType : sabrCtxSendingPolicy.getStartPolicyList()) {
+            if (!sabrContextsToSend.contains(startType)) {
+                Log.d(TAG, "Server requested to enable SABR Context Update for type %s", startType);
+                sabrContextsToSend.add(startType);
+            }
+        }
+
+        for (int stopType : sabrCtxSendingPolicy.getStopPolicyList()) {
+            if (!sabrContextsToSend.contains(stopType)) {
+                Log.d(TAG, "Server requested to disable SABR Context Update for type %s", stopType);
+                sabrContextsToSend.remove(stopType);
+            }
+        }
+
+        for (int discardType : sabrCtxSendingPolicy.getDiscardPolicyList()) {
+            if (!sabrContextsToSend.contains(discardType)) {
+                Log.d(TAG, "Server requested to discard SABR Context Update for type %s", discardType);
+                sabrContextUpdates.remove(discardType);
+            }
+        }
     }
 
     public boolean isLive() {
