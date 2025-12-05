@@ -243,6 +243,7 @@ public class GDriveBackupManager {
         String[] altPackages = new String[] {
                 "org.smarttube.beta",
                 "org.smarttube.stable",
+                "org.smarttube.fdroid",
                 "com.liskovsoft.smarttubetv.beta",
                 "com.teamsmart.videomanager.tv"
         };
