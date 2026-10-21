@@ -62,7 +62,11 @@ import kotlinx.coroutines.delay
 
 private val SHEET_TOP = 48.dp
 private val SHEET_HEIGHT = 130.dp
-private val ROW_TITLE = 34.dp
+/**
+ * Where the focused row's cards are pinned, from the top of the rows: its title (8 + ~21 + 4 dp)
+ * plus the row's top padding (12 dp), so the title stays fully visible above the cards.
+ */
+private val ROW_TITLE = 46.dp
 private val CARD_WIDTH = 232.dp
 /** Wait before the sheet follows the focus (no image storm while scrolling along a row). */
 private const val SHEET_SETTLE_MS = 180L
@@ -160,7 +164,8 @@ private fun VideoRowView(
         )
         RowScroll {
             LazyRow(
-                contentPadding = PaddingValues(horizontal = Dimens.Gutter, vertical = 12.dp),
+                // Channel rows: a bit more room above, so the zoomed round avatar stays clear of the title.
+                contentPadding = PaddingValues(horizontal = Dimens.Gutter, vertical = if (row.items.all { it.isChannel }) 16.dp else 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
             ) {
                 itemsIndexed(row.items, key = { _, video -> video.key }) { index, video ->
@@ -259,7 +264,7 @@ private fun Backdrop(video: Video?) {
                 Box(
                     Modifier
                         .align(Alignment.TopEnd)
-                        .padding(top = 40.dp, end = 96.dp)
+                        .padding(top = SHEET_TOP, end = Dimens.Gutter * 2)
                         .size(CHANNEL_BACKDROP)
                         .clip(CircleShape)
                         .background(Palette.Tile),
@@ -337,7 +342,7 @@ private fun ChannelCard(video: Video, modifier: Modifier, onFocus: () -> Unit, o
                     if (it.isFocused) onFocus()
                 },
             shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = FocusScale.Avatar),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = CHANNEL_FOCUS_SCALE),
             border = ClickableSurfaceDefaults.border(
                 focusedBorder = Border(androidx.compose.foundation.BorderStroke(2.dp, Color.White), shape = CircleShape),
             ),
@@ -359,6 +364,7 @@ private fun ChannelCard(video: Video, modifier: Modifier, onFocus: () -> Unit, o
     }
 }
 
-private val CHANNEL_CARD = 132.dp
-private val CHANNEL_AVATAR = 112.dp
-private val CHANNEL_BACKDROP = 200.dp
+private val CHANNEL_CARD = 120.dp
+private val CHANNEL_AVATAR = 96.dp
+private val CHANNEL_BACKDROP = 120.dp
+private const val CHANNEL_FOCUS_SCALE = 1.06f

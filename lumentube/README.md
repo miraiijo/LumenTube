@@ -37,6 +37,7 @@ Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTub
 
 ## Nouveautés
 ### 0.4.4
+- Rangées de chaînes : avatars plus petits (96 dp), plus d'espace au-dessus et zoom réduit, pour ne plus déborder sur le titre de la rangée ; la rangée active garde son titre entier visible. Avatar en haut à droite plus petit (120 dp), aligné sur la fiche.
 - Sous-titres : français et anglais en tête, sous « Préférées » (ceux de la vidéo puis les traductions automatiques), puis « Autres langues ».
 - Lecteur, commandes masquées : Gauche/Droite avancent ou reculent sans afficher les boutons ni leur donner le focus. Les appuis s'additionnent : 10 s par appui, puis 30 s et 60 s quand la touche reste enfoncée. La barre de temps montre la cible et son image, et le lecteur ne saute qu'une fois, 0,6 s après le dernier appui, au lieu de recharger la vidéo à chaque appui.
 - Lecteur : le bouton ⚙ Réglages est le dernier de la rangée, après ▣.
