@@ -36,6 +36,9 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.10.2
+- **Image figée, son qui continue** : le décodeur vidéo de la box peut se bloquer (vu sur Amlogic, surtout en VP9). Le chien de garde le détecte (aucune nouvelle image pendant ~4,5 s alors que la position avance) et relance le décodage sur place, à la même position. Chaque gel est compté dans les statistiques (« Gels relancés ») et journalisé avec le codec : `adb logcat -s LumenTube.Freeze`.
+
 ### 0.10.1
 - Commandes du lecteur : le même espace (10 dp) entre tous les boutons, compteurs J'aime / Je n'aime pas compris (plus d'écarts plus larges entre les groupes).
 

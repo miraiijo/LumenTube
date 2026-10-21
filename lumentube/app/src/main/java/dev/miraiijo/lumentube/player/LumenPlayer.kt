@@ -85,6 +85,7 @@ class LumenPlayer(context: Context) {
         exo.videoDecoderCounters?.let { counters ->
             counters.ensureUpdated()
             add("Images perdues" to "${counters.droppedBufferCount} / ${counters.renderedOutputBufferCount + counters.droppedBufferCount}")
+            if (freezesRecovered > 0) add("Gels relancés" to freezesRecovered.toString())
         }
         add("Tampon" to "%.1f s".format(Locale.US, (exo.bufferedPosition - exo.currentPosition).coerceAtLeast(0L) / 1000f))
         bandwidth.bitrateEstimate.takeIf { it > 0 }?.let { add("Connexion" to kbps(it)) }
@@ -177,6 +178,14 @@ class LumenPlayer(context: Context) {
     var selectedAudio = -1
         private set
 
+    /** Video frozen while the sound goes on: frames rendered and position at the last checks. */
+    private var lastRendered = -1
+    private var lastPositionMs = 0L
+    private var stillChecks = 0
+    /** Freezes caught and recovered (shown in the stats). */
+    var freezesRecovered = 0
+        private set
+
     private val watchdog = object : Runnable {
         override fun run() {
             if (exo.playbackState == Player.STATE_READY && exo.playWhenReady && !exo.isPlaying) {
@@ -184,7 +193,36 @@ class LumenPlayer(context: Context) {
                 exo.playWhenReady = false
                 exo.playWhenReady = true
             }
+            checkVideoFrozen()
             handler.postDelayed(this, STUCK_MS)
+        }
+    }
+
+    /**
+     * The box's video decoder sometimes stalls (seen on Amlogic, VP9 above all) while the audio
+     * plays on: no new frame for [FROZEN_CHECKS] checks (~4.5 s) while the position moves → the
+     * decoders are flushed by a seek to where we are (the picture comes back, nothing is skipped).
+     */
+    private fun checkVideoFrozen() {
+        val counters = exo.videoDecoderCounters
+        if (!exo.isPlaying || exo.videoFormat == null || counters == null) {
+            stillChecks = 0
+            lastRendered = -1
+            return
+        }
+        counters.ensureUpdated()
+        val rendered = counters.renderedOutputBufferCount
+        val position = exo.currentPosition
+        val moved = position - lastPositionMs > STUCK_MS / 2
+        stillChecks = if (lastRendered >= 0 && rendered == lastRendered && moved) stillChecks + 1 else 0
+        lastRendered = rendered
+        lastPositionMs = position
+        if (stillChecks >= FROZEN_CHECKS) {
+            stillChecks = 0
+            lastRendered = -1
+            freezesRecovered++
+            android.util.Log.w(FREEZE_TAG, "video frozen at $position ms (${exo.videoFormat?.let { "${it.codecs} ${it.width}x${it.height}@${it.frameRate}" }}), recovering")
+            exo.seekTo(position)
         }
     }
 
@@ -438,6 +476,8 @@ class LumenPlayer(context: Context) {
         const val START_BUFFER_MS = 1_000
         const val REBUFFER_MS = 2_500
         const val STUCK_MS = 1_500L
+        const val FROZEN_CHECKS = 3
+        const val FREEZE_TAG = "LumenTube.Freeze"
         const val MAX_BUFFER_BYTES = 40 shl 20
         const val AUTO_MAX = 1080
     }
