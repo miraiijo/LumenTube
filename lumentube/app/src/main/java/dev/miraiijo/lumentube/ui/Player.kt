@@ -160,6 +160,7 @@ fun PlayerScreen(
     val progress = remember { FocusRequester() }
     val root = remember { FocusRequester() }
     val settingsButton = remember { FocusRequester() }
+    val subtitlesButton = remember { FocusRequester() }
     var swallowOkUp by remember { mutableStateOf(false) }
     /** Incremented on each Left/Right with the controls hidden: the time line shows a moment. */
     var seekFlash by remember { mutableIntStateOf(0) }
@@ -498,6 +499,8 @@ fun PlayerScreen(
     LaunchedEffect(menuClosed) {
         if (menuClosed == 0) return@LaunchedEffect
         withFrameNanos { }
+        // Back to the button the panel was opened from (subtitles or settings).
+        if (menuRoot == PlayerMenu.SUBTITLES && subtitlesButton.tryRequestFocus()) return@LaunchedEffect
         settingsButton.tryRequestFocus()
     }
 
@@ -621,6 +624,7 @@ fun PlayerScreen(
                 chapters = chapters,
                 hasSubtitles = remember(tracksTick) { player.subtitleTracks().isNotEmpty() },
                 settingsButton = settingsButton,
+                subtitlesButton = subtitlesButton,
                 onSubtitles = {
                     menuRoot = PlayerMenu.SUBTITLES
                     menu = PlayerMenu.SUBTITLES
@@ -810,6 +814,7 @@ private fun Controls(
     chapters: List<Chapter>,
     hasSubtitles: Boolean,
     settingsButton: FocusRequester,
+    subtitlesButton: FocusRequester,
     onSubtitles: () -> Unit,
     onSettings: () -> Unit,
     showLike: Boolean,
@@ -857,7 +862,7 @@ private fun Controls(
                         ControlButton(LumenIcon.FORWARD, up = progress, onDown = onHide) { onSeekBy(SEEK_STEP_MS) }
                     }
                     if (showLike) ControlButton(LumenIcon.THUMB_UP, up = progress, onDown = onHide, active = liked, onClick = onLike)
-                    if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, up = progress, onDown = onHide, onClick = onSubtitles)
+                    if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, Modifier.focusRequester(subtitlesButton), up = progress, onDown = onHide, onClick = onSubtitles)
                     // Small window in a corner: keep watching while browsing ("Lecture en cours" in the menu brings it back).
                     ControlButton(LumenIcon.PIP, up = progress, onDown = onHide, onClick = onMinimize)
                     // Settings always last.

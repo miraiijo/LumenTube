@@ -312,6 +312,10 @@ object YouTube {
             .mapIndexedNotNull { index, group -> group.toRow("search-$index") }
     }
 
+    /** Lumen's /search: the engine's raw results (blocking, called off the main thread by the provider). */
+    fun searchItems(query: String): List<MediaItem?> =
+        service.contentService.getSearch(query).orEmpty().filterNotNull().flatMap { it.mediaItems.orEmpty() }
+
     /** Search suggestions while typing (YouTube's own). */
     suspend fun suggestions(text: String): List<String> = withContext(Dispatchers.IO) {
         runCatching {

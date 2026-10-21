@@ -18,6 +18,7 @@ import java.util.concurrent.TimeUnit
  *  - query /continue: videos started and not finished;
  *  - query /subscriptions: latest videos of the subscriptions;
  *  - query /accounts: the accounts linked in LumenTube (opaque id, name, avatar, selected);
+ *  - query /search?q=…: the first 20 videos YouTube finds (same columns as /continue);
  *  - call "select_account" (arg = account_id): switches account, its feed is refreshed.
  * Only answers Lumen: the calling package must be dev.miraiijo.lumen, signed with Lumen's
  * certificate (SHA-256 in BuildConfig). Not a signature permission: the two apps have their own keys.
@@ -29,10 +30,14 @@ class FeedProvider : ContentProvider() {
         addURI(FeedCache.AUTHORITY, FeedCache.CONTINUE, CODE_CONTINUE)
         addURI(FeedCache.AUTHORITY, FeedCache.SUBSCRIPTIONS, CODE_SUBSCRIPTIONS)
         addURI(FeedCache.AUTHORITY, FeedCache.ACCOUNTS, CODE_ACCOUNTS)
+        addURI(FeedCache.AUTHORITY, SEARCH, CODE_SEARCH)
     }
 
     /** Refreshes run here, never on the caller's (or the main) thread. */
     private val worker = Executors.newSingleThreadExecutor()
+
+    /** Searches: their own threads, never stuck behind a feed refresh (two at once at most). */
+    private val searches = Executors.newFixedThreadPool(2)
 
     override fun onCreate(): Boolean {
         context?.let(FeedCache::attach)
@@ -46,7 +51,11 @@ class FeedProvider : ContentProvider() {
         val code = matcher.match(uri)
         if (code == UriMatcher.NO_MATCH) throw IllegalArgumentException("Unknown feed: $uri")
         ready(ctx)
-        val cursor = if (code == CODE_ACCOUNTS) accounts() else videos(if (code == CODE_CONTINUE) FeedCache.CONTINUE else FeedCache.SUBSCRIPTIONS)
+        val cursor = when (code) {
+            CODE_ACCOUNTS -> accounts()
+            CODE_SEARCH -> search(uri.getQueryParameter("q"))
+            else -> videos(if (code == CODE_CONTINUE) FeedCache.CONTINUE else FeedCache.SUBSCRIPTIONS)
+        }
         cursor.setNotificationUri(ctx.contentResolver, uri)
         return cursor
     }
@@ -71,6 +80,23 @@ class FeedProvider : ContentProvider() {
             if (refreshed) items = FeedCache.load(list, accountId).second
         }
         items.take(FeedCache.MAX_ROWS).forEach { cursor.addRow(it.toRow()) }
+        return cursor
+    }
+
+    /**
+     * /search?q=…: YouTube's results for q (cut at 200 characters), videos only (no channel,
+     * playlist or Short), 20 at most. Empty q, error, or no answer within 8 s: empty cursor.
+     */
+    private fun search(q: String?): Cursor {
+        val cursor = MatrixCursor(FeedCache.COLUMNS)
+        // Longer than 200 characters: cut at 200 (nothing more is sent to YouTube).
+        val text = q?.trim().orEmpty().take(MAX_QUERY).trim()
+        if (text.isEmpty()) return cursor
+        val request = searches.submit<List<FeedCache.Item>> { FeedCache.itemsFrom(YouTube.searchItems(text), SEARCH) }
+        val items = runCatching { request.get(REFRESH_TIMEOUT_S, TimeUnit.SECONDS) }
+            .onFailure { request.cancel(true) }
+            .getOrDefault(emptyList())
+        items.forEach { cursor.addRow(it.toRow()) }
         return cursor
     }
 
@@ -126,6 +152,7 @@ class FeedProvider : ContentProvider() {
     override fun getType(uri: Uri): String? = when (matcher.match(uri)) {
         CODE_CONTINUE, CODE_SUBSCRIPTIONS -> "vnd.android.cursor.dir/vnd.lumentube.video"
         CODE_ACCOUNTS -> "vnd.android.cursor.dir/vnd.lumentube.account"
+        CODE_SEARCH -> "vnd.android.cursor.dir/vnd.lumentube.video"
         else -> null
     }
 
@@ -141,6 +168,9 @@ class FeedProvider : ContentProvider() {
         const val CODE_CONTINUE = 1
         const val CODE_SUBSCRIPTIONS = 2
         const val CODE_ACCOUNTS = 3
+        const val CODE_SEARCH = 4
+        const val SEARCH = "search"
+        const val MAX_QUERY = 200
         const val MAX_AGE_MS = 30 * 60 * 1000L
         const val REFRESH_TIMEOUT_S = 8L
         const val LUMEN_PACKAGE = "dev.miraiijo.lumen"

@@ -36,6 +36,12 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.7.2
+- **Flux Lumen, recherche** : `query content://dev.miraiijo.lumentube.feed/search?q=<texte>` (même contrôle de l'appelant, mêmes colonnes que `/continue`). Renvoie les 20 premiers résultats vidéo de YouTube, sans chaînes, playlists ni Shorts. `q` est coupé à 200 caractères ; une requête vide, une erreur ou plus de 8 s sans réponse renvoient un curseur vide. Les recherches tournent sur leurs propres threads (deux au plus en même temps), jamais derrière un rafraîchissement du flux.
+
+### 0.7.1
+- Lecteur : Retour depuis le panneau des sous-titres remet le focus sur le bouton Sous-titres (et non plus sur Réglages).
+
 ### 0.7.0
 - **Regarder sur la TV** : Réglages › « Lier un téléphone » affiche un code TV à saisir dans l'app YouTube du téléphone (photo de profil › Paramètres › Regarder sur la TV › Saisir le code TV). Le bouton Caster du téléphone envoie alors la vidéo ici, et le téléphone sert de télécommande (lecture, pause, position, suivante, arrêt, volume). Écoute uniquement quand LumenTube est à l'écran, et désactivable (« Commande depuis le téléphone »). Désactivé tant qu'aucun téléphone n'a été lié.
 - **Menu d'une carte** : appui long sur OK (ou touche Menu) : Lire, À regarder plus tard, Ouvrir la chaîne, Pas intéressé, Ne pas recommander cette chaîne. La carte disparaît des rangées tout de suite.
