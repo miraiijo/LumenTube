@@ -36,6 +36,9 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.10.1
+- Commandes du lecteur : le même espace (10 dp) entre tous les boutons, compteurs J'aime / Je n'aime pas compris (plus d'écarts plus larges entre les groupes).
+
 ### 0.10.0
 - **Commandes du lecteur réorganisées** par usage, avec un espace entre les groupes : lecture (lecture/pause, sous-titres, chapitres) · la vidéo (J'aime, Je n'aime pas, commentaires, À propos) · fenêtre et réglages (petite fenêtre, Réglages toujours en dernier).
 - **Réglages du lecteur en sections** : LECTURE (qualité, sous-titres, piste audio, vitesse, format de l'image) · VIDÉO ET CHAÎNE (à regarder plus tard, voir la chaîne, s'abonner) · OPTIONS (SponsorBlock, statistiques). À propos et Chapitres ne sont plus répétés (ils ont leur bouton) ; le focus s'ouvre sur la première ligne, pas sur un titre de section.

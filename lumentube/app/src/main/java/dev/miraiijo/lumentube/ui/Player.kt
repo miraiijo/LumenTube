@@ -91,8 +91,8 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 private const val SEEK_STEP_MS = 10_000L
-/** Extra room between the groups of the controls row. */
-private val GROUP_GAP = 14.dp
+/** Same gap between every button of the controls row (a thumb's count sits inside its own slot). */
+private val BUTTON_GAP = 10.dp
 private const val CONTROLS_HIDE_MS = 4_000L
 private const val SAVE_EVERY_MS = 30_000L
 private const val SKIP_NOTICE_MS = 3_000L
@@ -968,15 +968,13 @@ private fun Controls(
                 Spacer(Modifier.height(14.dp))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    // Grouped by use, most used first, a wider gap between groups:
+                Row(horizontalArrangement = Arrangement.spacedBy(BUTTON_GAP), verticalAlignment = Alignment.CenterVertically) {
+                    // Ordered by use, most used first, one even gap between buttons:
                     // playback (play, subtitles, chapters) · the video (thumbs, comments, about) ·
                     // window and settings (always last). ±10 s: Left / Right, or the progress bar.
                     ControlButton(if (isPlaying) LumenIcon.PAUSE else LumenIcon.PLAY, Modifier.focusRequester(playPause), up = progress, onDown = onHide, onClick = onPlayPause)
                     if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, Modifier.focusRequester(subtitlesButton), up = progress, onDown = onHide, onClick = onSubtitles)
                     if (hasChapters) ControlButton(LumenIcon.PLAYLIST, Modifier.focusRequester(chaptersButton), up = progress, onDown = onHide, onClick = onChapters)
-                    val rate = canRate || likes != null || dislikes != null
-                    if (rate || hasComments || hasInfo) Spacer(Modifier.width(GROUP_GAP))
                     if (canRate || likes != null) {
                         RateButton(if (liked) LumenIcon.THUMB_UP else LumenIcon.THUMB_UP_OUTLINE, likes, canRate, liked, up = progress, onDown = onHide, onClick = onLike)
                     }
@@ -985,7 +983,6 @@ private fun Controls(
                     }
                     if (hasComments) ControlButton(LumenIcon.COMMENT, Modifier.focusRequester(commentsButton), up = progress, onDown = onHide, onClick = onComments)
                     if (hasInfo) ControlButton(LumenIcon.INFO, Modifier.focusRequester(infoButton), up = progress, onDown = onHide, onClick = onInfo)
-                    Spacer(Modifier.width(GROUP_GAP))
                     // Small window in a corner: keep watching while browsing ("Lecture en cours" in the menu brings it back).
                     ControlButton(LumenIcon.PIP, up = progress, onDown = onHide, onClick = onMinimize)
                     ControlButton(LumenIcon.SETTINGS, Modifier.focusRequester(settingsButton), up = progress, onDown = onHide, onClick = onSettings)
@@ -1021,7 +1018,7 @@ private fun RateButton(
             Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) { Icon(icon, size = 24.dp, color = Color.White) }
         }
         if (count != null) {
-            Text(count, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 10.dp, end = 16.dp))
+            Text(count, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = BUTTON_GAP))
         }
     }
 }
