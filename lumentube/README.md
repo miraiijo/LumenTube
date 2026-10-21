@@ -36,6 +36,9 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.3.1
+- Sous-titres ouverts par leur bouton : Retour, ou le choix d'une langue, ferme le panneau au lieu d'afficher les réglages.
+
 ### 0.3.0
 - **Accueil** : la rangée « Reprendre » (vidéos commencées) en tête, puis l'accueil YouTube, les nouveautés des abonnements et deux rangées de chaque rubrique (Musique, Gaming, Actus, Sport, Direct).
 - **Rechercher** (en tête du menu) : au clavier de la télé, ou à la voix (« Dicter ») si le Player propose la reconnaissance vocale.

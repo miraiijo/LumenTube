@@ -141,6 +141,8 @@ fun PlayerScreen(
     var swallowOkUp by remember { mutableStateOf(false) }
     /** Settings panel level shown (null = closed). */
     var menu by remember(videoId) { mutableStateOf<PlayerMenu?>(null) }
+    /** Level the panel was opened on: Settings button = the main list, subtitles button = its list. */
+    var menuRoot by remember(videoId) { mutableStateOf(PlayerMenu.MAIN) }
     /** Incremented when the panel closes: the focus goes back to the settings button. */
     var menuClosed by remember { mutableIntStateOf(0) }
     /** Incremented when the tracks change: the panel's lists follow. */
@@ -333,7 +335,8 @@ fun PlayerScreen(
     }
     // Declared after: while the panel is open, Back goes up one level, then closes it.
     BackHandler(enabled = menu != null) {
-        if (menu == PlayerMenu.MAIN) closeMenu() else menu = PlayerMenu.MAIN
+        // Up one level, or closed when it's the level the panel was opened on.
+        if (menu == menuRoot) closeMenu() else menu = PlayerMenu.MAIN
     }
     LaunchedEffect(menuClosed) {
         if (menuClosed == 0) return@LaunchedEffect
@@ -450,8 +453,14 @@ fun PlayerScreen(
                 chapters = chapters,
                 hasSubtitles = remember(tracksTick) { player.subtitleTracks().isNotEmpty() },
                 settingsButton = settingsButton,
-                onSubtitles = { menu = PlayerMenu.SUBTITLES },
-                onSettings = { menu = PlayerMenu.MAIN },
+                onSubtitles = {
+                    menuRoot = PlayerMenu.SUBTITLES
+                    menu = PlayerMenu.SUBTITLES
+                },
+                onSettings = {
+                    menuRoot = PlayerMenu.MAIN
+                    menu = PlayerMenu.MAIN
+                },
                 showLike = signedIn && !live,
                 liked = liked,
                 onLike = ::toggleLike,
@@ -500,7 +509,8 @@ fun PlayerScreen(
                     onSubscribe = ::toggleSubscribe,
                     onWatchLater = ::addToWatchLater,
                 ),
-                onMenu = { next -> if (next == null) closeMenu() else menu = next },
+                // A choice made in a list opened directly (subtitles button) closes the panel.
+                onMenu = { next -> if (next == null || (next == PlayerMenu.MAIN && menuRoot != PlayerMenu.MAIN)) closeMenu() else menu = next },
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
         }
