@@ -9,6 +9,13 @@
     <!-- Keeps the screen on during playback (window flag, no wake lock needed otherwise). -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Lumen's feed (continue / subscriptions). Lumen declares this permission; LumenTube and Lumen
+         are signed with different keys, so it can't be a signature permission: FeedProvider itself
+         only answers dev.miraiijo.lumen signed with Lumen's certificate (SHA-256 checked). -->
+    <permission
+        android:name="dev.miraiijo.lumentube.permission.READ_FEED"
+        android:protectionLevel="normal" />
+
     <!-- Rechercher: is there a voice recognition app to dictate with? (package visibility, Android 11+) -->
     <queries>
         <intent>
@@ -44,7 +51,11 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="www.youtube.com" android:pathPrefix="/watch" />
+                <data android:scheme="https" />
+                <data android:host="www.youtube.com" />
+                <data android:host="youtube.com" />
+                <data android:host="m.youtube.com" />
+                <data android:pathPrefix="/watch" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -53,5 +64,12 @@
                 <data android:scheme="https" android:host="youtu.be" />
             </intent-filter>
         </activity>
+
+        <!-- Read-only feed for the Lumen launcher (FeedProvider): the caller's package and signing
+             certificate are checked on every query. -->
+        <provider
+            android:name=".feed.FeedProvider"
+            android:authorities="dev.miraiijo.lumentube.feed"
+            android:exported="true" />
     </application>
 </manifest>

@@ -150,7 +150,7 @@ fun Root(vm: MainViewModel) {
                 title = playing?.title,
                 channel = playing?.channel,
                 thumbnail = playing?.thumbnail,
-                startSeconds = playing?.let { resumeSeconds(it) } ?: 0,
+                startSeconds = playing?.let { resumeSeconds(it) } ?: state.playingStart,
                 item = playing?.raw,
                 signedIn = state.signedIn,
                 onNext = vm::playNext,

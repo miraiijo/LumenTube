@@ -36,8 +36,24 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
-### 0.4.4
+### 0.5.1
+- Flux pour Lumen : LumenTube garde sa propre clé de signature. La permission `READ_FEED` passe au niveau `normal` et ne verrouille plus rien ; c'est le fournisseur qui vérifie l'appelant : le paquet `dev.miraiijo.lumen`, fourni par le système, et l'empreinte SHA-256 de son certificat, réglée dans `gradle.properties` (`lumen.certSha256`, remplaçable par la variable d'environnement `LUMEN_CERT_SHA256`). Toute autre app reçoit une `SecurityException`. Si Lumen change de clé, il suffit de mettre à jour l'empreinte.
+- Sous-titres plus petits (4,2 % de la hauteur de l'image au lieu de 6 %).
+
+### 0.5.0
+- **Flux pour Lumen** : un fournisseur de contenu en lecture seule, `dev.miraiijo.lumentube.feed`, protégé par la permission `dev.miraiijo.lumentube.permission.READ_FEED` (niveau signature : Lumen doit être signé avec la même clé de release) :
+  - `/continue` : vidéos commencées et non finies (historique, progression de 1 à 94 %), de la plus récente à la plus ancienne ;
+  - `/subscriptions` : dernières vidéos des abonnements, sans les Shorts ;
+  - 20 lignes au plus ; colonnes `video_id`, `title`, `channel`, `thumbnail_url` (https), `duration_ms`, `watched_percent`, `position_s`, `published_ms` (0 si inconnu), `live` (0/1) ;
+  - cache JSON dans `filesDir`, écrit à chaque chargement d'Abonnements ou de l'historique (Historique, rangée « Reprendre ») ; s'il a plus de 30 min et que l'utilisateur est connecté, il est rafraîchi sur un thread à part, 8 s au plus, sinon l'ancien est servi ; `notifyChange` à chaque mise à jour ;
+  - aucun jeton, cookie ou identifiant de compte ; déconnecté : curseur vide ; cache effacé au changement de compte et à la déconnexion ;
+  - insert, update et delete lèvent `UnsupportedOperationException`.
+- **Liens** : le paramètre `t` des liens youtube.com/watch et youtu.be (`90`, `90s`, `1m30s`, `1h2m3s`) fixe la position de départ. Les liens youtube.com et m.youtube.com sont aussi acceptés.
+
+### 0.4.5
 - Rangées de chaînes : avatars plus petits (96 dp), plus d'espace au-dessus et zoom réduit, pour ne plus déborder sur le titre de la rangée ; la rangée active garde son titre entier visible. Avatar en haut à droite plus petit (120 dp), aligné sur la fiche.
+
+### 0.4.4
 - Sous-titres : français et anglais en tête, sous « Préférées » (ceux de la vidéo puis les traductions automatiques), puis « Autres langues ».
 - Lecteur, commandes masquées : Gauche/Droite avancent ou reculent sans afficher les boutons ni leur donner le focus. Les appuis s'additionnent : 10 s par appui, puis 30 s et 60 s quand la touche reste enfoncée. La barre de temps montre la cible et son image, et le lecteur ne saute qu'une fois, 0,6 s après le dernier appui, au lieu de recharger la vidéo à chaque appui.
 - Lecteur : le bouton ⚙ Réglages est le dernier de la rangée, après ▣.

@@ -8,6 +8,7 @@ import com.liskovsoft.mediaserviceinterfaces.data.MediaItemMetadata
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemStoryboard
 import com.liskovsoft.mediaserviceinterfaces.data.SponsorSegment
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager
+import dev.miraiijo.lumentube.feed.FeedCache
 import dev.miraiijo.lumentube.ui.LumenIcon
 import io.reactivex.Observable
 import io.reactivex.disposables.Disposable
@@ -134,7 +135,7 @@ object YouTube {
                 // YouTube's own home first, then a taste of each feed: Accueil is never a single row.
                 safely { addFeed(content.homeObserve) }
                 val extras = buildList<Pair<Observable<List<MediaGroup>>, String>> {
-                    if (signedIn) add(Observable.fromCallable { listOfNotNull(content.subscriptions) } to "Nouveautés des abonnements")
+                    if (signedIn) add(Observable.fromCallable { listOfNotNull(subscriptionsForFeed()) } to "Nouveautés des abonnements")
                     add(content.musicObserve to Section.MUSIC.label)
                     add(content.gamingObserve to Section.GAMING.label)
                     add(content.newsObserve to Section.NEWS.label)
@@ -144,17 +145,37 @@ object YouTube {
                 // One feed failing (or slow) never empties Accueil.
                 for ((parts, title) in extras) safely { addFeed(parts, limit = 2, titled = title) }
             }
-            Section.SUBSCRIPTIONS -> addFeed(Observable.fromCallable { listOfNotNull(content.subscriptions) })
+            Section.SUBSCRIPTIONS -> addFeed(Observable.fromCallable { listOfNotNull(subscriptionsForFeed()) })
             Section.MUSIC -> addFeed(content.musicObserve)
             Section.GAMING -> addFeed(content.gamingObserve)
             Section.NEWS -> addFeed(content.newsObserve)
             Section.SPORTS -> addFeed(content.sportsObserve)
             Section.LIVE -> addFeed(content.liveObserve)
-            Section.HISTORY -> addFeed(Observable.fromCallable { listOfNotNull(content.history) })
+            Section.HISTORY -> addFeed(Observable.fromCallable { listOfNotNull(historyForFeed()) })
             Section.PLAYLISTS -> addFeed(content.playlistRowsObserve)
         }
         if (rows.isEmpty()) emit(emptyList())
     }.flowOn(Dispatchers.IO)
+
+    // ---- Lumen's feed (FeedProvider) -----------------------------------------------------------
+
+    /** The account's subscriptions feed, also written to Lumen's feed cache. Blocking. */
+    private fun subscriptionsForFeed(): MediaGroup? =
+        service.contentService.subscriptions?.also { FeedCache.store(FeedCache.SUBSCRIPTIONS, FeedCache.itemsFrom(it.mediaItems.orEmpty(), FeedCache.SUBSCRIPTIONS)) }
+
+    /** The account's history, also written to Lumen's feed cache ("continue"). Blocking. */
+    private fun historyForFeed(): MediaGroup? =
+        service.contentService.history?.also { FeedCache.store(FeedCache.CONTINUE, FeedCache.itemsFrom(it.mediaItems.orEmpty(), FeedCache.CONTINUE)) }
+
+    /** Refresh of one feed list for the provider (off the main thread). True when it was written. */
+    fun refreshFeed(list: String): Boolean = runCatching {
+        if (!signedIn) return false
+        when (list) {
+            FeedCache.CONTINUE -> historyForFeed()
+            FeedCache.SUBSCRIPTIONS -> subscriptionsForFeed()
+            else -> null
+        } != null
+    }.getOrDefault(false)
 
     /** Runs [block], ignoring its failure (not a cancellation: the page was left, stop there). */
     private inline fun safely(block: () -> Unit) {
@@ -170,7 +191,7 @@ object YouTube {
     /** "Reprendre": videos started and not finished, from the account's history (null if none). */
     suspend fun resumeRow(): VideoRow? = withContext(Dispatchers.IO) {
         if (!signedIn) return@withContext null
-        val history = runCatching { service.contentService.history }.getOrNull() ?: return@withContext null
+        val history = runCatching { historyForFeed() }.getOrNull() ?: return@withContext null
         val started = history.mediaItems.orEmpty().filterNotNull()
             .filter { !it.isShorts && !it.isLive && it.videoId != null && it.percentWatched in 3..94 }
             .map { it.toVideo() }
@@ -290,6 +311,7 @@ object YouTube {
         runCatching {
             service.signInService.selectAccount(account.raw)
             service.invalidateCache()
+            if (!account.selected) FeedCache.clear()
         }
     }
 
@@ -305,13 +327,18 @@ object YouTube {
         service.signInService.signInObserve()
             .subscribeOn(Schedulers.io())
             .observeOn(io.reactivex.android.schedulers.AndroidSchedulers.mainThread())
-            .subscribe({ onCode(it) }, { onError(it.message ?: "Connexion impossible") }, { service.invalidateCache(); onDone() })
+            .subscribe({ onCode(it) }, { onError(it.message ?: "Connexion impossible") }, {
+                service.invalidateCache()
+                FeedCache.clear()
+                onDone()
+            })
 
     fun signOut() {
         runCatching {
             val signIn = service.signInService
             signIn.selectedAccount?.let(signIn::removeAccount)
             service.invalidateCache()
+            FeedCache.clear()
         }
     }
 

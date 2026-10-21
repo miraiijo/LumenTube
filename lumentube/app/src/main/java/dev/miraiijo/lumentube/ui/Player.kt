@@ -108,7 +108,7 @@ private fun formatsKind(info: com.liskovsoft.mediaserviceinterfaces.data.MediaIt
 }
 private val PREVIEW_WIDTH = 256.dp
 /** Subtitle height, as a share of the video's height (ExoPlayer's default is 0.0533). */
-private const val SUBTITLE_SIZE = 0.06f
+private const val SUBTITLE_SIZE = 0.042f
 
 /**
  * Full-screen player, laid out like Nuvio's: title and channel bottom left, a thin progress bar,

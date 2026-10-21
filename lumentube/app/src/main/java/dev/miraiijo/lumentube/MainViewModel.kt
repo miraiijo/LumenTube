@@ -43,6 +43,8 @@ data class UiState(
     val playing: Video? = null,
     /** A YouTube link opened from another app (video id), played directly. */
     val playingId: String? = null,
+    /** Where that link starts (its t parameter, seconds). */
+    val playingStart: Int = 0,
     /** The video plays in a small window in a corner while browsing (in-app picture-in-picture). */
     val minimized: Boolean = false,
     /** Accounts linked on this box. */
@@ -232,7 +234,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeOpened() = _state.update { it.copy(opened = null) }
 
-    fun playLink(videoId: String) = _state.update { it.copy(playing = null, playingId = videoId, minimized = false) }
+    fun playLink(videoId: String, startSeconds: Int = 0) =
+        _state.update { it.copy(playing = null, playingId = videoId, playingStart = startSeconds, minimized = false) }
 
     /** Small window in a corner; browsing goes on. */
     fun minimize() = _state.update { it.copy(minimized = true) }

@@ -15,12 +15,15 @@ android {
         applicationId = "dev.miraiijo.lumentube"
         minSdk = 28
         targetSdk = 35
-        versionCode = 14
-        versionName = "0.4.5"
+        versionCode = 16
+        versionName = "0.5.1"
         // The Freebox Player POP runs a 32-bit userspace; arm64 kept for other boxes.
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
         // Upstream modules have SmartTube's build flavors: use the "stable" one.
         missingDimensionStrategy("default", "ststable")
+        // The Lumen launcher's certificate: FeedProvider only answers it (see gradle.properties).
+        val lumenCert = System.getenv("LUMEN_CERT_SHA256") ?: (project.findProperty("lumen.certSha256") as String?) ?: ""
+        buildConfigField("String", "LUMEN_CERT_SHA256", "\"${lumenCert.lowercase()}\"")
     }
 
     signingConfigs {
@@ -49,7 +52,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     packaging {
         resources.excludes += listOf("META-INF/*.kotlin_module", "META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*")
     }
