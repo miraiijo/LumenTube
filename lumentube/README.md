@@ -36,6 +36,22 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.5.3
+- « À suivre » plus compact, en bas à droite (miniature 144 dp, titre sur deux lignes, boutons « Lire » et « Annuler ») : la fin de la vidéo reste visible.
+- Audio : la langue originale est choisie par défaut sur les vidéos doublées, et elle est en tête de la liste « Piste audio ». Les types de piste sont traduits : originale, doublée, doublage automatique, audiodescription.
+- Sous-titres centrés aussi sur la vidéo suivante (« À suivre ») : chaque vidéo a maintenant son propre écran de lecteur.
+- Audit sécurité et performances :
+  - liens entrants : seul un vrai identifiant de vidéo (11 caractères) est accepté, le moteur l'insérant tel quel dans ses requêtes connectées ; le paramètre `t` est plafonné à 24 h, plus de plantage sur une valeur énorme ;
+  - flux Lumen : l'appelant est vérifié avant tout le reste, et le certificat par le système (`hasSigningCertificate`, rotation de clé comprise) ; un chargement lancé avant un changement de compte n'écrit plus dans le cache ; fichier écrit avec `AtomicFile`, qui résiste aux coupures de courant ;
+  - CI : jeton en lecture seule, plus de release publique (l'APK reste un artefact du build), keystore limité à l'étape qui le restaure puis supprimé, jeton non conservé dans `.git`, actions épinglées par commit ;
+  - lecture : la source vidéo (analyse du manifeste DASH/SABR, création de Cronet) est construite hors du thread principal ;
+  - Accueil : les flux limités à deux rangées sont arrêtés au lieu de continuer à charger des pages inutiles ;
+  - aperçus de la barre : chaque planche est décodée une seule fois (trois gardées en mémoire), et la vignette est découpée selon la taille réelle de l'image ;
+  - cartes : miniatures en 640 px (`sddefault`), le 1280 px reste réservé à l'image en haut à droite et au lecteur ;
+  - DeArrow : chaque vidéo n'est demandée qu'une fois ;
+  - la préparation du moteur YouTube se fait à l'ouverture de l'écran, plus quand Lumen interroge le flux ;
+  - sauvegarde de position dans une portée de coroutines unique, propre à l'app.
+
 ### 0.5.2
 - Sous-titres centrés en bas de l'image : les positions envoyées par YouTube (souvent « à gauche, 0 % » pour les sous-titres automatiques) sont ignorées, comme dans SmartTube. Les lignes répétées des sous-titres automatiques défilants ne s'affichent plus qu'une fois.
 

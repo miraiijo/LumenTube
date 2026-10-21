@@ -126,15 +126,19 @@ class LumenPlayer(context: Context) {
      * Opens a video like SmartTube's VideoLoaderController: DASH formats, else SABR, else a live
      * DASH / HLS address, else plain URLs. False when there's nothing playable.
      */
-    fun open(info: MediaItemFormatInfo, startMs: Long = 0L): Boolean {
+    suspend fun open(info: MediaItemFormatInfo, startMs: Long = 0L): Boolean {
         val adaptive = !(info.isLive && info.startTimeMs == 0L)
-        val source: MediaSource = when {
-            adaptive && info.containsDashFormats() -> sources.fromDashFormatInfo(info)
-            adaptive && info.containsSabrFormats() && !info.isLive -> sources.fromSabrFormatInfo(info)
-            info.isLive && info.containsDashUrl() -> sources.fromDashManifestUrl(info.dashManifestUrl)
-            info.isLive && info.containsHlsUrl() -> sources.fromHlsPlaylist(info.hlsManifestUrl)
-            info.containsUrlFormats() -> sources.fromUrlList(info.createUrlList())
-            else -> return false
+        // Building the source parses the DASH / SABR manifest (and creates Cronet the first time):
+        // done off the main thread so the screen never freezes; only prepare() runs on it.
+        val source: MediaSource = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            when {
+                adaptive && info.containsDashFormats() -> sources.fromDashFormatInfo(info)
+                adaptive && info.containsSabrFormats() && !info.isLive -> sources.fromSabrFormatInfo(info)
+                info.isLive && info.containsDashUrl() -> sources.fromDashManifestUrl(info.dashManifestUrl)
+                info.isLive && info.containsHlsUrl() -> sources.fromHlsPlaylist(info.hlsManifestUrl)
+                info.containsUrlFormats() -> sources.fromUrlList(info.createUrlList())
+                else -> null
+            }
         } ?: return false
         exo.playWhenReady = true
         if (startMs > 0 && !info.isLive) {
@@ -233,7 +237,12 @@ class LumenPlayer(context: Context) {
         return (0 until groups.length)
             .map { trackName(groups[it].getFormat(0), it) to it }
             .distinctBy { it.first }
+            // The original language first (YouTube marks it "(original)"), then the dubs.
+            .sortedByDescending { isOriginalAudio(it.first) }
     }
+
+    /** Index of the original audio in [audioTracks] (-1: unknown, or a single track). */
+    fun originalAudio(): Int = audioTracks().takeIf { it.size > 1 }?.indexOfFirst(::isOriginalAudio) ?: -1
 
     /** The player's renderer for [type] and its track groups (null before the tracks are known). */
     private fun renderer(type: Int): Pair<Int, TrackGroupArray>? {
@@ -269,7 +278,23 @@ class LumenPlayer(context: Context) {
          * Name shown for an audio or subtitle track. YouTube's manifests put the name in the language
          * field ("Français (générés automatiquement)"); a bare code ("fr", "en-US") is spelled out.
          */
+        /** YouTube names audio tracks "Langue (original | dubbed | dubbed-auto | descriptive | secondary)". */
+        fun isOriginalAudio(name: String) = name.contains("(originale)") || name.contains("(original)")
+
+        private val AUDIO_KINDS = mapOf(
+            "(original)" to "(originale)",
+            "(dubbed-auto)" to "(doublage automatique)",
+            "(dubbed)" to "(doublée)",
+            "(descriptive)" to "(audiodescription)",
+            "(secondary)" to "(secondaire)",
+        )
+
         fun trackName(format: Format, index: Int): String {
+            val named = trackNameRaw(format, index)
+            return AUDIO_KINDS.entries.fold(named) { name, (en, fr) -> name.replace(en, fr) }
+        }
+
+        private fun trackNameRaw(format: Format, index: Int): String {
             val raw = format.label ?: format.language ?: return "Piste ${index + 1}"
             val isCode = raw.length <= 6 && raw.none { it == ' ' } && Regex("[a-zA-Z]{2,3}([-_][a-zA-Z0-9]+)?").matches(raw)
             if (!isCode) return raw

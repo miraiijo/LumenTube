@@ -113,8 +113,9 @@ fun RowScroll(content: @Composable () -> Unit) {
  * the frame's size, so a small card costs no more memory than before.
  */
 @Composable
-fun Thumbnail(videoId: String?, fallback: String?, modifier: Modifier = Modifier, custom: String? = null) {
-    val hd = custom ?: videoId?.let { "https://i.ytimg.com/vi/$it/maxresdefault.jpg" }
+fun Thumbnail(videoId: String?, fallback: String?, modifier: Modifier = Modifier, custom: String? = null, small: Boolean = false) {
+    // Cards (~460 px wide on the TV): YouTube's 640 px picture is enough and much lighter than 1280.
+    val hd = custom ?: videoId?.let { "https://i.ytimg.com/vi/$it/${if (small) "sddefault" else "maxresdefault"}.jpg" }
     GlideImage(
         model = hd ?: fallback,
         contentDescription = null,

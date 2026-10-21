@@ -145,7 +145,9 @@ fun Root(vm: MainViewModel) {
         val playing = state.playing
         val playingId = state.playingId ?: playing?.videoId
         if (playingId != null) {
-            PlayerScreen(
+            // One player screen per video: everything (PlayerView, subtitle output, listeners) starts
+            // fresh for the next one ("À suivre" included).
+            androidx.compose.runtime.key(playingId) { PlayerScreen(
                 videoId = playingId,
                 title = playing?.title,
                 channel = playing?.channel,
@@ -168,7 +170,7 @@ fun Root(vm: MainViewModel) {
                 } else {
                     Modifier.fillMaxSize()
                 },
-            )
+            ) }
         }
     }
     LaunchedEffect(returnFocusTick) {

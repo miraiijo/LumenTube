@@ -36,14 +36,15 @@ class FeedProvider : ContentProvider() {
     }
 
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor {
+        val ctx = context ?: throw SecurityException("Not ready")
+        // Who asks comes first: anything else is refused before the URI is even looked at.
+        if (!isLumen(ctx)) throw SecurityException("This feed is only readable by the Lumen launcher")
         val list = when (matcher.match(uri)) {
             CODE_CONTINUE -> FeedCache.CONTINUE
             CODE_SUBSCRIPTIONS -> FeedCache.SUBSCRIPTIONS
             else -> throw IllegalArgumentException("Unknown feed: $uri")
         }
         val cursor = MatrixCursor(FeedCache.COLUMNS)
-        val ctx = context ?: return cursor
-        if (!isLumen(ctx)) throw SecurityException("This feed is only readable by the Lumen launcher")
         // Providers start before Application.onCreate: the engine's prefs (account) must exist first.
         GlobalPreferences.instance(ctx.applicationContext)
         FeedCache.attach(ctx)
@@ -68,14 +69,14 @@ class FeedProvider : ContentProvider() {
     private fun isLumen(ctx: android.content.Context): Boolean {
         val expected = BuildConfig.LUMEN_CERT_SHA256
         val caller = callingPackage ?: return false
-        if (caller != LUMEN_PACKAGE || expected.isBlank()) return false
+        if (caller != LUMEN_PACKAGE || expected.length != 64) return false
+        // The system checks the calling app's certificate (key rotation included).
         return runCatching {
-            val info = ctx.packageManager.getPackageInfo(caller, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
-            val signers = info.signingInfo?.apkContentsSigners.orEmpty()
-            signers.isNotEmpty() && signers.all { signer ->
-                val digest = java.security.MessageDigest.getInstance("SHA-256").digest(signer.toByteArray())
-                java.security.MessageDigest.isEqual(digest, expected.hexToBytes())
-            }
+            ctx.packageManager.hasSigningCertificate(
+                android.os.Binder.getCallingUid(),
+                expected.hexToBytes(),
+                android.content.pm.PackageManager.CERT_INPUT_SHA256,
+            )
         }.getOrDefault(false)
     }
 

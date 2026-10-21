@@ -208,7 +208,7 @@ fun VideoCard(video: Video, modifier: Modifier = Modifier, onFocus: () -> Unit, 
             colors = ClickableSurfaceDefaults.colors(containerColor = Palette.Tile, focusedContainerColor = Palette.TileFocused),
         ) {
             Box(Modifier.fillMaxSize()) {
-                Thumbnail(video.videoId, video.thumbnail, Modifier.fillMaxSize(), custom = video.customThumbnail)
+                Thumbnail(video.videoId, video.thumbnail, Modifier.fillMaxSize(), custom = video.customThumbnail, small = true)
                 val badge = when {
                     video.live -> "EN DIRECT"
                     video.upcoming -> "BIENTÔT"

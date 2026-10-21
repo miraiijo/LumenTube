@@ -117,15 +117,21 @@ object YouTube {
         /** Adds the groups of [parts] as they arrive; [limit] rows at most, [titled] names untitled ones. */
         suspend fun addFeed(parts: Observable<List<MediaGroup>>, limit: Int = Int.MAX_VALUE, titled: String? = null) {
             var added = 0
-            for (groups in parts.timeout(OBSERVE_TIMEOUT_S, TimeUnit.SECONDS).blockingIterable()) {
-                for (group in groups.filterNotNull()) {
+            val iterator = parts.timeout(OBSERVE_TIMEOUT_S, TimeUnit.SECONDS).blockingIterable().iterator()
+            try {
+                while (iterator.hasNext()) {
+                    for (group in iterator.next().filterNotNull()) {
+                        if (added >= limit) break
+                        val row = group.toRow("${section.name}-${index++}", titled) ?: continue
+                        rows += row
+                        added++
+                    }
+                    emit(rows.toList())
                     if (added >= limit) break
-                    val row = group.toRow("${section.name}-${index++}", titled) ?: continue
-                    rows += row
-                    added++
                 }
-                emit(rows.toList())
-                if (added >= limit) break
+            } finally {
+                // Stops the feed's remaining requests (continuations nobody will show).
+                (iterator as? Disposable)?.dispose()
             }
         }
 
@@ -160,12 +166,20 @@ object YouTube {
     // ---- Lumen's feed (FeedProvider) -----------------------------------------------------------
 
     /** The account's subscriptions feed, also written to Lumen's feed cache. Blocking. */
-    private fun subscriptionsForFeed(): MediaGroup? =
-        service.contentService.subscriptions?.also { FeedCache.store(FeedCache.SUBSCRIPTIONS, FeedCache.itemsFrom(it.mediaItems.orEmpty(), FeedCache.SUBSCRIPTIONS)) }
+    private fun subscriptionsForFeed(): MediaGroup? {
+        val generation = FeedCache.generation()
+        return service.contentService.subscriptions?.also {
+            FeedCache.store(FeedCache.SUBSCRIPTIONS, FeedCache.itemsFrom(it.mediaItems.orEmpty(), FeedCache.SUBSCRIPTIONS), generation)
+        }
+    }
 
     /** The account's history, also written to Lumen's feed cache ("continue"). Blocking. */
-    private fun historyForFeed(): MediaGroup? =
-        service.contentService.history?.also { FeedCache.store(FeedCache.CONTINUE, FeedCache.itemsFrom(it.mediaItems.orEmpty(), FeedCache.CONTINUE)) }
+    private fun historyForFeed(): MediaGroup? {
+        val generation = FeedCache.generation()
+        return service.contentService.history?.also {
+            FeedCache.store(FeedCache.CONTINUE, FeedCache.itemsFrom(it.mediaItems.orEmpty(), FeedCache.CONTINUE), generation)
+        }
+    }
 
     /** Refresh of one feed list for the provider (off the main thread). True when it was written. */
     fun refreshFeed(list: String): Boolean = runCatching {

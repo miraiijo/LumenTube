@@ -54,8 +54,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,12 +71,10 @@ import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.text.CaptionStyleCompat
 import com.google.android.exoplayer2.ui.AspectRatioFrameLayout
 import com.google.android.exoplayer2.ui.PlayerView
-import com.bumptech.glide.integration.compose.GlideImage
-import com.bumptech.glide.load.engine.bitmap_recycle.BitmapPool
-import com.bumptech.glide.load.resource.bitmap.BitmapTransformation
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItem
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemStoryboard
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager
+import dev.miraiijo.lumentube.AppScope
 import dev.miraiijo.lumentube.data.Chapter
 import dev.miraiijo.lumentube.data.Details
 import dev.miraiijo.lumentube.data.Segment
@@ -188,6 +186,7 @@ fun PlayerScreen(
     /** Incremented when the tracks change: the panel's lists follow. */
     var tracksTick by remember(videoId) { mutableIntStateOf(0) }
     var subtitlesRestored by remember(videoId) { mutableStateOf(false) }
+    var audioRestored by remember(videoId) { mutableStateOf(false) }
     var sponsorBlock by remember { mutableStateOf(prefs.sponsorBlock) }
     var segments by remember(videoId) { mutableStateOf(emptyList<Segment>()) }
     var skipped by remember(videoId) { mutableStateOf(emptySet<Segment>()) }
@@ -275,6 +274,12 @@ fun PlayerScreen(
         player.onTracksChanged = {
             tracksTick++
             // Subtitles: the last language chosen, when this video has it (once, at the start).
+            // Dubbed video: the original language, not the dub YouTube may have picked by default.
+            if (!audioRestored && player.audioTracks().isNotEmpty()) {
+                audioRestored = true
+                val original = player.originalAudio()
+                if (original >= 0 && original != player.playingAudio) player.selectAudio(original)
+            }
             val tracks = player.subtitleTracks()
             if (!subtitlesRestored && tracks.isNotEmpty()) {
                 subtitlesRestored = true
@@ -317,7 +322,7 @@ fun PlayerScreen(
         onDispose {
             val seconds = player.exo.currentPosition / 1000f
             // Outlives the screen (its own scope is cancelled with it).
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { YouTube.savePosition(videoId, seconds) }
+            AppScope.launch { YouTube.savePosition(videoId, seconds) }
             player.exo.removeListener(listener)
             player.release()
         }
@@ -332,7 +337,7 @@ fun PlayerScreen(
                 androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
                     player.exo.playWhenReady = false
                     val seconds = player.exo.currentPosition / 1000f
-                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { YouTube.savePosition(videoId, seconds) }
+                    AppScope.launch { YouTube.savePosition(videoId, seconds) }
                 }
                 androidx.lifecycle.Lifecycle.Event.ON_START -> show()
                 else -> Unit
@@ -650,7 +655,7 @@ fun PlayerScreen(
                 next,
                 onPlay = { onNext(next) },
                 onCancel = onExit,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = Dimens.Gutter, bottom = 48.dp),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 32.dp, bottom = 32.dp),
             )
         }
 
@@ -932,56 +937,76 @@ private fun UpNextCard(next: Video, onPlay: () -> Unit, onCancel: () -> Unit, mo
         }
         onPlay()
     }
+    // Compact, bottom right: the end of the video stays visible around it.
     Row(
-        modifier.background(Palette.Panel.copy(alpha = 0.95f), DialogShape).padding(20.dp),
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
+        modifier.background(Palette.Panel.copy(alpha = 0.92f), DialogShape).padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(240.dp).aspectRatio(16f / 9f).clip(ControlShape).background(Palette.Tile)) {
-            Thumbnail(next.videoId, next.thumbnail, Modifier.fillMaxSize())
+        Box(Modifier.width(144.dp).aspectRatio(16f / 9f).clip(ControlShape).background(Palette.Tile)) {
+            Thumbnail(next.videoId, next.thumbnail, Modifier.fillMaxSize(), small = true)
         }
-        Column(Modifier.width(320.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("À suivre dans $seconds s", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary)
-            Text(next.title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, color = Color.White)
-            if (next.channel.isNotBlank()) Text(next.channel, fontSize = 14.sp, color = Palette.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap), modifier = Modifier.padding(top = 6.dp)) {
-                LumenButton("Lire maintenant", icon = LumenIcon.PLAY, modifier = Modifier.focusRequester(playNow), onClick = onPlay)
+        Column(Modifier.width(210.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("À suivre · $seconds s", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary)
+            Text(next.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp, color = Color.White)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                LumenButton("Lire", icon = LumenIcon.PLAY, modifier = Modifier.focusRequester(playNow), onClick = onPlay)
                 LumenButton("Annuler", onClick = onCancel)
             }
         }
     }
 }
 
-/** The storyboard picture at [positionMs]: one tile of YouTube's sprite sheets. */
+/**
+ * The storyboard picture at [positionMs]: one tile of YouTube's sprite sheets. Each sheet is
+ * decoded once at its real size (a few kept in memory) and the tile is drawn out of it: holding
+ * Left / Right no longer decodes a whole sheet per frame, and the tile is cut from the actual
+ * bitmap size (no shift if the server's sheet differs from the declared one).
+ */
 @Composable
 private fun StoryboardFrame(storyboard: MediaItemStoryboard, positionMs: Long, modifier: Modifier) {
     val size = storyboard.groupSize
     val groupMs = storyboard.groupDurationMS
     if (size == null || groupMs <= 0 || size.durationEachMS <= 0 || size.colCount <= 0 || size.rowCount <= 0) return
     val group = (positionMs / groupMs).toInt()
-    val index = ((positionMs % groupMs) / size.durationEachMS).toInt().coerceAtMost(size.colCount * size.rowCount - 1)
-    val tile = TileCrop(index % size.colCount, index / size.colCount, size.colCount, size.rowCount, size.width, size.height)
-    GlideImage(
-        model = storyboard.getGroupUrl(group),
-        contentDescription = null,
-        contentScale = ContentScale.FillBounds,
-        modifier = modifier,
-        requestBuilderTransform = { it.transform(tile) },
-    )
+    val index = ((positionMs % groupMs) / size.durationEachMS).toInt().coerceIn(0, size.colCount * size.rowCount - 1)
+    val context = LocalContext.current
+    val sheets = remember(storyboard) { SheetCache(context) }
+    var sheet by remember(storyboard) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    LaunchedEffect(storyboard, group) {
+        sheet = sheets.get(group, storyboard.getGroupUrl(group)) ?: sheet
+    }
+    val image = sheet ?: return
+    Canvas(modifier) {
+        val tileW = image.width / size.colCount
+        val tileH = image.height / size.rowCount
+        if (tileW <= 0 || tileH <= 0) return@Canvas
+        drawImage(
+            image,
+            srcOffset = androidx.compose.ui.unit.IntOffset((index % size.colCount) * tileW, (index / size.colCount) * tileH),
+            srcSize = androidx.compose.ui.unit.IntSize(tileW, tileH),
+            dstSize = androidx.compose.ui.unit.IntSize(this.size.width.toInt(), this.size.height.toInt()),
+        )
+    }
 }
 
-/** Cuts one tile out of a storyboard sheet ([width] × [height] each, or the sheet split evenly). */
-private data class TileCrop(val col: Int, val row: Int, val cols: Int, val rows: Int, val width: Int, val height: Int) : BitmapTransformation() {
-    override fun transform(pool: BitmapPool, toTransform: android.graphics.Bitmap, outWidth: Int, outHeight: Int): android.graphics.Bitmap {
-        val w = (if (width > 0) width else toTransform.width / cols).coerceIn(1, toTransform.width)
-        val h = (if (height > 0) height else toTransform.height / rows).coerceIn(1, toTransform.height)
-        val x = (col * w).coerceIn(0, toTransform.width - w)
-        val y = (row * h).coerceIn(0, toTransform.height - h)
-        return android.graphics.Bitmap.createBitmap(toTransform, x, y, w, h)
+/** The last storyboard sheets decoded (3 at most: the one shown and its neighbours). */
+private class SheetCache(private val context: android.content.Context) {
+    private val sheets = object : LinkedHashMap<Int, androidx.compose.ui.graphics.ImageBitmap>(4, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Int, androidx.compose.ui.graphics.ImageBitmap>?) = size > 3
     }
 
-    override fun updateDiskCacheKey(messageDigest: java.security.MessageDigest) {
-        messageDigest.update("lumentube.tile:$col:$row:$cols:$rows:$width:$height".toByteArray())
+    suspend fun get(group: Int, url: String?): androidx.compose.ui.graphics.ImageBitmap? {
+        sheets[group]?.let { return it }
+        if (url == null) return null
+        val bitmap = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                com.bumptech.glide.Glide.with(context).asBitmap().load(url)
+                    .override(com.bumptech.glide.request.target.Target.SIZE_ORIGINAL)
+                    .submit().get()
+            }.getOrNull()
+        } ?: return null
+        return bitmap.asImageBitmap().also { sheets[group] = it }
     }
 }
 

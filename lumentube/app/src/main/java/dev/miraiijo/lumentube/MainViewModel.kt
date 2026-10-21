@@ -195,11 +195,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // ---- DeArrow ------------------------------------------------------------------------------
 
     /** Community titles / thumbnails for the videos of these rows not looked up yet (when DeArrow is on). */
+    /** Video ids already asked to DeArrow (answered or not): each one is asked once. */
+    private val deArrowAsked = mutableSetOf<String>()
+
     private fun fetchDeArrow(rows: List<VideoRow>) {
         if (!_state.value.settings.deArrow) return
-        val known = _state.value.deArrow
-        val ids = rows.flatMap { row -> row.items.mapNotNull { it.videoId } }.distinct().filter { it !in known }.take(DEARROW_BATCH)
+        val ids = rows.flatMap { row -> row.items.mapNotNull { it.videoId } }.distinct().filter { it !in deArrowAsked }.take(DEARROW_BATCH)
         if (ids.isEmpty()) return
+        deArrowAsked += ids
         viewModelScope.launch {
             val found = YouTube.deArrow(ids)
             if (found.isNotEmpty()) _state.update { it.copy(deArrow = it.deArrow + found) }
@@ -273,6 +276,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.stableVolume = settings.stableVolume
         prefs.deArrow = settings.deArrow
         val deArrowTurnedOn = settings.deArrow && !_state.value.settings.deArrow
+        if (!settings.deArrow) deArrowAsked.clear()
         _state.update { it.copy(settings = settings, deArrow = if (settings.deArrow) it.deArrow else emptyMap()) }
         if (deArrowTurnedOn) {
             val s = _state.value

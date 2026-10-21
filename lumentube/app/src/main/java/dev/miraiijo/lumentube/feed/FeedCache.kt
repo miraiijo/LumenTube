@@ -42,6 +42,15 @@ object FeedCache {
     @Volatile
     private var context: Context? = null
 
+    /**
+     * Account generation: bumped by [clear]. A request started before an account switch carries the
+     * old value, and its result is dropped instead of showing the previous account's videos.
+     */
+    private val generation = java.util.concurrent.atomic.AtomicInteger()
+
+    /** Taken before fetching, passed back to [store]. */
+    fun generation(): Int = generation.get()
+
     /** Called by the app and by the provider (whichever starts first). */
     fun attach(context: Context) {
         if (this.context == null) this.context = context.applicationContext
@@ -76,17 +85,23 @@ object FeedCache {
         .take(MAX_ROWS)
         .toList()
 
-    /** Replaces one list and tells the readers (Lumen) it changed. */
-    fun store(list: String, items: List<Item>) {
+    /** Replaces one list and tells the readers (Lumen) it changed; dropped if the account changed since [fetchedIn]. */
+    fun store(list: String, items: List<Item>, fetchedIn: Int) {
         val ctx = context ?: return
         synchronized(this) {
+            if (fetchedIn != generation.get()) return
             val root = readRoot(ctx)
             root.put(list, JSONObject().put("updated_ms", System.currentTimeMillis()).put("items", JSONArray(items.map { it.toJson() })))
+            // AtomicFile: written to a side file, synced, then swapped (a power cut never leaves it empty).
+            val file = android.util.AtomicFile(File(ctx.filesDir, FILE))
             runCatching {
-                val file = File(ctx.filesDir, FILE)
-                val tmp = File(ctx.filesDir, "$FILE.tmp")
-                tmp.writeText(root.toString())
-                tmp.renameTo(file)
+                val out = file.startWrite()
+                try {
+                    out.write(root.toString().toByteArray())
+                    file.finishWrite(out)
+                } catch (e: java.io.IOException) {
+                    file.failWrite(out)
+                }
             }
         }
         runCatching { ctx.contentResolver.notifyChange(uri(list), null) }
@@ -95,7 +110,10 @@ object FeedCache {
     /** Account changed or signed out: nothing of the previous account stays readable. */
     fun clear() {
         val ctx = context ?: return
-        synchronized(this) { runCatching { File(ctx.filesDir, FILE).delete() } }
+        synchronized(this) {
+            generation.incrementAndGet()
+            runCatching { android.util.AtomicFile(File(ctx.filesDir, FILE)).delete() }
+        }
         runCatching {
             ctx.contentResolver.notifyChange(uri(CONTINUE), null)
             ctx.contentResolver.notifyChange(uri(SUBSCRIPTIONS), null)
@@ -112,7 +130,7 @@ object FeedCache {
     }
 
     private fun readRoot(ctx: Context): JSONObject =
-        runCatching { JSONObject(File(ctx.filesDir, FILE).readText()) }.getOrDefault(JSONObject())
+        runCatching { JSONObject(String(android.util.AtomicFile(File(ctx.filesDir, FILE)).readFully())) }.getOrDefault(JSONObject())
 
     private fun httpsThumbnail(url: String?, videoId: String): String = when {
         url.isNullOrBlank() -> "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"
