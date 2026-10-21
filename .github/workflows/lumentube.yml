@@ -1,0 +1,72 @@
+name: LumenTube APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master, main]
+    paths:
+      - "lumentube/**"
+      - "MediaServiceCore"
+      - "SharedModules"
+      - "exoplayer-amzn-2.10.6/**"
+      - ".github/workflows/lumentube.yml"
+
+permissions:
+  contents: write # publish the release the deploy script installs from
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      LUMENTUBE_KEYSTORE_B64: ${{ secrets.LUMENTUBE_KEYSTORE_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive # SmartTube's engine (MediaServiceCore, SharedModules)
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Restore release keystore
+        if: env.LUMENTUBE_KEYSTORE_B64 != ''
+        run: |
+          echo "$LUMENTUBE_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/lumentube.jks"
+          echo "LUMENTUBE_KEYSTORE_PATH=$RUNNER_TEMP/lumentube.jks" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        working-directory: lumentube
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --build-cache :app:assembleRelease
+        env:
+          LUMENTUBE_KEYSTORE_PASSWORD: ${{ secrets.LUMENTUBE_KEYSTORE_PASSWORD }}
+          LUMENTUBE_KEY_ALIAS: ${{ secrets.LUMENTUBE_KEY_ALIAS }}
+          LUMENTUBE_KEY_PASSWORD: ${{ secrets.LUMENTUBE_KEY_PASSWORD }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumentube-apk
+          path: lumentube/app/build/outputs/apk/release/*.apk
+
+      - name: Read version
+        id: version
+        run: |
+          echo "code=$(grep -oP 'versionCode = \K[0-9]+' lumentube/app/build.gradle.kts)" >> "$GITHUB_OUTPUT"
+          echo "name=$(grep -oP 'versionName = "\K[^"]+' lumentube/app/build.gradle.kts)" >> "$GITHUB_OUTPUT"
+
+      # Tagged lumentube-v<versionCode>, so it never clashes with SmartTube's own tags.
+      - name: Publish release
+        if: github.event_name == 'push' && env.LUMENTUBE_KEYSTORE_B64 != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp lumentube/app/build/outputs/apk/release/app-release.apk "lumentube-${{ steps.version.outputs.name }}.apk"
+          gh release delete "lumentube-v${{ steps.version.outputs.code }}" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "lumentube-v${{ steps.version.outputs.code }}" "lumentube-${{ steps.version.outputs.name }}.apk" \
+            --title "LumenTube ${{ steps.version.outputs.name }}" --notes "Build ${{ github.sha }}" --latest

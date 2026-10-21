@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="lumentube_background">#FF070707</color>
+
+    <style name="Theme.LumenTube" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/lumentube_background</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+</resources>
