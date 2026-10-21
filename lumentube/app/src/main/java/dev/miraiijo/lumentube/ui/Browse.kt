@@ -40,7 +40,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -51,7 +50,6 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
-import com.bumptech.glide.integration.compose.GlideImage
 import dev.miraiijo.lumentube.Page
 import dev.miraiijo.lumentube.data.Video
 import dev.miraiijo.lumentube.data.VideoRow
@@ -197,7 +195,7 @@ fun VideoCard(video: Video, modifier: Modifier = Modifier, onFocus: () -> Unit, 
             colors = ClickableSurfaceDefaults.colors(containerColor = Palette.Tile, focusedContainerColor = Palette.TileFocused),
         ) {
             Box(Modifier.fillMaxSize()) {
-                GlideImage(model = video.thumbnail, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                Thumbnail(video.videoId, video.thumbnail, Modifier.fillMaxSize())
                 val badge = when {
                     video.live -> "EN DIRECT"
                     video.upcoming -> "BIENTÔT"
@@ -243,19 +241,15 @@ fun VideoCard(video: Video, modifier: Modifier = Modifier, onFocus: () -> Unit, 
 /** The focused video's picture, top right, melting into the page (Lumen's Bibliothèque backdrop). */
 @Composable
 private fun Backdrop(video: Video?) {
-    Crossfade(targetState = video?.let { hdThumbnail(it) }, animationSpec = tween(500), label = "backdrop") { image ->
+    // Picture = (video id for the HD version, feed thumbnail as fallback).
+    val picture = video?.takeIf { it.videoId != null || it.thumbnail != null }?.let { it.videoId to it.thumbnail }
+    Crossfade(targetState = picture, animationSpec = tween(500), label = "backdrop") { image ->
         Box(Modifier.fillMaxSize()) {
             // Top-right quarter: the whole picture, melting into the page on its left (towards the
             // details) and at its bottom.
             if (image != null) {
                 Box(Modifier.fillMaxWidth(0.5f).aspectRatio(16f / 9f).align(Alignment.TopEnd).then(MeltIntoPage)) {
-                    GlideImage(
-                        model = image.first,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                        requestBuilderTransform = { it.error(it.clone().load(image.second)) },
-                    )
+                    Thumbnail(image.first, image.second, Modifier.fillMaxSize())
                 }
             }
         }
@@ -306,8 +300,4 @@ private fun Message(text: String, button: String? = null, buttonModifier: Modifi
     }
 }
 
-/** maxres picture for the backdrop, with the card's thumbnail as fallback. */
-private fun hdThumbnail(video: Video): Pair<String, String?>? {
-    val id = video.videoId ?: return video.thumbnail?.let { it to null }
-    return "https://i.ytimg.com/vi/$id/maxresdefault.jpg" to video.thumbnail
-}
+

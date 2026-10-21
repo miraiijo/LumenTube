@@ -2,6 +2,7 @@ package dev.miraiijo.lumentube.ui
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -10,6 +11,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Typography
 import androidx.tv.material3.darkColorScheme
@@ -93,8 +95,11 @@ fun LumenTubeTheme(content: @Composable () -> Unit) {
             onSurface = Palette.TextPrimary,
         ),
         typography = LumenTypography,
-        content = content,
-    )
+    ) {
+        // tv-material's Text takes LocalContentColor, black by default outside a Surface: without
+        // this, every Text with no explicit color (row titles, the sheet's title) is black on black.
+        CompositionLocalProvider(LocalContentColor provides Palette.TextPrimary, content = content)
+    }
 }
 
 /** Shared measurements: one set of radii, heights and font sizes for the whole app. */

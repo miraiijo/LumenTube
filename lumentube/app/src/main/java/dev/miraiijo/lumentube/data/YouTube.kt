@@ -10,6 +10,9 @@ import io.reactivex.Observable
 import io.reactivex.disposables.Disposable
 import io.reactivex.schedulers.Schedulers
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
@@ -57,22 +60,32 @@ object YouTube {
     private val service: ServiceManager get() = YouTubeServiceManager.instance()
     private const val OBSERVE_TIMEOUT_S = 30L
 
-    suspend fun rows(section: Section): List<VideoRow> = withContext(Dispatchers.IO) {
+    /**
+     * A section's rows, as they arrive: YouTube sends Accueil (and the other feeds) in several
+     * parts, each one is shown as soon as it's here instead of waiting for the whole page.
+     * Every emission is the full list so far.
+     */
+    fun rows(section: Section): Flow<List<VideoRow>> = flow {
         val content = service.contentService
-        val groups: List<MediaGroup?> = when (section) {
-            Section.HOME -> content.homeObserve.collectAll()
-            Section.SUBSCRIPTIONS -> listOf(content.subscriptions)
-            Section.TRENDING -> content.trendingObserve.collectAll()
-            Section.MUSIC -> content.musicObserve.collectAll()
-            Section.GAMING -> content.gamingObserve.collectAll()
-            Section.NEWS -> content.newsObserve.collectAll()
-            Section.SPORTS -> content.sportsObserve.collectAll()
-            Section.LIVE -> content.liveObserve.collectAll()
-            Section.HISTORY -> listOf(content.history)
-            Section.PLAYLISTS -> content.playlistRowsObserve.collectAll()
+        val parts: Observable<List<MediaGroup>> = when (section) {
+            Section.HOME -> content.homeObserve
+            Section.SUBSCRIPTIONS -> Observable.fromCallable { listOfNotNull(content.subscriptions) }
+            Section.TRENDING -> content.trendingObserve
+            Section.MUSIC -> content.musicObserve
+            Section.GAMING -> content.gamingObserve
+            Section.NEWS -> content.newsObserve
+            Section.SPORTS -> content.sportsObserve
+            Section.LIVE -> content.liveObserve
+            Section.HISTORY -> Observable.fromCallable { listOfNotNull(content.history) }
+            Section.PLAYLISTS -> content.playlistRowsObserve
         }
-        groups.filterNotNull().mapIndexedNotNull { index, group -> group.toRow("${section.name}-$index") }
-    }
+        val rows = mutableListOf<VideoRow>()
+        var index = 0
+        for (groups in parts.timeout(OBSERVE_TIMEOUT_S, TimeUnit.SECONDS).blockingIterable()) {
+            groups.filterNotNull().forEach { group -> group.toRow("${section.name}-${index++}")?.let(rows::add) }
+            emit(rows.toList())
+        }
+    }.flowOn(Dispatchers.IO)
 
     /** Next page of a row (null when there's no more). */
     suspend fun more(row: VideoRow): VideoRow? = withContext(Dispatchers.IO) {

@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
+@file:OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class, ExperimentalGlideComposeApi::class)
 
 package dev.miraiijo.lumentube.ui
 
@@ -28,6 +28,9 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Text
+import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.GlideImage
+import androidx.compose.ui.layout.ContentScale
 
 /* Lumen's controls and focus scrolling, shared by every LumenTube screen. */
 
@@ -102,6 +105,23 @@ fun RowScroll(content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalBringIntoViewSpec provides spec) {
         Box(Modifier.focusRestorer()) { content() }
     }
+}
+
+/**
+ * A video's picture in HD: YouTube's 1280×720 version (maxresdefault), cropped to its frame.
+ * Some videos don't have one (404): the feed's thumbnail is loaded instead. Glide downsamples it to
+ * the frame's size, so a small card costs no more memory than before.
+ */
+@Composable
+fun Thumbnail(videoId: String?, fallback: String?, modifier: Modifier = Modifier) {
+    val hd = videoId?.let { "https://i.ytimg.com/vi/$it/maxresdefault.jpg" }
+    GlideImage(
+        model = hd ?: fallback,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = modifier,
+        requestBuilderTransform = { if (hd != null && fallback != null) it.error(it.clone().load(fallback)) else it },
+    )
 }
 
 /** "12:34" / "1:02:03". */

@@ -80,8 +80,14 @@ class LumenPlayer(context: Context) {
             else -> return false
         } ?: return false
         exo.playWhenReady = true
-        exo.prepare(source, true, true)
-        if (startMs > 0 && !info.isLive) exo.seekTo(startMs)
+        if (startMs > 0 && !info.isLive) {
+            // Position first, then prepare without resetting it: the first segments loaded are the
+            // ones at the resume point (seeking after prepare loaded the start, then threw it away).
+            exo.seekTo(startMs)
+            exo.prepare(source, false, true)
+        } else {
+            exo.prepare(source, true, true)
+        }
         return true
     }
 

@@ -64,11 +64,20 @@ class MainViewModel : ViewModel() {
         loads[section]?.cancel()
         _state.update { it.copy(pages = it.pages + (section to Page(rows = it.pages[section]?.rows.orEmpty(), loading = true))) }
         loads[section] = viewModelScope.launch {
-            val page = runCatching { YouTube.rows(section) }.fold(
-                onSuccess = { rows -> Page(rows, loading = false, error = if (rows.isEmpty()) "Rien à afficher ici pour l'instant." else null) },
-                onFailure = { e -> Page(loading = false, error = e.userMessage()) },
+            fun set(page: Page) = _state.update { it.copy(pages = it.pages + (section to page)) }
+            var rows = emptyList<VideoRow>()
+            val failure = runCatching {
+                // Each part of the page is shown as soon as it arrives (still loading after it).
+                YouTube.rows(section).collect { rows = it; if (it.isNotEmpty()) set(Page(it, loading = true)) }
+            }.exceptionOrNull()
+            if (failure is kotlinx.coroutines.CancellationException) throw failure
+            set(
+                when {
+                    rows.isNotEmpty() -> Page(rows, loading = false)
+                    failure != null -> Page(loading = false, error = failure.userMessage())
+                    else -> Page(loading = false, error = "Rien à afficher ici pour l'instant.")
+                },
             )
-            _state.update { it.copy(pages = it.pages + (section to page)) }
         }
     }
 
@@ -150,9 +159,10 @@ class MainViewModel : ViewModel() {
         signIn?.dispose()
     }
 
-    private fun Throwable.userMessage(): String = when (this) {
+    // RxJava's blocking calls wrap checked exceptions (TimeoutException…) in a RuntimeException.
+    private fun Throwable.userMessage(): String = when (val e = if (this.javaClass == RuntimeException::class.java) cause ?: this else this) {
         is java.net.UnknownHostException, is java.net.ConnectException -> "Pas de connexion à Internet."
         is java.net.SocketTimeoutException, is java.util.concurrent.TimeoutException -> "YouTube ne répond pas. Réessaie."
-        else -> "Impossible de charger cette page (${this::class.java.simpleName})."
+        else -> "Impossible de charger cette page (${e::class.java.simpleName})."
     }
 }
