@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -957,8 +956,8 @@ private fun Controls(
 }
 
 /**
- * Thumb with its count, Nuvio's round style stretched into a pill (white when focused, filled
- * icon when active). Not signed in: the count alone, not focusable.
+ * Thumb: the same round button as the others (white circle when focused, light fill when active),
+ * its count beside it, outside the circle. Not signed in: the icon and count alone, not focusable.
  */
 @Composable
 private fun RateButton(
@@ -970,41 +969,15 @@ private fun RateButton(
     onDown: () -> Unit,
     onClick: () -> Unit,
 ) {
-    if (!enabled) {
-        Row(Modifier.height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, size = 22.dp, color = Color.White)
-            if (count != null) Text(count, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White, modifier = Modifier.padding(start = 8.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (enabled) {
+            ControlButton(icon, up = up, onDown = onDown, active = active, onClick = onClick)
+        } else {
+            Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) { Icon(icon, size = 24.dp, color = Color.White) }
         }
-        return
-    }
-    androidx.tv.material3.Button(
-        onClick = onClick,
-        modifier = Modifier
-            .height(52.dp)
-            .focusProperties { this.up = up }
-            .onPreviewKeyEvent { event ->
-                val native = event.nativeKeyEvent
-                if (native.action == AndroidKeyEvent.ACTION_DOWN && native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN) {
-                    onDown()
-                    true
-                } else {
-                    false
-                }
-            },
-        contentPadding = PaddingValues(horizontal = if (count != null) 16.dp else 14.dp),
-        shape = androidx.tv.material3.ButtonDefaults.shape(shape = CircleShape),
-        scale = androidx.tv.material3.ButtonDefaults.scale(focusedScale = 1.05f),
-        colors = androidx.tv.material3.ButtonDefaults.colors(
-            containerColor = if (active) Palette.ControlOnArt else Color.Transparent,
-            contentColor = Color.White,
-            focusedContainerColor = Color.White,
-            focusedContentColor = Color.Black,
-            pressedContainerColor = Color.White,
-            pressedContentColor = Color.Black,
-        ),
-    ) {
-        Icon(icon, size = 24.dp)
-        if (count != null) Text(count, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 8.dp))
+        if (count != null) {
+            Text(count, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 2.dp, end = 8.dp))
+        }
     }
 }
 

@@ -36,6 +36,9 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.8.2
+- Lecteur : J'aime et Je n'aime pas sont des boutons ronds identiques aux autres (même taille, même hauteur, cercle blanc au focus), avec le compteur affiché à côté du cercle.
+
 ### 0.8.1
 - Correctif de compilation de la 0.8.0 (panneau des commentaires : API de focus expérimentale de Compose déclarée). Aucun changement de fonctionnement.
 
