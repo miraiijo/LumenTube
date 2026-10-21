@@ -77,6 +77,8 @@ fun BrowsePage(
     onRetry: () -> Unit,
     needsAccount: Boolean,
     onSignIn: () -> Unit,
+    /** "Réessayer" under an empty page's message. */
+    showRetry: Boolean = true,
 ) {
     var focused by remember { mutableStateOf<Video?>(null) }
     var shown by remember { mutableStateOf<Video?>(null) }
@@ -108,7 +110,7 @@ fun BrowsePage(
                     page.rows.isEmpty() && page.loading -> Message("Chargement…")
                     page.rows.isEmpty() -> Message(
                         page.error ?: "Rien à afficher.",
-                        button = "Réessayer",
+                        button = if (showRetry) "Réessayer" else null,
                         buttonModifier = Modifier.focusRequester(action),
                         onClick = onRetry,
                     )
@@ -195,7 +197,7 @@ fun VideoCard(video: Video, modifier: Modifier = Modifier, onFocus: () -> Unit, 
             colors = ClickableSurfaceDefaults.colors(containerColor = Palette.Tile, focusedContainerColor = Palette.TileFocused),
         ) {
             Box(Modifier.fillMaxSize()) {
-                Thumbnail(video.videoId, video.thumbnail, Modifier.fillMaxSize())
+                Thumbnail(video.videoId, video.thumbnail, Modifier.fillMaxSize(), custom = video.customThumbnail)
                 val badge = when {
                     video.live -> "EN DIRECT"
                     video.upcoming -> "BIENTÔT"

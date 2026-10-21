@@ -36,6 +36,34 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.3.0
+- **Accueil** : la rangée « Reprendre » (vidéos commencées) en tête, puis l'accueil YouTube, les nouveautés des abonnements et deux rangées de chaque rubrique (Musique, Gaming, Actus, Sport, Direct).
+- **Rechercher** (en tête du menu) : au clavier de la télé, ou à la voix (« Dicter ») si le Player propose la reconnaissance vocale.
+- **Comptes** :
+  - connexion par QR code, avec le code déjà rempli ; le QR est dessiné sur le Player (bibliothèque ZXing), sans service web ;
+  - plusieurs comptes : « Qui regarde ? » à l'ouverture dès que deux comptes sont liés ;
+  - « Compte et réglages » en bas du menu : changer de compte, en ajouter un, se déconnecter.
+- **Réglages** : Lecture automatique, SponsorBlock, Volume stable, DeArrow (désactivé par défaut).
+- **Lecteur** :
+  - « À suivre » : en fin de vidéo, la suivante (playlist ou suggestion YouTube) après 10 s ;
+  - aperçu de l'image en déplaçant la barre ;
+  - bouton J'aime ;
+  - dans ⚙ : s'abonner, ajouter à « À regarder plus tard », infos sur la vidéo (description, vues, date), format de l'image (image entière, remplir l'écran, étirer) ;
+  - volume stable : correction de volume par vidéo fournie par YouTube (+3,5 dB au plus) ;
+  - OK affiche les commandes au lieu de mettre en pause ; la touche lecture/pause de la télécommande garde son rôle.
+- **Menu latéral** : les rubriques défilent quand elles ne tiennent pas à l'écran.
+- **Tendances** retiré : YouTube a supprimé sa page Tendances en 2025 et le flux ne répond plus.
+
+### 0.2.0
+- Lecteur : panneau Réglages façon Nuvio, ouvert par le bouton ⚙ et fermé par Retour :
+  - **Qualité** : Auto, ou une qualité tenue (2160p, 1440p, 1080p…). Seules les qualités que le Player sait décoder sont proposées. Le choix est mémorisé.
+  - **Sous-titres** : ceux de la vidéo, puis les traductions automatiques de YouTube. La langue choisie est réappliquée aux vidéos suivantes qui l'ont. Bouton direct à côté de ⚙. Texte blanc sur bande sombre, un peu plus grand.
+  - **Vitesse** : de 0,5× à 2×.
+  - **Piste audio** : affichée seulement pour les vidéos doublées.
+  - **SponsorBlock** : activé ou désactivé (mémorisé).
+- SponsorBlock : les sponsors, l'autopromo, les rappels d'abonnement, l'intro et le générique de fin sont sautés automatiquement, avec un bandeau « Passé : … ». Ces segments apparaissent en orange sur la barre de progression, et un segment n'est sauté qu'une fois : revenir en arrière dedans le lit.
+- Chapitres : marqués sur la barre de progression, avec le chapitre en cours affiché à côté du nom de la chaîne, y compris pendant l'aperçu d'un déplacement.
+
 ### 0.1.3
 - Accueil et les autres pages s'affichent dès la première partie reçue. YouTube envoie l'Accueil en plusieurs requêtes successives, et l'app attendait la dernière avant d'afficher quoi que ce soit.
 - Reprise de lecture plus rapide : le lecteur se place à la position sauvegardée avant de préparer la vidéo, au lieu de charger le début puis de sauter.
@@ -66,7 +94,5 @@ Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTub
 - Erreur de lecture : nouvelle tentative avec un autre client YouTube, comme SmartTube.
 
 ## Prochaine étape
-- Recherche.
-- SponsorBlock.
-- Choix de la qualité et sous-titres.
 - Rangée ou tuile dans Lumen.
+- Signature avec la vraie clé (secrets de la CI).

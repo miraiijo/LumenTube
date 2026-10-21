@@ -9,11 +9,16 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,12 +38,15 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -46,6 +54,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,11 +67,22 @@ import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.Text
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.google.android.exoplayer2.Player
+import com.google.android.exoplayer2.text.CaptionStyleCompat
 import com.google.android.exoplayer2.ui.AspectRatioFrameLayout
 import com.google.android.exoplayer2.ui.PlayerView
+import com.bumptech.glide.integration.compose.GlideImage
+import com.bumptech.glide.load.engine.bitmap_recycle.BitmapPool
+import com.bumptech.glide.load.resource.bitmap.BitmapTransformation
+import com.liskovsoft.mediaserviceinterfaces.data.MediaItem
+import com.liskovsoft.mediaserviceinterfaces.data.MediaItemStoryboard
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager
+import dev.miraiijo.lumentube.data.Chapter
+import dev.miraiijo.lumentube.data.Details
+import dev.miraiijo.lumentube.data.Segment
+import dev.miraiijo.lumentube.data.Video
 import dev.miraiijo.lumentube.data.YouTube
 import dev.miraiijo.lumentube.player.LumenPlayer
+import dev.miraiijo.lumentube.player.PlayerPrefs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalTime
@@ -71,11 +91,16 @@ import java.time.format.DateTimeFormatter
 private const val SEEK_STEP_MS = 10_000L
 private const val CONTROLS_HIDE_MS = 4_000L
 private const val SAVE_EVERY_MS = 30_000L
+private const val SKIP_NOTICE_MS = 3_000L
+private const val UP_NEXT_SECONDS = 10
+private val PREVIEW_WIDTH = 256.dp
+/** Subtitle height, as a share of the video's height (ExoPlayer's default is 0.0533). */
+private const val SUBTITLE_SIZE = 0.06f
 
 /**
  * Full-screen player, laid out like Nuvio's: title and channel bottom left, a thin progress bar,
  * round icon buttons (white when focused) and the time on the right, the clock top right,
- * gradients top and bottom. Hidden controls: OK = pause/play, Left/Right = ±10 s, any arrow shows them.
+ * gradients top and bottom. Hidden controls: OK or Up/Down shows them, Left/Right = ±10 s.
  */
 @Composable
 fun PlayerScreen(
@@ -84,10 +109,15 @@ fun PlayerScreen(
     channel: String?,
     thumbnail: String?,
     startSeconds: Int,
+    /** The card played (playlist context for the next video, like), null for a link. */
+    item: MediaItem?,
+    signedIn: Boolean,
+    onNext: (Video) -> Unit,
     onExit: () -> Unit,
 ) {
     val context = LocalContext.current
-    val player = remember(videoId) { LumenPlayer(context) }
+    val prefs = remember { PlayerPrefs(context) }
+    val player = remember(videoId) { LumenPlayer(context).also { it.setQuality(prefs.quality) } }
     var shownTitle by remember(videoId) { mutableStateOf(title.orEmpty()) }
     var shownChannel by remember(videoId) { mutableStateOf(channel.orEmpty()) }
     var error by remember(videoId) { mutableStateOf<String?>(null) }
@@ -107,6 +137,35 @@ fun PlayerScreen(
     val playPause = remember { FocusRequester() }
     val progress = remember { FocusRequester() }
     val root = remember { FocusRequester() }
+    val settingsButton = remember { FocusRequester() }
+    var swallowOkUp by remember { mutableStateOf(false) }
+    /** Settings panel level shown (null = closed). */
+    var menu by remember(videoId) { mutableStateOf<PlayerMenu?>(null) }
+    /** Incremented when the panel closes: the focus goes back to the settings button. */
+    var menuClosed by remember { mutableIntStateOf(0) }
+    /** Incremented when the tracks change: the panel's lists follow. */
+    var tracksTick by remember(videoId) { mutableIntStateOf(0) }
+    var subtitlesRestored by remember(videoId) { mutableStateOf(false) }
+    var sponsorBlock by remember { mutableStateOf(prefs.sponsorBlock) }
+    var segments by remember(videoId) { mutableStateOf(emptyList<Segment>()) }
+    var skipped by remember(videoId) { mutableStateOf(emptySet<Segment>()) }
+    var skipNotice by remember(videoId) { mutableStateOf<String?>(null) }
+    var details by remember(videoId) { mutableStateOf<Details?>(null) }
+    val chapters = details?.chapters.orEmpty()
+    var liked by remember(videoId) { mutableStateOf(false) }
+    var subscribed by remember(videoId) { mutableStateOf(false) }
+    var watchLaterDone by remember(videoId) { mutableStateOf(false) }
+    var storyboard by remember(videoId) { mutableStateOf<MediaItemStoryboard?>(null) }
+    var pictureFormat by remember { mutableIntStateOf(prefs.pictureFormat) }
+    /** Video ended with a next one to play: the "À suivre" card counts down. */
+    var upNext by remember(videoId) { mutableStateOf<Video?>(null) }
+    val scope = rememberCoroutineScope()
+
+    fun closeMenu() {
+        if (menu == null) return
+        menu = null
+        menuClosed++
+    }
 
     fun show() {
         controls = true
@@ -138,12 +197,24 @@ fun PlayerScreen(
                 if (shownTitle.isBlank()) shownTitle = info.title.orEmpty()
                 if (shownChannel.isBlank()) shownChannel = info.author.orEmpty()
                 live = info.isLive
+                player.setVolumeLevel(if (prefs.stableVolume) info.volumeLevel else 1f)
                 if (!player.open(info, resumeAt)) error = "Pas encore de flux pour cette vidéo (direct à venir ?)."
+                if (storyboard == null && !info.isLive) storyboard = YouTube.storyboard(info)
             }
         }
     }
 
     DisposableEffect(player) {
+        player.onTracksChanged = {
+            tracksTick++
+            // Subtitles: the last language chosen, when this video has it (once, at the start).
+            val tracks = player.subtitleTracks()
+            if (!subtitlesRestored && tracks.isNotEmpty()) {
+                subtitlesRestored = true
+                // -1 (off) is applied too: no track turns on by itself as the manifest's default.
+                player.selectSubtitle(prefs.subtitles?.let(tracks::indexOf) ?: -1)
+            }
+        }
         player.onError = { e ->
             if (!retried) {
                 retried = true
@@ -157,7 +228,10 @@ fun PlayerScreen(
             override fun onPlayerStateChanged(playWhenReady: Boolean, playbackState: Int) {
                 buffering = playbackState == Player.STATE_BUFFERING || playbackState == Player.STATE_IDLE
                 if (playbackState == Player.STATE_READY) started = true
-                if (playbackState == Player.STATE_ENDED) onExit()
+                if (playbackState == Player.STATE_ENDED) {
+                    val next = details?.next
+                    if (prefs.autoplay && next != null) upNext = next else onExit()
+                }
             }
 
             override fun onIsPlayingChanged(playing: Boolean) {
@@ -174,6 +248,22 @@ fun PlayerScreen(
         }
     }
 
+    // SponsorBlock segments and chapters, fetched next to the video (they never delay it).
+    LaunchedEffect(videoId, sponsorBlock) {
+        segments = if (sponsorBlock) YouTube.skipSegments(videoId) else emptyList()
+    }
+    LaunchedEffect(videoId) {
+        details = YouTube.details(videoId, item)
+        liked = details?.liked == true
+        subscribed = details?.subscribed == true
+    }
+    LaunchedEffect(skipNotice) {
+        if (skipNotice != null) {
+            delay(SKIP_NOTICE_MS)
+            skipNotice = null
+        }
+    }
+
     // Time line, refreshed while the screen is up; YouTube history saved every 30 s.
     LaunchedEffect(player) {
         var lastSave = 0L
@@ -181,6 +271,16 @@ fun PlayerScreen(
             position = player.exo.currentPosition
             duration = player.exo.duration.coerceAtLeast(0L)
             buffered = player.exo.bufferedPosition
+            // SponsorBlock: each segment skipped once (seeking back into it plays it).
+            if (sponsorBlock && player.exo.playWhenReady) {
+                val at = position
+                segments.firstOrNull { at >= it.startMs && at < it.endMs - 500 && it !in skipped }?.let { segment ->
+                    skipped = skipped + segment
+                    player.exo.seekTo(segment.endMs)
+                    position = segment.endMs
+                    skipNotice = "Passé : ${segment.label}"
+                }
+            }
             if (isPlaying && System.currentTimeMillis() - lastSave > SAVE_EVERY_MS) {
                 lastSave = System.currentTimeMillis()
                 launch { YouTube.savePosition(videoId, position / 1000f) }
@@ -190,19 +290,55 @@ fun PlayerScreen(
     }
 
     // Controls hide after a while when playing (never while paused or loading).
-    LaunchedEffect(activity, isPlaying, controls) {
-        if (controls && isPlaying) {
+    LaunchedEffect(activity, isPlaying, controls, menu) {
+        if (controls && isPlaying && menu == null) {
             delay(CONTROLS_HIDE_MS)
             controls = false
         }
     }
     LaunchedEffect(controls) {
         withFrameNanos { }
+        if (upNext != null) return@LaunchedEffect
         if (controls) playPause.tryRequestFocus() else root.tryRequestFocus()
+    }
+
+    fun toggleLike() {
+        val target = !liked
+        liked = target
+        scope.launch { if (!YouTube.setLiked(videoId, item, target)) liked = !target }
+        show()
+    }
+
+    fun toggleSubscribe() {
+        val channelId = details?.channelId ?: return
+        val target = !subscribed
+        subscribed = target
+        details = details?.copy(subscribed = target)
+        scope.launch {
+            if (!YouTube.setSubscribed(channelId, target)) {
+                subscribed = !target
+                details = details?.copy(subscribed = !target)
+            }
+        }
+    }
+
+    fun addToWatchLater() {
+        if (watchLaterDone) return
+        watchLaterDone = true
+        scope.launch { if (!YouTube.watchLater(videoId)) watchLaterDone = false }
     }
 
     BackHandler {
         if (controls && isPlaying) controls = false else onExit()
+    }
+    // Declared after: while the panel is open, Back goes up one level, then closes it.
+    BackHandler(enabled = menu != null) {
+        if (menu == PlayerMenu.MAIN) closeMenu() else menu = PlayerMenu.MAIN
+    }
+    LaunchedEffect(menuClosed) {
+        if (menuClosed == 0) return@LaunchedEffect
+        withFrameNanos { }
+        settingsButton.tryRequestFocus()
     }
 
     Box(
@@ -216,13 +352,25 @@ fun PlayerScreen(
             .focusable()
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
+                val isOk = native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER || native.keyCode == AndroidKeyEvent.KEYCODE_ENTER
+                // The OK that showed the controls: its release must not click the play button that
+                // just took the focus (it would pause).
+                if (native.action == AndroidKeyEvent.ACTION_UP && isOk && swallowOkUp) {
+                    swallowOkUp = false
+                    return@onPreviewKeyEvent true
+                }
                 if (native.action != AndroidKeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                // The "À suivre" card has its own buttons.
+                if (upNext != null) return@onPreviewKeyEvent false
                 if (controls) {
                     activity++
                     return@onPreviewKeyEvent false
                 }
                 when (native.keyCode) {
-                    AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { togglePlay(); true }
+                    // OK only shows the controls (play / pause is the focused button then); the remote's
+                    // play-pause key still toggles directly.
+                    AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER -> { swallowOkUp = true; show(); true }
+                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { togglePlay(); true }
                     AndroidKeyEvent.KEYCODE_DPAD_LEFT, AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> { seekBy(-SEEK_STEP_MS); true }
                     AndroidKeyEvent.KEYCODE_DPAD_RIGHT, AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { seekBy(SEEK_STEP_MS); true }
                     AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_DPAD_DOWN -> { show(); true }
@@ -234,13 +382,31 @@ fun PlayerScreen(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    resizeMode = resizeModeOf(pictureFormat)
                     keepScreenOn = true
                     setShutterBackgroundColor(android.graphics.Color.BLACK)
+                    // Subtitles readable from the couch: white on a translucent band, a bit larger.
+                    subtitleView?.apply {
+                        setApplyEmbeddedStyles(false)
+                        setStyle(
+                            CaptionStyleCompat(
+                                android.graphics.Color.WHITE,
+                                0x99000000.toInt(),
+                                android.graphics.Color.TRANSPARENT,
+                                CaptionStyleCompat.EDGE_TYPE_NONE,
+                                android.graphics.Color.TRANSPARENT,
+                                null,
+                            ),
+                        )
+                        setFractionalTextSize(SUBTITLE_SIZE)
+                    }
                     this.player = player.exo
                 }
             },
-            update = { it.player = player.exo },
+            update = {
+                it.player = player.exo
+                it.resizeMode = resizeModeOf(pictureFormat)
+            },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -258,9 +424,10 @@ fun PlayerScreen(
         if (started && buffering && error == null) LoadingDots(Modifier.align(Alignment.Center))
 
         AnimatedVisibility(visible = controls && error == null, enter = fadeIn(tween(150)), exit = fadeOut(tween(250))) {
+            val chapter = chapters.lastOrNull { it.startMs <= (preview ?: position) }?.title
             Controls(
                 title = shownTitle,
-                channel = shownChannel,
+                channel = listOfNotNull(shownChannel.takeIf { it.isNotBlank() }, chapter?.takeIf { it.isNotBlank() }).joinToString(" · "),
                 isPlaying = isPlaying || (player.exo.playWhenReady && buffering),
                 live = live,
                 position = preview ?: position,
@@ -279,6 +446,71 @@ fun PlayerScreen(
                     preview = null
                 },
                 onHide = { controls = false },
+                segments = segments,
+                chapters = chapters,
+                hasSubtitles = remember(tracksTick) { player.subtitleTracks().isNotEmpty() },
+                settingsButton = settingsButton,
+                onSubtitles = { menu = PlayerMenu.SUBTITLES },
+                onSettings = { menu = PlayerMenu.MAIN },
+                showLike = signedIn && !live,
+                liked = liked,
+                onLike = ::toggleLike,
+                storyboard = storyboard,
+                previewing = preview != null,
+            )
+        }
+
+        // SponsorBlock: what was just skipped, top left.
+        AnimatedVisibility(
+            visible = skipNotice != null,
+            enter = fadeIn(),
+            exit = fadeOut(tween(400)),
+            modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = Dimens.Gutter),
+        ) {
+            Text(
+                skipNotice.orEmpty(),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                modifier = Modifier.background(Color.Black.copy(alpha = 0.7f), ControlShape).padding(horizontal = 14.dp, vertical = 8.dp),
+            )
+        }
+
+        menu?.let { level ->
+            PlayerMenuPanel(
+                menu = level,
+                player = player,
+                prefs = prefs,
+                live = live,
+                tracksTick = tracksTick,
+                sponsorBlock = sponsorBlock,
+                onSponsorBlock = {
+                    sponsorBlock = it
+                    prefs.sponsorBlock = it
+                },
+                pictureFormat = pictureFormat,
+                onPictureFormat = {
+                    pictureFormat = it
+                    prefs.pictureFormat = it
+                },
+                actions = VideoActions(
+                    details = details,
+                    signedIn = signedIn,
+                    watchLaterDone = watchLaterDone,
+                    onSubscribe = ::toggleSubscribe,
+                    onWatchLater = ::addToWatchLater,
+                ),
+                onMenu = { next -> if (next == null) closeMenu() else menu = next },
+                modifier = Modifier.align(Alignment.CenterEnd),
+            )
+        }
+
+        upNext?.let { next ->
+            UpNextCard(
+                next,
+                onPlay = { onNext(next) },
+                onCancel = onExit,
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = Dimens.Gutter, bottom = 48.dp),
             )
         }
 
@@ -324,6 +556,17 @@ private fun Controls(
     onPreview: (Long) -> Unit,
     onCommit: () -> Unit,
     onHide: () -> Unit,
+    segments: List<Segment>,
+    chapters: List<Chapter>,
+    hasSubtitles: Boolean,
+    settingsButton: FocusRequester,
+    onSubtitles: () -> Unit,
+    onSettings: () -> Unit,
+    showLike: Boolean,
+    liked: Boolean,
+    onLike: () -> Unit,
+    storyboard: MediaItemStoryboard?,
+    previewing: Boolean,
 ) {
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().height(150.dp).align(Alignment.TopCenter).background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent))))
@@ -340,7 +583,19 @@ private fun Controls(
             }
             Spacer(Modifier.height(18.dp))
             if (!live || duration > 0) {
-                ProgressBar(position, duration, buffered, progress, down = playPause, onPreview = onPreview, onCommit = onCommit, onClick = onPlayPause, onUp = onHide)
+                // Seek preview: the picture at the aimed position, above the bar.
+                if (previewing && storyboard != null && duration > 0) {
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val fraction = (position.toFloat() / duration).coerceIn(0f, 1f)
+                        val x = (maxWidth * fraction - PREVIEW_WIDTH / 2).coerceIn(0.dp, maxWidth - PREVIEW_WIDTH)
+                        Column(Modifier.offset(x = x).width(PREVIEW_WIDTH), horizontalAlignment = Alignment.CenterHorizontally) {
+                            StoryboardFrame(storyboard, position, Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(ControlShape).background(Color.Black))
+                            Text(formatTime(position), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color.White, modifier = Modifier.padding(top = 6.dp))
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                }
+                ProgressBar(position, duration, buffered, progress, down = playPause, onPreview = onPreview, onCommit = onCommit, onClick = onPlayPause, onUp = onHide, segments = segments, chapters = chapters)
                 Spacer(Modifier.height(14.dp))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -350,6 +605,9 @@ private fun Controls(
                         ControlButton(LumenIcon.REWIND, up = progress, onDown = onHide) { onSeekBy(-SEEK_STEP_MS) }
                         ControlButton(LumenIcon.FORWARD, up = progress, onDown = onHide) { onSeekBy(SEEK_STEP_MS) }
                     }
+                    if (showLike) ControlButton(LumenIcon.THUMB_UP, up = progress, onDown = onHide, active = liked, onClick = onLike)
+                    if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, up = progress, onDown = onHide, onClick = onSubtitles)
+                    ControlButton(LumenIcon.SETTINGS, Modifier.focusRequester(settingsButton), up = progress, onDown = onHide, onClick = onSettings)
                 }
                 Text(
                     if (live && duration <= 0) "En direct" else "${formatTime(position)} / ${formatTime(duration)}",
@@ -363,7 +621,15 @@ private fun Controls(
 
 /** Nuvio's round icon button: transparent, white with a black icon when focused. */
 @Composable
-private fun ControlButton(icon: LumenIcon, modifier: Modifier = Modifier, up: FocusRequester? = null, onDown: (() -> Unit)? = null, onClick: () -> Unit) {
+private fun ControlButton(
+    icon: LumenIcon,
+    modifier: Modifier = Modifier,
+    up: FocusRequester? = null,
+    onDown: (() -> Unit)? = null,
+    /** On (liked…): a light fill when not focused. */
+    active: Boolean = false,
+    onClick: () -> Unit,
+) {
     IconButton(
         onClick = onClick,
         modifier = modifier
@@ -379,7 +645,7 @@ private fun ControlButton(icon: LumenIcon, modifier: Modifier = Modifier, up: Fo
                 }
             },
         colors = IconButtonDefaults.colors(
-            containerColor = Color.Transparent,
+            containerColor = if (active) Palette.ControlOnArt else Color.Transparent,
             focusedContainerColor = Color.White,
             contentColor = Color.White,
             focusedContentColor = Color.Black,
@@ -402,6 +668,8 @@ private fun ProgressBar(
     onCommit: () -> Unit,
     onClick: () -> Unit,
     onUp: () -> Unit,
+    segments: List<Segment>,
+    chapters: List<Chapter>,
 ) {
     var focused by remember { mutableStateOf(false) }
     val played = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
@@ -439,6 +707,21 @@ private fun ProgressBar(
         Box(Modifier.fillMaxWidth().height(height.dp).clip(barShape).background(Palette.Track)) {
             Box(Modifier.fillMaxWidth(loaded).fillMaxHeight().background(Color.White.copy(alpha = 0.35f)))
             Box(Modifier.fillMaxWidth(shownPlayed).fillMaxHeight().background(Color.White))
+            if (duration > 0 && (segments.isNotEmpty() || chapters.size > 1)) {
+                Canvas(Modifier.matchParentSize()) {
+                    // SponsorBlock segments in amber, chapter starts as small gaps.
+                    segments.forEach { segment ->
+                        val start = size.width * (segment.startMs.toFloat() / duration).coerceIn(0f, 1f)
+                        val end = size.width * (segment.endMs.toFloat() / duration).coerceIn(0f, 1f)
+                        drawRect(Palette.Warning, topLeft = Offset(start, 0f), size = Size(end - start, size.height))
+                    }
+                    val gap = 3.dp.toPx()
+                    chapters.drop(1).forEach { chapter ->
+                        val x = size.width * (chapter.startMs.toFloat() / duration).coerceIn(0f, 1f)
+                        drawRect(Color.Black, topLeft = Offset(x - gap / 2, 0f), size = Size(gap, size.height))
+                    }
+                }
+            }
         }
     }
 }
@@ -473,3 +756,76 @@ private fun LoadingDots(modifier: Modifier = Modifier) {
 }
 
 private fun formatTime(ms: Long): String = formatDuration(ms).ifEmpty { "0:00" }
+
+/** "À suivre": the next video, played when the countdown ends (OK: now, Annuler: back to the page). */
+@Composable
+private fun UpNextCard(next: Video, onPlay: () -> Unit, onCancel: () -> Unit, modifier: Modifier = Modifier) {
+    var seconds by remember(next.key) { mutableIntStateOf(UP_NEXT_SECONDS) }
+    val playNow = remember { FocusRequester() }
+    LaunchedEffect(next.key) {
+        withFrameNanos { }
+        playNow.tryRequestFocus()
+        while (seconds > 0) {
+            delay(1_000)
+            seconds--
+        }
+        onPlay()
+    }
+    Row(
+        modifier.background(Palette.Panel.copy(alpha = 0.95f), DialogShape).padding(20.dp),
+        horizontalArrangement = Arrangement.spacedBy(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(240.dp).aspectRatio(16f / 9f).clip(ControlShape).background(Palette.Tile)) {
+            Thumbnail(next.videoId, next.thumbnail, Modifier.fillMaxSize())
+        }
+        Column(Modifier.width(320.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("À suivre dans $seconds s", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary)
+            Text(next.title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, color = Color.White)
+            if (next.channel.isNotBlank()) Text(next.channel, fontSize = 14.sp, color = Palette.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap), modifier = Modifier.padding(top = 6.dp)) {
+                LumenButton("Lire maintenant", icon = LumenIcon.PLAY, modifier = Modifier.focusRequester(playNow), onClick = onPlay)
+                LumenButton("Annuler", onClick = onCancel)
+            }
+        }
+    }
+}
+
+/** The storyboard picture at [positionMs]: one tile of YouTube's sprite sheets. */
+@Composable
+private fun StoryboardFrame(storyboard: MediaItemStoryboard, positionMs: Long, modifier: Modifier) {
+    val size = storyboard.groupSize
+    val groupMs = storyboard.groupDurationMS
+    if (size == null || groupMs <= 0 || size.durationEachMS <= 0 || size.colCount <= 0 || size.rowCount <= 0) return
+    val group = (positionMs / groupMs).toInt()
+    val index = ((positionMs % groupMs) / size.durationEachMS).toInt().coerceAtMost(size.colCount * size.rowCount - 1)
+    val tile = TileCrop(index % size.colCount, index / size.colCount, size.colCount, size.rowCount, size.width, size.height)
+    GlideImage(
+        model = storyboard.getGroupUrl(group),
+        contentDescription = null,
+        contentScale = ContentScale.FillBounds,
+        modifier = modifier,
+        requestBuilderTransform = { it.transform(tile) },
+    )
+}
+
+/** Cuts one tile out of a storyboard sheet ([width] × [height] each, or the sheet split evenly). */
+private data class TileCrop(val col: Int, val row: Int, val cols: Int, val rows: Int, val width: Int, val height: Int) : BitmapTransformation() {
+    override fun transform(pool: BitmapPool, toTransform: android.graphics.Bitmap, outWidth: Int, outHeight: Int): android.graphics.Bitmap {
+        val w = (if (width > 0) width else toTransform.width / cols).coerceIn(1, toTransform.width)
+        val h = (if (height > 0) height else toTransform.height / rows).coerceIn(1, toTransform.height)
+        val x = (col * w).coerceIn(0, toTransform.width - w)
+        val y = (row * h).coerceIn(0, toTransform.height - h)
+        return android.graphics.Bitmap.createBitmap(toTransform, x, y, w, h)
+    }
+
+    override fun updateDiskCacheKey(messageDigest: java.security.MessageDigest) {
+        messageDigest.update("lumentube.tile:$col:$row:$cols:$rows:$width:$height".toByteArray())
+    }
+}
+
+private fun resizeModeOf(pictureFormat: Int) = when (pictureFormat) {
+    1 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+    2 -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+    else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+}

@@ -15,8 +15,8 @@ android {
         applicationId = "dev.miraiijo.lumentube"
         minSdk = 28
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 6
+        versionName = "0.3.0"
         // The Freebox Player POP runs a 32-bit userspace; arm64 kept for other boxes.
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
         // Upstream modules have SmartTube's build flavors: use the "stable" one.
@@ -86,4 +86,6 @@ dependencies {
     implementation("androidx.tv:tv-material:1.0.0")
     // Thumbnails: Glide (no OkHttp 4, which Coil needs and the engine can't use).
     implementation("com.github.bumptech.glide:compose:1.0.0-beta01")
+    // QR code of the sign-in, drawn on the box (no web QR service sees the activation code).
+    implementation("com.google.zxing:core:3.5.3")
 }

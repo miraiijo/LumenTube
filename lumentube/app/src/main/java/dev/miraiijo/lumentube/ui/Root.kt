@@ -61,17 +61,28 @@ fun Root(vm: MainViewModel) {
                 // Right from the menu: back to the card you left.
                 .focusRestorer(),
         ) {
-            Crossfade(targetState = state.section to state.opened?.title, animationSpec = tween(220), label = "pages") { _ ->
-                BrowsePage(
-                    page = state.page,
-                    title = state.opened?.title,
-                    focusTick = pageFocusTick,
-                    onSelect = vm::select,
-                    onLoadMore = vm::loadMore,
-                    onRetry = vm::reload,
-                    needsAccount = state.section.account && !state.signedIn && state.opened == null,
-                    onSignIn = vm::startSignIn,
-                )
+            Crossfade(targetState = state.section to state.opened?.title, animationSpec = tween(220), label = "pages") { (section, opened) ->
+                if (section == dev.miraiijo.lumentube.data.Section.SEARCH && opened == null) {
+                    SearchPage(
+                        query = state.query,
+                        page = state.page,
+                        focusTick = pageFocusTick,
+                        onSearch = vm::search,
+                        onSelect = vm::select,
+                        onLoadMore = vm::loadMore,
+                    )
+                } else {
+                    BrowsePage(
+                        page = state.page,
+                        title = state.opened?.title,
+                        focusTick = pageFocusTick,
+                        onSelect = vm::select,
+                        onLoadMore = vm::loadMore,
+                        onRetry = vm::reload,
+                        needsAccount = state.section.account && !state.signedIn && state.opened == null,
+                        onSignIn = vm::startSignIn,
+                    )
+                }
             }
         }
         SideRail(
@@ -82,9 +93,23 @@ fun Root(vm: MainViewModel) {
                 vm.show(section)
                 pageFocusTick++
             },
-            onAccount = { if (state.signedIn) vm.signOut() else vm.startSignIn() },
+            onAccount = vm::openSettings,
         )
-        if (state.signingIn) SignInDialog(code = state.signInCode, error = state.signInError, onRetry = vm::startSignIn, onDismiss = vm::cancelSignIn)
+        if (state.signingIn) {
+            SignInDialog(code = state.signInCode, error = state.signInError, onRetry = vm::startSignIn, onDismiss = vm::cancelSignIn)
+        } else if (state.choosingAccount || state.settingsOpen) {
+            AccountDialog(
+                launch = state.choosingAccount,
+                accounts = state.accounts,
+                signedIn = state.signedIn,
+                settings = state.settings,
+                onChoose = vm::chooseAccount,
+                onAdd = vm::startSignIn,
+                onSignOut = vm::signOut,
+                onSettings = vm::updateSettings,
+                onDismiss = { if (state.choosingAccount) vm.skipAccountChoice() else vm.closeSettings() },
+            )
+        }
         // The video plays over the pages (they stay composed: Back returns to the same card).
         val playing = state.playing
         val playingId = state.playingId ?: playing?.videoId
@@ -95,6 +120,9 @@ fun Root(vm: MainViewModel) {
                 channel = playing?.channel,
                 thumbnail = playing?.thumbnail,
                 startSeconds = playing?.let { resumeSeconds(it) } ?: 0,
+                item = playing?.raw,
+                signedIn = state.signedIn,
+                onNext = vm::playNext,
                 onExit = {
                     vm.stopPlaying()
                     returnFocusTick++

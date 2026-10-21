@@ -1,0 +1,302 @@
+@file:OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
+
+package dev.miraiijo.lumentube.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.LocalContentColor
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.LocalDensity
+import dev.miraiijo.lumentube.data.Details
+import dev.miraiijo.lumentube.player.LumenPlayer
+import kotlinx.coroutines.launch
+import dev.miraiijo.lumentube.player.PlayerPrefs
+
+/** The player's settings panel: a main list, and one list per setting. */
+enum class PlayerMenu { MAIN, QUALITY, SUBTITLES, SPEED, AUDIO, FORMAT, INFO }
+
+private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
+
+/** Picture formats (PlayerPrefs.pictureFormat): whole picture, fill the screen, stretched. */
+val PICTURE_FORMATS = listOf("Image entière", "Remplir l'écran", "Étirer")
+
+/** The video's account actions and info, shown in the main list. */
+class VideoActions(
+    val details: Details?,
+    val signedIn: Boolean,
+    val watchLaterDone: Boolean,
+    val onSubscribe: () -> Unit,
+    val onWatchLater: () -> Unit,
+)
+
+private class Entry(
+    val label: String,
+    val value: String? = null,
+    val selected: Boolean = false,
+    val submenu: Boolean = false,
+    val onClick: () -> Unit,
+)
+
+/**
+ * Nuvio-like side panel on the right of the player. OK opens a setting or picks a value (back to
+ * the main list), Back goes up one level (handled by the player screen). [tracksTick] changes when
+ * the video's tracks do, so the lists follow them.
+ */
+@Composable
+fun PlayerMenuPanel(
+    menu: PlayerMenu,
+    player: LumenPlayer,
+    prefs: PlayerPrefs,
+    live: Boolean,
+    tracksTick: Int,
+    sponsorBlock: Boolean,
+    onSponsorBlock: (Boolean) -> Unit,
+    pictureFormat: Int,
+    onPictureFormat: (Int) -> Unit,
+    actions: VideoActions,
+    onMenu: (PlayerMenu?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Bumped after each choice: the values shown are read from the player again.
+    var version by remember { mutableIntStateOf(0) }
+    val entries = remember(menu, tracksTick, version, sponsorBlock, pictureFormat, actions.details, actions.watchLaterDone) {
+        buildEntries(menu, player, prefs, live, sponsorBlock, onSponsorBlock, pictureFormat, onPictureFormat, actions, onMenu) { version++ }
+    }
+    val title = when (menu) {
+        PlayerMenu.MAIN -> "Réglages"
+        PlayerMenu.QUALITY -> "Qualité"
+        PlayerMenu.SUBTITLES -> "Sous-titres"
+        PlayerMenu.SPEED -> "Vitesse"
+        PlayerMenu.AUDIO -> "Piste audio"
+        PlayerMenu.FORMAT -> "Format de l'image"
+        PlayerMenu.INFO -> "Infos sur la vidéo"
+    }
+    // A list of choices opens on the current one; the main list on its first line.
+    val focusIndex = if (menu == PlayerMenu.MAIN) 0 else entries.indexOfFirst { it.selected }.coerceAtLeast(0)
+    val first = remember(menu) { FocusRequester() }
+
+    Column(
+        modifier
+            .width(400.dp)
+            .fillMaxHeight()
+            .background(Palette.Panel.copy(alpha = 0.97f))
+            // The focus stays in the panel until Back closes it.
+            .focusProperties { exit = { FocusRequester.Cancel } }
+            .focusGroup()
+            .padding(horizontal = 20.dp, vertical = 32.dp),
+    ) {
+        Text(title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 12.dp, bottom = 16.dp))
+        if (menu == PlayerMenu.INFO) {
+            InfoText(actions.details, Modifier.weight(1f).focusRequester(first))
+        } else Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            entries.forEachIndexed { index, entry ->
+                MenuRow(entry, if (index == focusIndex) Modifier.focusRequester(first) else Modifier)
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+    LaunchedEffect(menu) {
+        withFrameNanos { }
+        first.tryRequestFocus()
+    }
+}
+
+private fun buildEntries(
+    menu: PlayerMenu,
+    player: LumenPlayer,
+    prefs: PlayerPrefs,
+    live: Boolean,
+    sponsorBlock: Boolean,
+    onSponsorBlock: (Boolean) -> Unit,
+    pictureFormat: Int,
+    onPictureFormat: (Int) -> Unit,
+    actions: VideoActions,
+    onMenu: (PlayerMenu?) -> Unit,
+    changed: () -> Unit,
+): List<Entry> = when (menu) {
+    PlayerMenu.MAIN -> buildList {
+        val details = actions.details
+        if (actions.signedIn && details?.channelId != null) {
+            val channel = details.channel?.takeIf { it.isNotBlank() } ?: "la chaîne"
+            add(Entry(if (details.subscribed) "Abonné à $channel" else "S'abonner à $channel", if (details.subscribed) "Se désabonner" else null, onClick = actions.onSubscribe))
+        }
+        if (actions.signedIn) {
+            add(Entry("À regarder plus tard", if (actions.watchLaterDone) "Ajoutée" else null, selected = actions.watchLaterDone, onClick = actions.onWatchLater))
+        }
+        if (details != null) add(Entry("Infos sur la vidéo", submenu = true) { onMenu(PlayerMenu.INFO) })
+        val qualities = player.qualities()
+        if (qualities.isNotEmpty()) {
+            val value = if (prefs.quality == 0) "Auto" + (player.playingQuality?.let { " · ${qualityName(it)}" } ?: "") else qualityName(prefs.quality)
+            add(Entry("Qualité", value, submenu = true) { onMenu(PlayerMenu.QUALITY) })
+        }
+        val subtitles = player.subtitleTracks()
+        if (subtitles.isNotEmpty()) {
+            add(Entry("Sous-titres", subtitles.getOrNull(player.selectedSubtitle) ?: "Désactivés", submenu = true) { onMenu(PlayerMenu.SUBTITLES) })
+        }
+        if (!live) add(Entry("Vitesse", speedName(player.speed), submenu = true) { onMenu(PlayerMenu.SPEED) })
+        val audio = player.audioTracks()
+        if (audio.size > 1) add(Entry("Piste audio", audio.getOrNull(player.playingAudio) ?: "Auto", submenu = true) { onMenu(PlayerMenu.AUDIO) })
+        add(Entry("Format de l'image", PICTURE_FORMATS[pictureFormat.coerceIn(0, PICTURE_FORMATS.lastIndex)], submenu = true) { onMenu(PlayerMenu.FORMAT) })
+        if (!live) {
+            add(Entry("SponsorBlock", if (sponsorBlock) "Activé" else "Désactivé") { onSponsorBlock(!sponsorBlock) })
+        }
+    }
+    PlayerMenu.FORMAT -> PICTURE_FORMATS.mapIndexed { index, name ->
+        Entry(name, selected = index == pictureFormat) {
+            onPictureFormat(index)
+            onMenu(PlayerMenu.MAIN)
+        }
+    }
+    PlayerMenu.INFO -> emptyList()
+    PlayerMenu.QUALITY -> buildList {
+        fun pick(quality: Int) {
+            prefs.quality = quality
+            player.setQuality(quality)
+            changed()
+            onMenu(PlayerMenu.MAIN)
+        }
+        add(Entry("Auto", "selon la connexion", selected = prefs.quality == 0) { pick(0) })
+        player.qualities().forEach { quality -> add(Entry(qualityName(quality), selected = prefs.quality == quality) { pick(quality) }) }
+    }
+    PlayerMenu.SUBTITLES -> buildList {
+        val tracks = player.subtitleTracks()
+        fun pick(index: Int) {
+            player.selectSubtitle(index)
+            prefs.subtitles = tracks.getOrNull(index)
+            changed()
+            onMenu(PlayerMenu.MAIN)
+        }
+        add(Entry("Désactivés", selected = player.selectedSubtitle < 0) { pick(-1) })
+        tracks.forEachIndexed { index, name -> add(Entry(name, selected = player.selectedSubtitle == index) { pick(index) }) }
+    }
+    PlayerMenu.SPEED -> SPEEDS.map { speed ->
+        Entry(speedName(speed), selected = player.speed == speed) {
+            player.speed = speed
+            changed()
+            onMenu(PlayerMenu.MAIN)
+        }
+    }
+    PlayerMenu.AUDIO -> {
+        val playing = player.playingAudio
+        player.audioTracks().mapIndexed { index, name ->
+            Entry(name, selected = index == playing) {
+                player.selectAudio(index)
+                changed()
+                onMenu(PlayerMenu.MAIN)
+            }
+        }
+    }
+}
+
+/** Description and figures; Up / Down scroll it (it takes the focus, the panel has nothing else). */
+@Composable
+private fun InfoText(details: Details?, modifier: Modifier) {
+    val scroll = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val step = with(LocalDensity.current) { 160.dp.toPx() }
+    Column(
+        modifier
+            .fillMaxWidth()
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (native.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                when (native.keyCode) {
+                    android.view.KeyEvent.KEYCODE_DPAD_DOWN -> { scope.launch { scroll.animateScrollBy(step) }; true }
+                    android.view.KeyEvent.KEYCODE_DPAD_UP -> { scope.launch { scroll.animateScrollBy(-step) }; true }
+                    else -> false
+                }
+            }
+            .focusable()
+            .verticalScroll(scroll)
+            .padding(horizontal = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        val figures = listOfNotNull(details?.views, details?.published, details?.likes?.let { "$it J'aime" }).joinToString("  ·  ")
+        if (figures.isNotEmpty()) Text(figures, fontSize = 14.sp, color = Palette.TextSecondary)
+        Text(details?.description?.takeIf { it.isNotBlank() } ?: "Pas de description.", fontSize = 15.sp, lineHeight = 22.sp, color = Palette.TextPrimary)
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+private fun qualityName(quality: Int) = when (quality) {
+    2160 -> "2160p · 4K"
+    1440 -> "1440p · 2K"
+    else -> "${quality}p"
+}
+
+private fun speedName(speed: Float) = if (speed == 1f) "Normale" else "${speed.toString().removeSuffix(".0").replace('.', ',')}×"
+
+@Composable
+private fun MenuRow(entry: Entry, modifier: Modifier) {
+    Surface(
+        onClick = entry.onClick,
+        modifier = modifier.fillMaxWidth().height(48.dp),
+        shape = ClickableSurfaceDefaults.shape(shape = ControlShape),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = if (entry.selected) Palette.Selected else Color.Transparent,
+            contentColor = Palette.TextPrimary,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Color.Black,
+            pressedContainerColor = Color.White,
+            pressedContentColor = Color.Black,
+        ),
+    ) {
+        Row(Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(entry.label, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            if (entry.value != null) {
+                Text(
+                    entry.value,
+                    fontSize = 14.sp,
+                    color = LocalContentColor.current.copy(alpha = 0.65f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 12.dp),
+                )
+            }
+            when {
+                entry.selected -> Icon(LumenIcon.CHECK, size = 18.dp, modifier = Modifier.padding(start = 10.dp))
+                entry.submenu -> Text("›", fontSize = 20.sp, color = LocalContentColor.current.copy(alpha = 0.65f), modifier = Modifier.padding(start = 10.dp))
+            }
+        }
+    }
+}
