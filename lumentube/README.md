@@ -36,6 +36,9 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.5.2
+- Sous-titres centrés en bas de l'image : les positions envoyées par YouTube (souvent « à gauche, 0 % » pour les sous-titres automatiques) sont ignorées, comme dans SmartTube. Les lignes répétées des sous-titres automatiques défilants ne s'affichent plus qu'une fois.
+
 ### 0.5.1
 - Flux pour Lumen : LumenTube garde sa propre clé de signature. La permission `READ_FEED` passe au niveau `normal` et ne verrouille plus rien ; c'est le fournisseur qui vérifie l'appelant : le paquet `dev.miraiijo.lumen`, fourni par le système, et l'empreinte SHA-256 de son certificat, réglée dans `gradle.properties` (`lumen.certSha256`, remplaçable par la variable d'environnement `LUMEN_CERT_SHA256`). Toute autre app reçoit une `SecurityException`. Si Lumen change de clé, il suffit de mettre à jour l'empreinte.
 - Sous-titres plus petits (4,2 % de la hauteur de l'image au lieu de 6 %).

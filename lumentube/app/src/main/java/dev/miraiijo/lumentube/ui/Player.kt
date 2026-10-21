@@ -519,6 +519,12 @@ fun PlayerScreen(
                         setFractionalTextSize(SUBTITLE_SIZE)
                     }
                     this.player = player.exo
+                    // Registered after PlayerView's own text output, so these cues are the ones shown:
+                    // YouTube's cues carry positions (auto captions often "left, 0 %"), which put them
+                    // off-center or off-screen. Rebuilt as plain cues: centered, at the bottom.
+                    val centered = CenteredCues()
+                    val view = subtitleView
+                    player.exo.addTextOutput { cues -> view?.setCues(centered.of(cues)) }
                 }
             },
             update = {
@@ -1012,5 +1018,37 @@ private fun SeekLine(position: Long, duration: Long, buffered: Long, storyboard:
                 Box(Modifier.fillMaxWidth(played).fillMaxHeight().background(Color.White))
             }
         }
+    }
+}
+
+/**
+ * YouTube cues rebuilt without their position (as SmartTube does): centered at the bottom. Auto
+ * captions repeat the previous line in each cue ("rolling" captions); that part is cut, so each
+ * line shows once.
+ */
+private class CenteredCues {
+    private var previous: String? = null
+
+    fun of(cues: List<com.google.android.exoplayer2.text.Cue>): List<com.google.android.exoplayer2.text.Cue> = cues.mapNotNull { cue ->
+        val text = cue.text?.toString() ?: return@mapNotNull null
+        val shown = when {
+            // WebVTT rolling line: kept for the next cue, not shown twice.
+            text.endsWith("\n") || text.endsWith(" ") -> {
+                previous = text
+                return@mapNotNull null
+            }
+            text.contains("\n") -> {
+                val kept = previous?.takeIf { text.contains(it) }?.let { text.replace(it, "").replace("\n", "") } ?: text
+                val lines = text.split("\n")
+                previous = if (lines.size == 2) lines[1] else text
+                kept
+            }
+            else -> {
+                val kept = previous?.let { text.replace(it, "") } ?: text
+                previous = kept
+                kept
+            }
+        }
+        if (shown.isBlank()) null else com.google.android.exoplayer2.text.Cue(shown)
     }
 }
