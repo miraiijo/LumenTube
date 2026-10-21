@@ -36,6 +36,20 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.10.0
+- **Commandes du lecteur réorganisées** par usage, avec un espace entre les groupes : lecture (lecture/pause, sous-titres, chapitres) · la vidéo (J'aime, Je n'aime pas, commentaires, À propos) · fenêtre et réglages (petite fenêtre, Réglages toujours en dernier).
+- **Réglages du lecteur en sections** : LECTURE (qualité, sous-titres, piste audio, vitesse, format de l'image) · VIDÉO ET CHAÎNE (à regarder plus tard, voir la chaîne, s'abonner) · OPTIONS (SponsorBlock, statistiques). À propos et Chapitres ne sont plus répétés (ils ont leur bouton) ; le focus s'ouvre sur la première ligne, pas sur un titre de section.
+- **Perfs (audit)** :
+  - déplacer le focus ne recompose plus toute la page (lu dans un flux), et la fiche / l'image de fond ne suivent qu'après 300 ms de pause sur une carte ; la fiche change sans fondu (un fondu rendait le texte hors écran à chaque image) ;
+  - `contentType` sur les rangées et les cartes (réutilisation des compositions entre rangées) ; durées formatées sans `String.format`, expression des avatars compilée une seule fois ;
+  - voile du menu latéral dessiné directement, sans calque plein écran ;
+  - cache mémoire Glide de 32 Mo (≈ 6 écrans de miniatures, au lieu de ≈ 2) : revenir en arrière ne redécode plus depuis le disque ;
+  - tampon vidéo plafonné à 40 Mo en plus des 30 s (la 4K pouvait occuper plus de 100 Mo de mémoire) ;
+  - LoudnessEnhancer créé seulement quand la vidéo a besoin d'être remontée ;
+  - lecteur : un appui de touche ne recompose plus tout l'écran (minuterie de masquage lue dans un flux).
+- **Chaîne ouverte depuis une carte** (« Vos chaînes préférées »…) : le focus ne passe plus par le menu latéral pendant le chargement (il est tenu dans la page jusqu'aux vidéos).
+- Le script d'installation compile l'appli en natif (AOT, `cmd package compile -m speed`) après l'installation.
+
 ### 0.9.2
 - **Focus audio** : le lecteur demande `AUDIOFOCUS_GAIN` au démarrage de la lecture (et à chaque reprise) et se met en pause sur `AUDIOFOCUS_LOSS` (sans reprise automatique) ou `AUDIOFOCUS_LOSS_TRANSIENT` (reprise automatique au retour du focus, sauf si la lecture a été relancée à la main entre-temps). « Peut baisser le son » : le système baisse le volume lui-même, la lecture continue. Le focus est rendu à la fermeture du lecteur. Géré par LumenTube et non par ExoPlayer, dont la gestion laissait parfois la vidéo prête mais en pause sur la box : une demande refusée ou différée ne bloque jamais la lecture.
 - Arrière-plan (bouton Accueil, autre appli) : inchangé, déjà en place : pause et sauvegarde de la position (`updateHistoryPosition`) dans `onStop`, et au retour la vidéo attend en pause, à la même position, commandes affichées.

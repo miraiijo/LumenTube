@@ -129,7 +129,9 @@ fun Thumbnail(videoId: String?, fallback: String?, modifier: Modifier = Modifier
  * Channel and account avatars come small (88 px). Their Google image server resizes on demand:
  * "=s88-…" asked as "=s256-…" gives a sharp picture at the same address.
  */
-fun avatarUrl(url: String?): String? = url?.replace(Regex("=s\\d+"), "=s$AVATAR_PX")?.let { if (it.startsWith("//")) "https:$it" else it }
+fun avatarUrl(url: String?): String? = url?.replace(AVATAR_SIZE, "=s$AVATAR_PX")?.let { if (it.startsWith("//")) "https:$it" else it }
+
+private val AVATAR_SIZE = Regex("=s\\d+")
 
 private const val AVATAR_PX = 256
 
@@ -140,5 +142,7 @@ fun formatDuration(ms: Long): String {
     val h = total / 3600
     val m = (total % 3600) / 60
     val s = total % 60
-    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+    // By hand: String.format for every card (parses the pattern each time) shows on the box.
+    fun two(n: Long) = if (n < 10) "0$n" else n.toString()
+    return if (h > 0) "$h:${two(m)}:${two(s)}" else "$m:${two(s)}"
 }

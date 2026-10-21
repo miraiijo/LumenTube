@@ -61,6 +61,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import dev.miraiijo.lumentube.data.Video
 import dev.miraiijo.lumentube.data.VideoRow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.runtime.snapshotFlow
 
 private val SHEET_TOP = 48.dp
 private val SHEET_HEIGHT = 130.dp
@@ -71,7 +73,7 @@ private val SHEET_HEIGHT = 130.dp
 private val ROW_TITLE = 46.dp
 private val CARD_WIDTH = 232.dp
 /** Wait before the sheet follows the focus (no image storm while scrolling along a row). */
-private const val SHEET_SETTLE_MS = 180L
+private const val SHEET_SETTLE_MS = 300L
 
 /**
  * A section (or an opened channel / playlist), like Lumen's Bibliothèque in the side-menu layout:
@@ -102,9 +104,13 @@ fun BrowsePage(
 ) {
     var focused by remember { mutableStateOf<Video?>(null) }
     var shown by remember { mutableStateOf<Video?>(null) }
-    LaunchedEffect(focused) {
-        if (shown != null) delay(SHEET_SETTLE_MS)
-        shown = focused
+    // Read in a flow, not as an effect key: a focus move doesn't recompose the whole page, and the
+    // sheet / backdrop only follow once the focus rests on a card.
+    LaunchedEffect(Unit) {
+        snapshotFlow { focused }.collectLatest {
+            if (shown != null) delay(SHEET_SETTLE_MS)
+            shown = it
+        }
     }
     val first = remember { FocusRequester() }
     val action = remember { FocusRequester() }
@@ -143,7 +149,7 @@ fun BrowsePage(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 64.dp),
                         ) {
-                            itemsIndexed(page.rows, key = { _, row -> row.key }) { index, row ->
+                            itemsIndexed(page.rows, key = { _, row -> row.key }, contentType = { _, _ -> 0 }) { index, row ->
                                 VideoRowView(
                                     row,
                                     firstRequester = if (index == 0) first else null,
@@ -185,7 +191,7 @@ private fun VideoRowView(
                 contentPadding = PaddingValues(horizontal = Dimens.Gutter, vertical = if (row.items.all { it.isChannel }) 16.dp else 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
             ) {
-                itemsIndexed(row.items, key = { _, video -> video.key }) { index, video ->
+                itemsIndexed(row.items, key = { _, video -> video.key }, contentType = { _, video -> if (video.isChannel) 1 else 0 }) { index, video ->
                     VideoCard(
                         video,
                         modifier = if (index == 0 && firstRequester != null) Modifier.focusRequester(firstRequester) else Modifier,
@@ -317,7 +323,7 @@ private val MeltIntoPage = Modifier.drawWithContent {
 @Composable
 private fun Sheet(video: Video?, pageTitle: String?) {
     Box(Modifier.fillMaxWidth().height(SHEET_HEIGHT).padding(start = Dimens.Gutter, end = Dimens.Gutter)) {
-        Crossfade(targetState = video, animationSpec = tween(250), label = "sheet") { shown ->
+        video.let { shown ->
             Column(Modifier.fillMaxWidth(0.55f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (pageTitle != null) {
                     Text(pageTitle.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary, maxLines = 1)

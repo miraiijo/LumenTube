@@ -53,6 +53,9 @@ class LumenPlayer(context: Context) {
         selector,
         DefaultLoadControl.Builder()
             .setBufferDurationsMs(MIN_BUFFER_MS, MAX_BUFFER_MS, START_BUFFER_MS, REBUFFER_MS)
+            // Capped in bytes too (the fork defaults to time first): 30 s of 4K is 100+ MB of heap.
+            .setTargetBufferBytes(MAX_BUFFER_BYTES)
+            .setPrioritizeTimeOverSizeThresholds(false)
             .createDefaultLoadControl(),
         null,
         bandwidth,
@@ -221,17 +224,26 @@ class LumenPlayer(context: Context) {
         applyBoost()
     }
 
+    private var audioSessionId = C.AUDIO_SESSION_ID_UNSET
+
     private fun attachEnhancer(audioSessionId: Int) {
+        this.audioSessionId = audioSessionId
         enhancer?.release()
-        enhancer = if (audioSessionId == C.AUDIO_SESSION_ID_UNSET) null else runCatching { android.media.audiofx.LoudnessEnhancer(audioSessionId) }.getOrNull()
+        enhancer = null
         applyBoost()
     }
 
+    /** The effect only exists while a boost is needed (an idle one can still sit in the audio path). */
     private fun applyBoost() {
-        val effect = enhancer ?: return
+        if (boostMb <= 0 || audioSessionId == C.AUDIO_SESSION_ID_UNSET) {
+            enhancer?.let { runCatching { it.release() } }
+            enhancer = null
+            return
+        }
+        val effect = enhancer ?: runCatching { android.media.audiofx.LoudnessEnhancer(audioSessionId) }.getOrNull()?.also { enhancer = it } ?: return
         runCatching {
             effect.setTargetGain(boostMb)
-            effect.enabled = boostMb > 0
+            effect.enabled = true
         }
     }
 
@@ -426,6 +438,7 @@ class LumenPlayer(context: Context) {
         const val START_BUFFER_MS = 1_000
         const val REBUFFER_MS = 2_500
         const val STUCK_MS = 1_500L
+        const val MAX_BUFFER_BYTES = 40 shl 20
         const val AUTO_MAX = 1080
     }
 }

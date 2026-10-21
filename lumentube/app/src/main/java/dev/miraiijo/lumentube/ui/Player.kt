@@ -84,11 +84,15 @@ import dev.miraiijo.lumentube.player.LumenPlayer
 import dev.miraiijo.lumentube.remote.RemoteControl
 import dev.miraiijo.lumentube.player.PlayerPrefs
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 private const val SEEK_STEP_MS = 10_000L
+/** Extra room between the groups of the controls row. */
+private val GROUP_GAP = 14.dp
 private const val CONTROLS_HIDE_MS = 4_000L
 private const val SAVE_EVERY_MS = 30_000L
 private const val SKIP_NOTICE_MS = 3_000L
@@ -451,10 +455,13 @@ fun PlayerScreen(
     }
 
     // Controls hide after a while when playing (never while paused or loading).
-    LaunchedEffect(activity, isPlaying, controls, menu) {
-        if (controls && isPlaying && menu == null) {
-            delay(CONTROLS_HIDE_MS)
-            controls = false
+    // Read in a flow, not as effect keys: a key press (activity++) doesn't recompose the screen.
+    LaunchedEffect(Unit) {
+        snapshotFlow { listOf(activity, isPlaying, controls, menu) }.collectLatest {
+            if (controls && isPlaying && menu == null) {
+                delay(CONTROLS_HIDE_MS)
+                controls = false
+            }
         }
     }
     LaunchedEffect(controls, minimized) {
@@ -962,8 +969,14 @@ private fun Controls(
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Grouped by use, most used first, a wider gap between groups:
+                    // playback (play, subtitles, chapters) · the video (thumbs, comments, about) ·
+                    // window and settings (always last). ±10 s: Left / Right, or the progress bar.
                     ControlButton(if (isPlaying) LumenIcon.PAUSE else LumenIcon.PLAY, Modifier.focusRequester(playPause), up = progress, onDown = onHide, onClick = onPlayPause)
-                    // ±10 s: Left / Right with the controls hidden, or on the progress bar.
+                    if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, Modifier.focusRequester(subtitlesButton), up = progress, onDown = onHide, onClick = onSubtitles)
+                    if (hasChapters) ControlButton(LumenIcon.PLAYLIST, Modifier.focusRequester(chaptersButton), up = progress, onDown = onHide, onClick = onChapters)
+                    val rate = canRate || likes != null || dislikes != null
+                    if (rate || hasComments || hasInfo) Spacer(Modifier.width(GROUP_GAP))
                     if (canRate || likes != null) {
                         RateButton(if (liked) LumenIcon.THUMB_UP else LumenIcon.THUMB_UP_OUTLINE, likes, canRate, liked, up = progress, onDown = onHide, onClick = onLike)
                     }
@@ -972,11 +985,9 @@ private fun Controls(
                     }
                     if (hasComments) ControlButton(LumenIcon.COMMENT, Modifier.focusRequester(commentsButton), up = progress, onDown = onHide, onClick = onComments)
                     if (hasInfo) ControlButton(LumenIcon.INFO, Modifier.focusRequester(infoButton), up = progress, onDown = onHide, onClick = onInfo)
-                    if (hasChapters) ControlButton(LumenIcon.PLAYLIST, Modifier.focusRequester(chaptersButton), up = progress, onDown = onHide, onClick = onChapters)
-                    if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, Modifier.focusRequester(subtitlesButton), up = progress, onDown = onHide, onClick = onSubtitles)
+                    Spacer(Modifier.width(GROUP_GAP))
                     // Small window in a corner: keep watching while browsing ("Lecture en cours" in the menu brings it back).
                     ControlButton(LumenIcon.PIP, up = progress, onDown = onHide, onClick = onMinimize)
-                    // Settings always last.
                     ControlButton(LumenIcon.SETTINGS, Modifier.focusRequester(settingsButton), up = progress, onDown = onHide, onClick = onSettings)
                 }
                 Text(

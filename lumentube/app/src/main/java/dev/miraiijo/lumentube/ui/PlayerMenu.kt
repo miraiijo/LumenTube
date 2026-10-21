@@ -124,8 +124,8 @@ fun PlayerMenuPanel(
         PlayerMenu.INFO -> "À propos"
         PlayerMenu.CHAPTERS -> "Chapitres"
     }
-    // A list of choices opens on the current one; the main list on its first line.
-    val focusIndex = if (menu == PlayerMenu.MAIN) 0 else entries.indexOfFirst { it.selected }.coerceAtLeast(0)
+    // A list of choices opens on the current one; the main list on its first line (not a header).
+    val focusIndex = if (menu == PlayerMenu.MAIN) entries.indexOfFirst { !it.header }.coerceAtLeast(0) else entries.indexOfFirst { it.selected }.coerceAtLeast(0)
     val first = remember(menu) { FocusRequester() }
 
     Column(
@@ -174,20 +174,11 @@ private fun buildEntries(
     onMenu: (PlayerMenu?) -> Unit,
     changed: () -> Unit,
 ): List<Entry> = when (menu) {
+    // Grouped by use, most used first: how it plays, then the video itself, then extras. Chapters,
+    // À propos and comments have their own buttons in the controls: not repeated here.
     PlayerMenu.MAIN -> buildList {
         val details = actions.details
-        if (actions.signedIn && details?.channelId != null) {
-            val channel = details.channel?.takeIf { it.isNotBlank() } ?: "la chaîne"
-            add(Entry(if (details.subscribed) "Abonné à $channel" else "S'abonner à $channel", if (details.subscribed) "Se désabonner" else null, onClick = actions.onSubscribe))
-        }
-        if (details?.channelId != null) add(Entry("Voir la chaîne", details.channel?.takeIf { it.isNotBlank() }, onClick = actions.onChannel))
-        if (actions.signedIn) {
-            add(Entry("À regarder plus tard", if (actions.watchLaterDone) "Ajoutée" else null, selected = actions.watchLaterDone, onClick = actions.onWatchLater))
-        }
-        if (details != null) add(Entry("À propos", submenu = true) { onMenu(PlayerMenu.INFO) })
-        if (actions.chapters.isNotEmpty()) {
-            add(Entry("Chapitres", actions.chapters.getOrNull(actions.currentChapter)?.title, submenu = true) { onMenu(PlayerMenu.CHAPTERS) })
-        }
+        add(Entry("LECTURE", header = true) {})
         val qualities = player.qualities()
         if (qualities.isNotEmpty()) {
             val value = if (prefs.quality == 0) "Auto" + (player.playingQuality?.let { " · ${qualityName(it)}" } ?: "") else qualityName(prefs.quality)
@@ -197,14 +188,29 @@ private fun buildEntries(
         if (subtitles.isNotEmpty()) {
             add(Entry("Sous-titres", subtitles.getOrNull(player.selectedSubtitle) ?: "Désactivés", submenu = true) { onMenu(PlayerMenu.SUBTITLES) })
         }
-        if (!live) add(Entry("Vitesse", speedName(player.speed), submenu = true) { onMenu(PlayerMenu.SPEED) })
         val audio = player.audioTracks()
         if (audio.size > 1) add(Entry("Piste audio", audio.getOrNull(player.playingAudio) ?: "Auto", submenu = true) { onMenu(PlayerMenu.AUDIO) })
+        if (!live) add(Entry("Vitesse", speedName(player.speed), submenu = true) { onMenu(PlayerMenu.SPEED) })
         add(Entry("Format de l'image", PICTURE_FORMATS[pictureFormat.coerceIn(0, PICTURE_FORMATS.lastIndex)], submenu = true) { onMenu(PlayerMenu.FORMAT) })
-        add(Entry("Statistiques pour les curieux", if (actions.stats) "Affichées" else "Masquées", onClick = actions.onStats))
-        if (!live) {
-            add(Entry("SponsorBlock", if (sponsorBlock) "Activé" else "Désactivé") { onSponsorBlock(!sponsorBlock) })
+
+        val channelId = details?.channelId
+        if (channelId != null || actions.signedIn) {
+            add(Entry("VIDÉO ET CHAÎNE", header = true) {})
+            if (actions.signedIn) {
+                add(Entry("À regarder plus tard", if (actions.watchLaterDone) "Ajoutée" else null, selected = actions.watchLaterDone, onClick = actions.onWatchLater))
+            }
+            if (details != null && channelId != null) {
+                val channel = details.channel?.takeIf { it.isNotBlank() }
+                add(Entry("Voir la chaîne", channel, onClick = actions.onChannel))
+                if (actions.signedIn) {
+                    add(Entry(if (details.subscribed) "Abonné" else "S'abonner", if (details.subscribed) "Se désabonner" else channel, onClick = actions.onSubscribe))
+                }
+            }
         }
+
+        add(Entry("OPTIONS", header = true) {})
+        if (!live) add(Entry("SponsorBlock", if (sponsorBlock) "Activé" else "Désactivé") { onSponsorBlock(!sponsorBlock) })
+        add(Entry("Statistiques pour les curieux", if (actions.stats) "Affichées" else "Masquées", onClick = actions.onStats))
     }
     PlayerMenu.FORMAT -> PICTURE_FORMATS.mapIndexed { index, name ->
         Entry(name, selected = index == pictureFormat) {

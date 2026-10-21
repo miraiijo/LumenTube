@@ -6,6 +6,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -46,6 +49,22 @@ fun Root(vm: MainViewModel) {
     // Incremented when the player closes: the focus goes back to the card that was played.
     var returnFocusTick by remember { mutableIntStateOf(0) }
 
+    // A page about to be replaced (channel / playlist opened, or closed): its focused card goes
+    // away while the next one loads. This invisible holder keeps the focus meanwhile (otherwise it
+    // fell into the side menu, which opened and closed); it's only focusable while holding.
+    val holder = remember { FocusRequester() }
+    var holding by remember { androidx.compose.runtime.mutableStateOf(false) }
+    fun holdFocus() {
+        holding = true
+        if (!holder.tryRequestFocus()) holding = false
+    }
+    val select: (dev.miraiijo.lumentube.data.Video) -> Unit = remember(vm) {
+        { video ->
+            if (!video.isVideo || video.videoId == null) holdFocus()
+            vm.select(video)
+        }
+    }
+
     // Back: channel/playlist → its section; page → menu; menu → Accueil (then the system closes).
     var inMenu by remember { androidx.compose.runtime.mutableStateOf(false) }
     val fullScreenPlayer = (state.playingId != null || state.playing != null) && !state.minimized
@@ -53,6 +72,7 @@ fun Root(vm: MainViewModel) {
     BackHandler(enabled = !fullScreenPlayer && (state.opened != null || !inMenu || state.section != dev.miraiijo.lumentube.data.Section.HOME || state.minimized)) {
         when {
             state.opened != null -> {
+                holdFocus()
                 vm.closeOpened()
                 pageFocusTick++
             }
@@ -90,6 +110,14 @@ fun Root(vm: MainViewModel) {
                 // Right from the menu: back to the card you left.
                 .focusRestorer(),
         ) {
+            Box(
+                Modifier
+                    .size(1.dp)
+                    .focusProperties { canFocus = holding }
+                    .focusRequester(holder)
+                    .onFocusChanged { if (!it.isFocused && holding) holding = false }
+                    .focusable(),
+            )
             Crossfade(targetState = state.section to state.opened?.title, animationSpec = tween(220), label = "pages") { (section, opened) ->
                 if (section == dev.miraiijo.lumentube.data.Section.SEARCH && opened == null) {
                     SearchPage(
@@ -97,7 +125,7 @@ fun Root(vm: MainViewModel) {
                         page = page,
                         focusTick = pageFocusTick,
                         onSearch = vm::search,
-                        onSelect = vm::select,
+                        onSelect = select,
                         onLoadMore = vm::loadMore,
                         suggestions = state.suggestions,
                         onTyping = vm::suggest,
@@ -110,7 +138,7 @@ fun Root(vm: MainViewModel) {
                         page = page,
                         title = state.opened?.title,
                         focusTick = pageFocusTick,
-                        onSelect = vm::select,
+                        onSelect = select,
                         onLoadMore = vm::loadMore,
                         onRetry = vm::reload,
                         needsAccount = state.section.account && !state.signedIn && state.opened == null,
@@ -168,6 +196,7 @@ fun Root(vm: MainViewModel) {
                 },
                 onWatchLater = { vm.cardWatchLater(video) },
                 onChannel = {
+                    holdFocus()
                     vm.cardOpenChannel(video)
                     pageFocusTick++
                 },

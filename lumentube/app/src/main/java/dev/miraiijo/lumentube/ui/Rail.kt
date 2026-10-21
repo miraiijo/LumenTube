@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -102,7 +103,8 @@ fun SideRail(
     val requesters = remember { Section.entries.associateWith { FocusRequester() } }
     val playerItem = remember { FocusRequester() }
     Box(Modifier.fillMaxSize()) {
-        if (scrim > 0f) Box(Modifier.fillMaxSize().graphicsLayer { alpha = scrim }.background(Color.Black))
+        // Drawn with its alpha, no layer: a layer alpha renders the whole screen offscreen per frame.
+        if (scrim > 0f) Box(Modifier.fillMaxSize().drawBehind { drawRect(Color.Black, alpha = scrim) })
         Row(Modifier.fillMaxHeight()) {
             Column(
                 modifier
