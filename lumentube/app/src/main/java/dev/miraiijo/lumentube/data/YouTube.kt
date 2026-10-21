@@ -52,6 +52,7 @@ data class Video(
     /** Picture replacing the thumbnail (DeArrow), shown instead of the HD one. */
     val customThumbnail: String? = null,
 ) {
+    val isChannel get() = kind == MediaItem.TYPE_CHANNEL
     val isVideo get() = kind == MediaItem.TYPE_VIDEO || kind == MediaItem.TYPE_MUSIC || kind == MediaItem.TYPE_UNDEFINED && videoId != null
 }
 

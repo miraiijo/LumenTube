@@ -43,6 +43,8 @@ data class UiState(
     val playing: Video? = null,
     /** A YouTube link opened from another app (video id), played directly. */
     val playingId: String? = null,
+    /** The video plays in a small window in a corner while browsing (in-app picture-in-picture). */
+    val minimized: Boolean = false,
     /** Accounts linked on this box. */
     val accounts: List<Account> = emptyList(),
     /** "Qui regarde ?" at launch (several accounts), before Accueil loads. */
@@ -203,7 +205,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** OK on a card: play a video, open a channel / playlist. */
     fun select(video: Video) {
         if (video.isVideo && video.videoId != null) {
-            _state.update { it.copy(playing = video, playingId = null) }
+            // The video already in the small window: back to full screen, where it was.
+            val current = _state.value.let { it.playing?.videoId ?: it.playingId }
+            if (_state.value.minimized && current == video.videoId) {
+                restore()
+                return
+            }
+            _state.update { it.copy(playing = video, playingId = null, minimized = false) }
             return
         }
         _state.update { it.copy(opened = Opened(video.title, Page())) }
@@ -222,10 +230,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeOpened() = _state.update { it.copy(opened = null) }
 
-    fun playLink(videoId: String) = _state.update { it.copy(playing = null, playingId = videoId) }
+    fun playLink(videoId: String) = _state.update { it.copy(playing = null, playingId = videoId, minimized = false) }
+
+    /** Small window in a corner; browsing goes on. */
+    fun minimize() = _state.update { it.copy(minimized = true) }
+
+    /** Back to full screen. */
+    fun restore() = _state.update { it.copy(minimized = false) }
 
     fun stopPlaying() {
-        _state.update { it.copy(playing = null, playingId = null) }
+        _state.update { it.copy(playing = null, playingId = null, minimized = false) }
         // "Reprendre" follows what was just watched (YouTube needs a moment to record the position).
         if (_state.value.signedIn) {
             viewModelScope.launch {

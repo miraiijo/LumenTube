@@ -36,6 +36,16 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.4.1
+- Chaînes (« Vos chaînes préférées », résultats de recherche…) : avatar rond et plus petit, demandé en 256 px au serveur d'images de Google au lieu de 88 px. En haut à droite, une chaîne sélectionnée s'affiche en rond, sans image 16:9 pixelisée.
+
+### 0.4.0
+- Lecteur réduit (image dans l'image, dans l'app) : le bouton ▣ du lecteur réduit la vidéo dans un coin, et la navigation continue. « Lecture en cours » en haut du menu, ou OK sur la même vidéo, la remet en plein écran. Au dernier Retour (menu, Accueil), la vidéo réduite s'arrête. En fin de vidéo, la suivante enchaîne directement dans la petite fenêtre.
+- Démarrage des vidéos :
+  - le moteur YouTube (script du lecteur, déchiffrement des signatures) se prépare au lancement de l'app, comme dans SmartTube, au lieu de pendant la première vidéo ;
+  - SponsorBlock et les infos de la vidéo ne partent qu'une fois les formats reçus, pour ne plus concurrencer la requête dont l'image dépend ;
+  - temps de démarrage dans les logs : `adb logcat -s LumenTube.Timing`.
+
 ### 0.3.2
 - Lecteur : la touche Accueil de la télécommande (ou une autre app au premier plan) met la vidéo en pause et enregistre la position. Au retour, la vidéo attend en pause, commandes affichées.
 

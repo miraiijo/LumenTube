@@ -32,6 +32,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import com.bumptech.glide.integration.compose.GlideImage
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.clip
@@ -178,6 +183,7 @@ private fun VideoRowView(
 /** 16:9 thumbnail (duration badge, watched lane), title and channel below. */
 @Composable
 fun VideoCard(video: Video, modifier: Modifier = Modifier, onFocus: () -> Unit, onClick: () -> Unit) {
+    if (video.isChannel) return ChannelCard(video, modifier, onFocus, onClick)
     var isFocused by remember { mutableStateOf(false) }
     Column(Modifier.width(CARD_WIDTH)) {
         Surface(
@@ -245,11 +251,24 @@ fun VideoCard(video: Video, modifier: Modifier = Modifier, onFocus: () -> Unit, 
 private fun Backdrop(video: Video?) {
     // Picture = (video id for the HD version, feed thumbnail as fallback).
     val picture = video?.takeIf { it.videoId != null || it.thumbnail != null }?.let { it.videoId to it.thumbnail }
-    Crossfade(targetState = picture, animationSpec = tween(500), label = "backdrop") { image ->
+    val channel = video?.takeIf { it.isChannel }
+    Crossfade(targetState = picture to channel, animationSpec = tween(500), label = "backdrop") { (image, shownChannel) ->
         Box(Modifier.fillMaxSize()) {
-            // Top-right quarter: the whole picture, melting into the page on its left (towards the
-            // details) and at its bottom.
-            if (image != null) {
+            if (shownChannel != null) {
+                // A channel: its round avatar (a channel picture stretched to 16:9 is a blur).
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 40.dp, end = 96.dp)
+                        .size(CHANNEL_BACKDROP)
+                        .clip(CircleShape)
+                        .background(Palette.Tile),
+                ) {
+                    GlideImage(model = avatarUrl(shownChannel.thumbnail), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                }
+            } else if (image != null) {
+                // Top-right quarter: the whole picture, melting into the page on its left (towards
+                // the details) and at its bottom.
                 Box(Modifier.fillMaxWidth(0.5f).aspectRatio(16f / 9f).align(Alignment.TopEnd).then(MeltIntoPage)) {
                     Thumbnail(image.first, image.second, Modifier.fillMaxSize())
                 }
@@ -303,3 +322,50 @@ private fun Message(text: String, button: String? = null, buttonModifier: Modifi
 }
 
 
+
+/** A channel ("Vos chaînes préférées"…): round avatar and name, smaller than a video card. */
+@Composable
+private fun ChannelCard(video: Video, modifier: Modifier, onFocus: () -> Unit, onClick: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
+    Column(Modifier.width(CHANNEL_CARD), horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(
+            onClick = onClick,
+            modifier = modifier
+                .size(CHANNEL_AVATAR)
+                .onFocusChanged {
+                    isFocused = it.isFocused
+                    if (it.isFocused) onFocus()
+                },
+            shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = FocusScale.Avatar),
+            border = ClickableSurfaceDefaults.border(
+                focusedBorder = Border(androidx.compose.foundation.BorderStroke(2.dp, Color.White), shape = CircleShape),
+            ),
+            colors = ClickableSurfaceDefaults.colors(containerColor = Palette.Tile, focusedContainerColor = Palette.TileFocused),
+        ) {
+            GlideImage(model = avatarUrl(video.thumbnail), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        }
+        Text(
+            video.title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (isFocused) Palette.TextPrimary else Palette.TextPrimary.copy(alpha = 0.85f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            lineHeight = 17.sp,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+    }
+}
+
+/**
+ * Channel avatars come small (88 px). Their Google image server resizes on demand: "=s88-…" asked
+ * as "=s256-…" gives a sharp picture at the same address.
+ */
+private fun avatarUrl(url: String?): String? = url?.replace(Regex("=s\\d+"), "=s$AVATAR_PX")?.let { if (it.startsWith("//")) "https:$it" else it }
+
+private const val AVATAR_PX = 256
+private val CHANNEL_CARD = 132.dp
+private val CHANNEL_AVATAR = 112.dp
+private val CHANNEL_BACKDROP = 200.dp

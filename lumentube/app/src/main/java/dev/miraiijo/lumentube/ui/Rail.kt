@@ -86,6 +86,8 @@ fun SideRail(
     onSection: (Section) -> Unit,
     /** Account / settings dialog. */
     onAccount: () -> Unit,
+    /** Back to the video playing in the small window. */
+    onRestorePlayer: () -> Unit = {},
 ) {
     var open by remember { mutableStateOf(false) }
     val width by animateDpAsState(if (open) RAIL_OPEN_WIDTH else RAIL_WIDTH, tween(220), label = "rail-width")
@@ -123,6 +125,9 @@ fun SideRail(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
+                    if (state.minimized) {
+                        RailItem("Lecture en cours", open, icon = LumenIcon.PIP, current = true, onClick = onRestorePlayer)
+                    }
                     sections.forEach { section ->
                         RailItem(section.label, open, icon = section.icon, current = section == state.section && state.opened == null, requester = requesters.getValue(section)) {
                             onSection(section)

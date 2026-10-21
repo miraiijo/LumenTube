@@ -19,6 +19,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
@@ -41,14 +44,17 @@ fun Root(vm: MainViewModel) {
 
     // Back: channel/playlist → its section; page → menu; menu → Accueil (then the system closes).
     var inMenu by remember { androidx.compose.runtime.mutableStateOf(false) }
-    BackHandler(enabled = state.playingId == null && state.playing == null && (state.opened != null || !inMenu || state.section != dev.miraiijo.lumentube.data.Section.HOME)) {
+    val fullScreenPlayer = (state.playingId != null || state.playing != null) && !state.minimized
+    // …then, with a video in the small window, the last Back closes it (the next one leaves the app).
+    BackHandler(enabled = !fullScreenPlayer && (state.opened != null || !inMenu || state.section != dev.miraiijo.lumentube.data.Section.HOME || state.minimized)) {
         when {
             state.opened != null -> {
                 vm.closeOpened()
                 pageFocusTick++
             }
             !inMenu -> rail.tryRequestFocus()
-            else -> vm.show(dev.miraiijo.lumentube.data.Section.HOME)
+            state.section != dev.miraiijo.lumentube.data.Section.HOME -> vm.show(dev.miraiijo.lumentube.data.Section.HOME)
+            else -> vm.stopPlaying()
         }
     }
 
@@ -94,6 +100,7 @@ fun Root(vm: MainViewModel) {
                 pageFocusTick++
             },
             onAccount = vm::openSettings,
+            onRestorePlayer = vm::restore,
         )
         if (state.signingIn) {
             SignInDialog(code = state.signInCode, error = state.signInError, onRetry = vm::startSignIn, onDismiss = vm::cancelSignIn)
@@ -127,6 +134,16 @@ fun Root(vm: MainViewModel) {
                     vm.stopPlaying()
                     returnFocusTick++
                 },
+                minimized = state.minimized,
+                onMinimize = {
+                    vm.minimize()
+                    returnFocusTick++
+                },
+                modifier = if (state.minimized) {
+                    Modifier.align(Alignment.BottomEnd).padding(end = 32.dp, bottom = 32.dp).size(MINI_WIDTH, MINI_WIDTH * 9 / 16)
+                } else {
+                    Modifier.fillMaxSize()
+                },
             )
         }
     }
@@ -136,6 +153,9 @@ fun Root(vm: MainViewModel) {
         if (!content.tryRequestFocus()) rail.tryRequestFocus()
     }
 }
+
+/** Width of the in-app picture-in-picture window (16:9). */
+private val MINI_WIDTH = 400.dp
 
 /** Where a video resumes: YouTube's saved position, else its watched share (not when finished). */
 private fun resumeSeconds(video: dev.miraiijo.lumentube.data.Video): Int {

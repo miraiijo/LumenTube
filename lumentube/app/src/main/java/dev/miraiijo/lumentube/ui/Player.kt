@@ -39,6 +39,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -93,6 +94,15 @@ private const val CONTROLS_HIDE_MS = 4_000L
 private const val SAVE_EVERY_MS = 30_000L
 private const val SKIP_NOTICE_MS = 3_000L
 private const val UP_NEXT_SECONDS = 10
+/** adb logcat -s LumenTube.Timing: how long a video takes to start, step by step. */
+private const val TIMING_TAG = "LumenTube.Timing"
+
+private fun formatsKind(info: com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo) = when {
+    info.containsDashFormats() -> "DASH"
+    info.containsSabrFormats() -> "SABR"
+    info.isLive -> "live"
+    else -> "URL"
+}
 private val PREVIEW_WIDTH = 256.dp
 /** Subtitle height, as a share of the video's height (ExoPlayer's default is 0.0533). */
 private const val SUBTITLE_SIZE = 0.06f
@@ -114,7 +124,13 @@ fun PlayerScreen(
     signedIn: Boolean,
     onNext: (Video) -> Unit,
     onExit: () -> Unit,
+    /** In-app picture-in-picture: small window in a corner, no controls, browsing goes on. */
+    minimized: Boolean = false,
+    onMinimize: () -> Unit = {},
+    modifier: Modifier = Modifier.fillMaxSize(),
 ) {
+    val isMini by rememberUpdatedState(minimized)
+    val playNext by rememberUpdatedState(onNext)
     val context = LocalContext.current
     val prefs = remember { PlayerPrefs(context) }
     val player = remember(videoId) { LumenPlayer(context).also { it.setQuality(prefs.quality) } }
@@ -161,6 +177,10 @@ fun PlayerScreen(
     var pictureFormat by remember { mutableIntStateOf(prefs.pictureFormat) }
     /** Video ended with a next one to play: the "À suivre" card counts down. */
     var upNext by remember(videoId) { mutableStateOf<Video?>(null) }
+    /** Formats received: the side requests (SponsorBlock, details) start only then, so they never
+     *  compete with the one the picture waits for. */
+    var infoReady by remember(videoId) { mutableStateOf(false) }
+    var openedAt by remember(videoId) { mutableLongStateOf(0L) }
     val scope = rememberCoroutineScope()
 
     fun closeMenu() {
@@ -191,7 +211,10 @@ fun PlayerScreen(
     LaunchedEffect(videoId, loadTick) {
         error = null
         val resumeAt = if (loadTick == 0) startSeconds * 1000L else player.exo.currentPosition
+        openedAt = android.os.SystemClock.elapsedRealtime()
         val info = runCatching { YouTube.formatInfo(videoId) }.getOrNull()
+        android.util.Log.i(TIMING_TAG, "$videoId: formats in ${android.os.SystemClock.elapsedRealtime() - openedAt} ms (${info?.let { formatsKind(it) } ?: "none"})")
+        infoReady = true
         when {
             info == null -> error = "YouTube ne répond pas."
             info.isUnplayable -> error = info.playabilityReason?.takeIf { it.isNotBlank() } ?: "Cette vidéo ne peut pas être lue."
@@ -229,10 +252,18 @@ fun PlayerScreen(
         val listener = object : Player.EventListener {
             override fun onPlayerStateChanged(playWhenReady: Boolean, playbackState: Int) {
                 buffering = playbackState == Player.STATE_BUFFERING || playbackState == Player.STATE_IDLE
-                if (playbackState == Player.STATE_READY) started = true
+                if (playbackState == Player.STATE_READY && !started) {
+                    started = true
+                    android.util.Log.i(TIMING_TAG, "$videoId: first frame ready ${android.os.SystemClock.elapsedRealtime() - openedAt} ms after the request")
+                }
                 if (playbackState == Player.STATE_ENDED) {
                     val next = details?.next
-                    if (prefs.autoplay && next != null) upNext = next else onExit()
+                    when {
+                        !prefs.autoplay || next == null -> onExit()
+                        // Small window: no card to show, the next one starts right away.
+                        isMini -> playNext(next)
+                        else -> upNext = next
+                    }
                 }
             }
 
@@ -270,10 +301,12 @@ fun PlayerScreen(
     }
 
     // SponsorBlock segments and chapters, fetched next to the video (they never delay it).
-    LaunchedEffect(videoId, sponsorBlock) {
+    LaunchedEffect(videoId, sponsorBlock, infoReady) {
+        if (!infoReady) return@LaunchedEffect
         segments = if (sponsorBlock) YouTube.skipSegments(videoId) else emptyList()
     }
-    LaunchedEffect(videoId) {
+    LaunchedEffect(videoId, infoReady) {
+        if (!infoReady) return@LaunchedEffect
         details = YouTube.details(videoId, item)
         liked = details?.liked == true
         subscribed = details?.subscribed == true
@@ -317,10 +350,24 @@ fun PlayerScreen(
             controls = false
         }
     }
-    LaunchedEffect(controls) {
+    LaunchedEffect(controls, minimized) {
         withFrameNanos { }
-        if (upNext != null) return@LaunchedEffect
+        if (upNext != null || minimized) return@LaunchedEffect
         if (controls) playPause.tryRequestFocus() else root.tryRequestFocus()
+    }
+    // "À suivre" counting down when the window shrinks: the next video starts now.
+    LaunchedEffect(minimized, upNext) {
+        val next = upNext
+        if (minimized && next != null) playNext(next)
+    }
+    // Into the small window: no controls nor panel. Back to full screen: controls shown.
+    LaunchedEffect(minimized) {
+        if (minimized) {
+            menu = null
+            controls = false
+        } else {
+            show()
+        }
     }
 
     fun toggleLike() {
@@ -349,11 +396,11 @@ fun PlayerScreen(
         scope.launch { if (!YouTube.watchLater(videoId)) watchLaterDone = false }
     }
 
-    BackHandler {
+    BackHandler(enabled = !minimized) {
         if (controls && isPlaying) controls = false else onExit()
     }
     // Declared after: while the panel is open, Back goes up one level, then closes it.
-    BackHandler(enabled = menu != null) {
+    BackHandler(enabled = menu != null && !minimized) {
         // Up one level, or closed when it's the level the panel was opened on.
         if (menu == menuRoot) closeMenu() else menu = PlayerMenu.MAIN
     }
@@ -364,14 +411,17 @@ fun PlayerScreen(
     }
 
     Box(
-        Modifier
-            .fillMaxSize()
+        modifier
             .background(Color.Black)
-            .focusRequester(root)
-            // The page under the player never gets the focus.
-            .focusProperties { exit = { FocusRequester.Cancel } }
-            .focusGroup()
-            .focusable()
+            .then(
+                // Small window: not focusable, the page keeps the remote.
+                if (minimized) Modifier else Modifier
+                    .focusRequester(root)
+                    // The page under the player never gets the focus.
+                    .focusProperties { exit = { FocusRequester.Cancel } }
+                    .focusGroup()
+                    .focusable(),
+            )
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
                 val isOk = native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER || native.keyCode == AndroidKeyEvent.KEYCODE_ENTER
@@ -445,7 +495,7 @@ fun PlayerScreen(
         }
         if (started && buffering && error == null) LoadingDots(Modifier.align(Alignment.Center))
 
-        AnimatedVisibility(visible = controls && error == null, enter = fadeIn(tween(150)), exit = fadeOut(tween(250))) {
+        AnimatedVisibility(visible = controls && error == null && !minimized, enter = fadeIn(tween(150)), exit = fadeOut(tween(250))) {
             val chapter = chapters.lastOrNull { it.startMs <= (preview ?: position) }?.title
             Controls(
                 title = shownTitle,
@@ -480,6 +530,7 @@ fun PlayerScreen(
                     menuRoot = PlayerMenu.MAIN
                     menu = PlayerMenu.MAIN
                 },
+                onMinimize = onMinimize,
                 showLike = signedIn && !live,
                 liked = liked,
                 onLike = ::toggleLike,
@@ -490,7 +541,7 @@ fun PlayerScreen(
 
         // SponsorBlock: what was just skipped, top left.
         AnimatedVisibility(
-            visible = skipNotice != null,
+            visible = skipNotice != null && !minimized,
             enter = fadeIn(),
             exit = fadeOut(tween(400)),
             modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = Dimens.Gutter),
@@ -534,7 +585,7 @@ fun PlayerScreen(
             )
         }
 
-        upNext?.let { next ->
+        upNext?.takeIf { !minimized }?.let { next ->
             UpNextCard(
                 next,
                 onPlay = { onNext(next) },
@@ -543,7 +594,9 @@ fun PlayerScreen(
             )
         }
 
-        if (error != null) {
+        if (error != null && minimized) {
+            Text("Lecture impossible", fontSize = 14.sp, color = Color.White, modifier = Modifier.align(Alignment.Center))
+        } else if (error != null) {
             Column(
                 Modifier.align(Alignment.Center).background(Palette.Panel.copy(alpha = 0.95f), DialogShape).padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -596,6 +649,7 @@ private fun Controls(
     onLike: () -> Unit,
     storyboard: MediaItemStoryboard?,
     previewing: Boolean,
+    onMinimize: () -> Unit,
 ) {
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().height(150.dp).align(Alignment.TopCenter).background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent))))
@@ -637,6 +691,8 @@ private fun Controls(
                     if (showLike) ControlButton(LumenIcon.THUMB_UP, up = progress, onDown = onHide, active = liked, onClick = onLike)
                     if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, up = progress, onDown = onHide, onClick = onSubtitles)
                     ControlButton(LumenIcon.SETTINGS, Modifier.focusRequester(settingsButton), up = progress, onDown = onHide, onClick = onSettings)
+                    // Small window in a corner: keep watching while browsing ("Lecture en cours" in the menu brings it back).
+                    ControlButton(LumenIcon.PIP, up = progress, onDown = onHide, onClick = onMinimize)
                 }
                 Text(
                     if (live && duration <= 0) "En direct" else "${formatTime(position)} / ${formatTime(duration)}",

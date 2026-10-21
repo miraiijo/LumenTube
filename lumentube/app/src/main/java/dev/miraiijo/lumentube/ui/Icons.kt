@@ -26,7 +26,7 @@ enum class LumenIcon {
     DICE, PLAY, PLUS, CHECK, HEART, STAR, REFRESH, CLOSE, MIC, EYE_OFF,
     CHEVRON_UP, CHEVRON_DOWN, INFO, HOME, LIBRARY, APPS, GAMEPAD, MORE,
     // LumenTube
-    PAUSE, SUBTITLES, MUSIC, NEWS, LIVE, HISTORY, PLAYLIST, SUBSCRIPTIONS, REWIND, FORWARD, USER, THUMB_UP, TROPHY,
+    PAUSE, PIP, SUBTITLES, MUSIC, NEWS, LIVE, HISTORY, PLAYLIST, SUBSCRIPTIONS, REWIND, FORWARD, USER, THUMB_UP, TROPHY,
     // Avatar glyphs
     MOON, BOLT, SMILE, CAT, FLAME, LEAF, GHOST, CROWN,
 }
@@ -228,6 +228,10 @@ private fun DrawScope.drawIcon(icon: LumenIcon, color: Color) {
         LumenIcon.PAUSE -> {
             drawRoundRect(color, p(6f, 4.5f), Size(4f * u, 15f * u), CornerRadius(1.2f * u))
             drawRoundRect(color, p(14f, 4.5f), Size(4f * u, 15f * u), CornerRadius(1.2f * u))
+        }
+        LumenIcon.PIP -> {
+            drawRoundRect(color, p(3f, 5f), Size(18f * u, 14f * u), CornerRadius(2.5f * u), style = stroke)
+            drawRoundRect(color, p(11.5f, 11.5f), Size(7f * u, 5f * u), CornerRadius(1f * u))
         }
         LumenIcon.SUBTITLES -> {
             drawRoundRect(color, p(3f, 5f), Size(18f * u, 14f * u), CornerRadius(3f * u), style = stroke)
