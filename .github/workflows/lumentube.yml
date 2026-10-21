@@ -29,9 +29,21 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # setup-gradle's wrapper validation scans the whole repo and rejects SmartTube's own wrappers
+      # (root and exoplayer-amzn-2.10.6), which this build never runs. Only LumenTube's wrapper is
+      # executed, so only that one is checked, against Gradle's published checksum.
+      - name: Validate LumenTube's Gradle wrapper
+        run: |
+          version=$(grep -oP 'gradle-\K[0-9.]+(?=-bin\.zip)' lumentube/gradle/wrapper/gradle-wrapper.properties)
+          expected=$(curl -fsSL "https://services.gradle.org/distributions/gradle-${version}-wrapper.jar.sha256")
+          actual=$(sha256sum lumentube/gradle/wrapper/gradle-wrapper.jar | cut -d' ' -f1)
+          echo "Gradle $version wrapper: expected $expected, got $actual"
+          test "$expected" = "$actual"
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
+          validate-wrappers: false
 
       - name: Restore release keystore
         if: env.LUMENTUBE_KEYSTORE_B64 != ''
