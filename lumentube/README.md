@@ -36,6 +36,9 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.8.1
+- Correctif de compilation de la 0.8.0 (panneau des commentaires : API de focus expérimentale de Compose déclarée). Aucun changement de fonctionnement.
+
 ### 0.8.0
 - **Commandes du lecteur** : les boutons « reculer » et « avancer » disparaissent (Gauche/Droite commandes masquées, ou la barre de progression, font la même chose). À droite de lecture/pause : J'aime, Je n'aime pas, Commentaires, ronds façon Nuvio (blancs au focus), puis Sous-titres, Petite fenêtre et Réglages. Haut mène à la barre, Bas masque les commandes.
 - **J'aime / Je n'aime pas** : nombre de « j'aime » (métadonnées YouTube) et nombre estimé de « je n'aime pas » (Return YouTube Dislike, via MediaServiceCore). OK met ou retire le vote ; le pouce se remplit quand il est actif, et les deux s'excluent. Sans compte connecté, seuls les compteurs sont affichés.

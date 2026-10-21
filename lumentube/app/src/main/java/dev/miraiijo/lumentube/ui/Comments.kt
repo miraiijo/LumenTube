@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalTvMaterial3Api::class, ExperimentalGlideComposeApi::class)
+@file:OptIn(ExperimentalTvMaterial3Api::class, ExperimentalGlideComposeApi::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 
 package dev.miraiijo.lumentube.ui
 
