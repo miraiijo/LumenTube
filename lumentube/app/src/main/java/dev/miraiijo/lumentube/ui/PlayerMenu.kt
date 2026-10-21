@@ -63,6 +63,11 @@ class VideoActions(
     val watchLaterDone: Boolean,
     val onSubscribe: () -> Unit,
     val onWatchLater: () -> Unit,
+    /** "Voir la chaîne": the video goes to the small window, the channel page opens. */
+    val onChannel: () -> Unit = {},
+    /** "Statistiques pour les curieux" shown. */
+    val stats: Boolean = false,
+    val onStats: () -> Unit = {},
 )
 
 private class Entry(
@@ -102,7 +107,7 @@ fun PlayerMenuPanel(
 ) {
     // Bumped after each choice: the values shown are read from the player again.
     var version by remember { mutableIntStateOf(0) }
-    val entries = remember(menu, tracksTick, version, sponsorBlock, pictureFormat, actions.details, actions.watchLaterDone) {
+    val entries = remember(menu, tracksTick, version, sponsorBlock, pictureFormat, actions.details, actions.watchLaterDone, actions.stats) {
         buildEntries(menu, player, prefs, live, sponsorBlock, onSponsorBlock, pictureFormat, onPictureFormat, actions, onMenu) { version++ }
     }
     val title = when (menu) {
@@ -170,6 +175,7 @@ private fun buildEntries(
             val channel = details.channel?.takeIf { it.isNotBlank() } ?: "la chaîne"
             add(Entry(if (details.subscribed) "Abonné à $channel" else "S'abonner à $channel", if (details.subscribed) "Se désabonner" else null, onClick = actions.onSubscribe))
         }
+        if (details?.channelId != null) add(Entry("Voir la chaîne", details.channel?.takeIf { it.isNotBlank() }, onClick = actions.onChannel))
         if (actions.signedIn) {
             add(Entry("À regarder plus tard", if (actions.watchLaterDone) "Ajoutée" else null, selected = actions.watchLaterDone, onClick = actions.onWatchLater))
         }
@@ -187,6 +193,7 @@ private fun buildEntries(
         val audio = player.audioTracks()
         if (audio.size > 1) add(Entry("Piste audio", audio.getOrNull(player.playingAudio) ?: "Auto", submenu = true) { onMenu(PlayerMenu.AUDIO) })
         add(Entry("Format de l'image", PICTURE_FORMATS[pictureFormat.coerceIn(0, PICTURE_FORMATS.lastIndex)], submenu = true) { onMenu(PlayerMenu.FORMAT) })
+        add(Entry("Statistiques pour les curieux", if (actions.stats) "Affichées" else "Masquées", onClick = actions.onStats))
         if (!live) {
             add(Entry("SponsorBlock", if (sponsorBlock) "Activé" else "Désactivé") { onSponsorBlock(!sponsorBlock) })
         }

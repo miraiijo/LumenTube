@@ -10,6 +10,7 @@ import dev.miraiijo.lumentube.data.Video
 import dev.miraiijo.lumentube.data.VideoRow
 import dev.miraiijo.lumentube.data.YouTube
 import dev.miraiijo.lumentube.player.PlayerPrefs
+import dev.miraiijo.lumentube.remote.RemoteControl
 import kotlinx.coroutines.delay
 import io.reactivex.disposables.Disposable
 import kotlinx.coroutines.Job
@@ -22,11 +23,27 @@ import kotlinx.coroutines.launch
 /** A page's content: loading, rows, or an error message. */
 data class Page(val rows: List<VideoRow> = emptyList(), val loading: Boolean = true, val error: String? = null)
 
-/** A channel or playlist opened from a card, shown over the section. */
-data class Opened(val title: String, val page: Page)
+/** A channel or playlist opened from a card, shown over the section. [channel]: a channel page's header. */
+data class Opened(val title: String, val page: Page, val channel: ChannelHeader? = null)
+
+/**
+ * A channel page's header: avatar, name, "S'abonner" ([subscribed] null: unknown or signed out) and
+ * its orders ([sorts]: "Plus récentes", "Populaires"…; [sort] -1 = the channel's own page).
+ */
+data class ChannelHeader(
+    val id: String,
+    val name: String,
+    val avatar: String?,
+    val subscribed: Boolean? = null,
+    val sorts: List<String> = emptyList(),
+    val sort: Int = -1,
+)
 
 /** The app-wide switches of the "Compte et réglages" dialog. */
-data class Settings(val sponsorBlock: Boolean, val autoplay: Boolean, val stableVolume: Boolean, val deArrow: Boolean)
+data class Settings(val sponsorBlock: Boolean, val autoplay: Boolean, val stableVolume: Boolean, val deArrow: Boolean, val remote: Boolean = false)
+
+/** "Lier un téléphone": the TV code to type in the phone's YouTube app (null while it's requested). */
+data class Pairing(val code: String? = null, val error: String? = null)
 
 data class UiState(
     val section: Section = Section.HOME,
@@ -63,6 +80,15 @@ data class UiState(
     val search: Page? = null,
     /** DeArrow titles / thumbnails by video id (only filled when DeArrow is on). */
     val deArrow: Map<String, DeArrow> = emptyMap(),
+    /** Search filters (SearchOptions flags, 0 = none) and YouTube's suggestions for what's typed. */
+    val searchOptions: Int = 0,
+    val suggestions: List<String> = emptyList(),
+    /** Long press on a card: its menu. */
+    val cardMenu: Video? = null,
+    /** Short message at the bottom of the screen ("Ajoutée à À regarder plus tard"…). */
+    val notice: String? = null,
+    /** "Lier un téléphone" dialog open. */
+    val pairing: Pairing? = null,
 ) {
     val page: Page
         get() = when {
@@ -114,6 +140,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+        viewModelScope.launch { RemoteControl.events.collect(::onRemote) }
         viewModelScope.launch {
             val accounts = YouTube.accounts()
             // Several accounts: "Qui regarde ?" first, Accueil loads for the one picked.
@@ -195,15 +222,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val text = query.trim()
         if (text.isEmpty()) return
         searchJob?.cancel()
-        _state.update { it.copy(query = text, search = Page(loading = true)) }
+        suggestJob?.cancel()
+        val options = _state.value.searchOptions
+        _state.update { it.copy(query = text, search = Page(loading = true), suggestions = emptyList()) }
         searchJob = viewModelScope.launch {
-            val page = runCatching { YouTube.search(text) }.fold(
+            val page = runCatching { YouTube.search(text, options) }.fold(
                 onSuccess = { Page(it, loading = false, error = if (it.isEmpty()) "Aucun résultat pour « $text »." else null) },
                 onFailure = { Page(loading = false, error = it.userMessage()) },
             )
             _state.update { it.copy(search = page) }
             fetchDeArrow(page.rows)
         }
+    }
+
+    private var suggestJob: Job? = null
+
+    /** Typing in the search bar: YouTube's suggestions, once the typing pauses. */
+    fun suggest(text: String) {
+        suggestJob?.cancel()
+        val typed = text.trim()
+        if (typed.length < 2) {
+            _state.update { it.copy(suggestions = emptyList()) }
+            return
+        }
+        suggestJob = viewModelScope.launch {
+            delay(SUGGEST_DELAY_MS)
+            val found = YouTube.suggestions(typed)
+            _state.update { it.copy(suggestions = found) }
+        }
+    }
+
+    /** A filter changed (date, duration, type, order): the current search runs again with it. */
+    fun setSearchOptions(options: Int) {
+        _state.update { it.copy(searchOptions = options) }
+        _state.value.query.takeIf { it.isNotBlank() }?.let(::search)
     }
 
     // ---- DeArrow ------------------------------------------------------------------------------
@@ -235,6 +287,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(playing = video, playingId = null, minimized = false) }
             return
         }
+        val channelId = video.raw.channelId
+        if (video.isChannel && channelId != null) {
+            openChannel(channelId, video.title, video.thumbnail)
+            return
+        }
         _state.update { it.copy(opened = Opened(video.title, Page())) }
         viewModelScope.launch {
             val page = runCatching { YouTube.open(video) }.fold(
@@ -243,6 +300,179 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             _state.update { s -> if (s.opened == null) s else s.copy(opened = Opened(video.title, page)) }
             fetchDeArrow(page.rows)
+        }
+    }
+
+    // ---- Channel page ---------------------------------------------------------------------------
+
+    private var channelJob: Job? = null
+    /** The opened channel's rows: its own page, then one per order. */
+    private var channelHome: List<VideoRow> = emptyList()
+    private var channelSortRows: List<VideoRow> = emptyList()
+
+    /** From the player: the video goes to the small window, the channel page opens behind it. */
+    fun openChannelFromPlayer(channelId: String, name: String) {
+        _state.update { it.copy(minimized = true) }
+        openChannel(channelId, name, null)
+    }
+
+    /** A channel page (from a channel card, a card's menu or the player): header, then its rows. */
+    fun openChannel(channelId: String, name: String, avatar: String?) {
+        channelJob?.cancel()
+        channelHome = emptyList()
+        channelSortRows = emptyList()
+        val header = ChannelHeader(channelId, name.ifBlank { "Chaîne" }, avatar)
+        _state.update { it.copy(opened = Opened(header.name, Page(), header), cardMenu = null) }
+        channelJob = viewModelScope.launch {
+            launch {
+                val subscribed = if (_state.value.signedIn) YouTube.isSubscribed(channelId) else null
+                updateChannel(channelId) { it.copy(subscribed = subscribed) }
+            }
+            launch {
+                val sorts = runCatching { YouTube.channelSorts(channelId) }.getOrDefault(emptyList())
+                channelSortRows = sorts
+                updateChannel(channelId) { it.copy(sorts = sorts.map { row -> row.title }) }
+            }
+            val page = runCatching { YouTube.channelRows(channelId) }.fold(
+                onSuccess = { Page(it, loading = false, error = if (it.isEmpty()) "Aucune vidéo." else null) },
+                onFailure = { Page(loading = false, error = it.userMessage()) },
+            )
+            channelHome = page.rows
+            _state.update { s ->
+                val opened = s.opened?.takeIf { it.channel?.id == channelId } ?: return@update s
+                if (opened.channel?.sort != -1) return@update s
+                s.copy(opened = opened.copy(page = page))
+            }
+            fetchDeArrow(page.rows)
+        }
+    }
+
+    private fun updateChannel(channelId: String, change: (ChannelHeader) -> ChannelHeader) = _state.update { s ->
+        val opened = s.opened ?: return@update s
+        val channel = opened.channel?.takeIf { it.id == channelId } ?: return@update s
+        s.copy(opened = opened.copy(channel = change(channel)))
+    }
+
+    /** "Accueil de la chaîne" (-1) or one of its orders. */
+    fun chooseChannelSort(index: Int) {
+        val channel = _state.value.opened?.channel ?: return
+        val rows = if (index < 0) channelHome else listOfNotNull(channelSortRows.getOrNull(index))
+        updateChannel(channel.id) { it.copy(sort = index) }
+        _state.update { s -> s.opened?.let { s.copy(opened = it.copy(page = Page(rows, loading = false, error = if (rows.isEmpty()) "Aucune vidéo." else null))) } ?: s }
+        fetchDeArrow(rows)
+    }
+
+    fun toggleChannelSubscription() {
+        val channel = _state.value.opened?.channel ?: return
+        val target = channel.subscribed != true
+        updateChannel(channel.id) { it.copy(subscribed = target) }
+        viewModelScope.launch {
+            if (!YouTube.setSubscribed(channel.id, target)) {
+                updateChannel(channel.id) { it.copy(subscribed = !target) }
+                showNotice("Impossible de modifier l'abonnement.")
+            }
+        }
+    }
+
+    // ---- Card menu (long press) -----------------------------------------------------------------
+
+    fun openCardMenu(video: Video) = _state.update { it.copy(cardMenu = video) }
+
+    fun closeCardMenu() = _state.update { it.copy(cardMenu = null) }
+
+    fun cardWatchLater(video: Video) {
+        closeCardMenu()
+        val id = video.videoId ?: return
+        viewModelScope.launch { showNotice(if (YouTube.watchLater(id)) "Ajoutée à « À regarder plus tard »." else "Impossible d'ajouter la vidéo.") }
+    }
+
+    fun cardOpenChannel(video: Video) {
+        val id = video.raw.channelId ?: return closeCardMenu()
+        openChannel(id, video.channel, null)
+    }
+
+    /** "Pas intéressé" / "Ne pas recommander cette chaîne": the card (or the channel's cards) leaves the rows. */
+    fun cardNotInterested(video: Video, channel: Boolean) {
+        closeCardMenu()
+        viewModelScope.launch {
+            if (!YouTube.notInterested(video, channel)) {
+                showNotice("YouTube n'a pas pris en compte la demande.")
+                return@launch
+            }
+            val channelId = video.raw.channelId
+            removeCards { it.key == video.key || (channel && channelId != null && it.raw.channelId == channelId) }
+            showNotice(if (channel) "Cette chaîne ne sera plus recommandée." else "Tu ne verras plus cette vidéo.")
+        }
+    }
+
+    private fun removeCards(matches: (Video) -> Boolean) = _state.update { s ->
+        fun Page.without() = copy(rows = rows.map { row -> row.copy(items = row.items.filterNot(matches)) }.filter { it.items.isNotEmpty() })
+        s.copy(
+            pages = s.pages.mapValues { (_, page) -> page.without() },
+            search = s.search?.without(),
+            opened = s.opened?.let { it.copy(page = it.page.without()) },
+            resume = s.resume?.let { row -> row.copy(items = row.items.filterNot(matches)).takeIf { it.items.isNotEmpty() } },
+        )
+    }
+
+    private var noticeJob: Job? = null
+
+    fun showNotice(text: String) {
+        noticeJob?.cancel()
+        _state.update { it.copy(notice = text) }
+        noticeJob = viewModelScope.launch {
+            delay(NOTICE_MS)
+            _state.update { it.copy(notice = null) }
+        }
+    }
+
+    // ---- "Regarder sur la TV" (phone remote) ------------------------------------------------------
+
+    private var foreground = false
+
+    /** The activity is on screen (or not): commands are listened to only then, when it's enabled. */
+    fun onForeground(on: Boolean) {
+        foreground = on
+        if (on && _state.value.settings.remote) RemoteControl.start(getApplication()) else RemoteControl.stop()
+    }
+
+    /** "Lier un téléphone": the TV code; listening starts so the phone finds the TV right away. */
+    fun openPairing() {
+        _state.update { it.copy(pairing = Pairing(), settingsOpen = false) }
+        if (!_state.value.settings.remote) updateSettings(_state.value.settings.copy(remote = true))
+        viewModelScope.launch {
+            val code = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { RemoteControl.pairingCode().timeout(20, java.util.concurrent.TimeUnit.SECONDS).blockingFirst() }.getOrNull()
+            }
+            _state.update { s ->
+                if (s.pairing == null) s
+                else s.copy(pairing = if (code.isNullOrBlank()) Pairing(error = "Code indisponible. Réessaie.") else Pairing(code = code.chunked(3).joinToString(" ")))
+            }
+        }
+    }
+
+    fun closePairing() = _state.update { it.copy(pairing = null) }
+
+    private fun onRemote(event: RemoteControl.Event) {
+        when (event) {
+            is RemoteControl.Event.Open -> {
+                val s = _state.value
+                val current = s.playing?.videoId ?: s.playingId
+                // The video already playing: only its position (the player handles the Seek).
+                if (current == event.videoId) {
+                    if (s.minimized) restore()
+                } else {
+                    _state.update { it.copy(playing = null, playingId = event.videoId, playingStart = (event.startMs / 1000).toInt(), minimized = false, cardMenu = null) }
+                }
+            }
+            RemoteControl.Event.Stop -> if (_state.value.let { it.playing != null || it.playingId != null }) stopPlaying()
+            RemoteControl.Event.StateRequest -> if (_state.value.let { it.playing == null && it.playingId == null }) RemoteControl.reportIdle()
+            is RemoteControl.Event.Connected -> {
+                showNotice("${event.device?.takeIf { it.isNotBlank() } ?: "Un téléphone"} est connecté.")
+                if (_state.value.pairing != null) closePairing()
+            }
+            RemoteControl.Event.Disconnected -> showNotice("Téléphone déconnecté.")
+            else -> Unit // seek, play, pause, next: the player screen
         }
     }
 
@@ -289,6 +519,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.autoplay = settings.autoplay
         prefs.stableVolume = settings.stableVolume
         prefs.deArrow = settings.deArrow
+        prefs.remote = settings.remote
+        if (settings.remote != _state.value.settings.remote) {
+            if (settings.remote && foreground) RemoteControl.start(getApplication()) else if (!settings.remote) RemoteControl.stop()
+        }
         val deArrowTurnedOn = settings.deArrow && !_state.value.settings.deArrow
         if (!settings.deArrow) deArrowAsked.clear()
         _state.update { it.copy(settings = settings, deArrow = if (settings.deArrow) it.deArrow else emptyMap()) }
@@ -364,6 +598,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private companion object {
         const val DEARROW_BATCH = 50
         const val RESUME_REFRESH_DELAY_MS = 1_500L
+        const val SUGGEST_DELAY_MS = 300L
+        const val NOTICE_MS = 3_000L
     }
 
     override fun onCleared() {

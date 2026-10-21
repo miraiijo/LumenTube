@@ -239,6 +239,7 @@ object YouTube {
     fun watchAccountChanges() {
         if (accountListener != null) return
         val listener = com.liskovsoft.mediaserviceinterfaces.SignInService.OnAccountChange {
+            subscribedChannels = null
             FeedCache.notifyReaders()
             appAccountListeners.forEach { it() }
         }
@@ -304,8 +305,65 @@ object YouTube {
         groups.filterNotNull().mapIndexedNotNull { index, group -> group.toRow("open-${item.key}-$index") }
     }
 
-    suspend fun search(query: String): List<VideoRow> = withContext(Dispatchers.IO) {
-        service.contentService.getSearch(query).orEmpty().mapIndexedNotNull { index, group -> group.toRow("search-$index") }
+    /** [options]: SearchOptions flags (date, duration, type, sort), 0 = none. */
+    suspend fun search(query: String, options: Int = 0): List<VideoRow> = withContext(Dispatchers.IO) {
+        val content = service.contentService
+        (if (options == 0) content.getSearch(query) else content.getSearch(query, options)).orEmpty()
+            .mapIndexedNotNull { index, group -> group.toRow("search-$index") }
+    }
+
+    /** Search suggestions while typing (YouTube's own). */
+    suspend fun suggestions(text: String): List<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            service.contentService.getSearchTagsObserve(text).timeout(5, TimeUnit.SECONDS).blockingFirst(emptyList())
+        }.getOrDefault(emptyList()).filterNotNull().filter { it.isNotBlank() }.take(8)
+    }
+
+    // ---- Channels ---------------------------------------------------------------------------------
+
+    /** A channel page: its rows (uploads, lives, playlists…), as YouTube orders them. */
+    suspend fun channelRows(channelId: String): List<VideoRow> = withContext(Dispatchers.IO) {
+        service.contentService.getChannelObserve(channelId).collectAll().filterNotNull()
+            .mapIndexedNotNull { index, group -> group.toRow("channel-$channelId-$index") }
+    }
+
+    /** The channel's videos in each available order ("Plus récentes", "Populaires"…), may be empty. */
+    suspend fun channelSorts(channelId: String): List<VideoRow> = withContext(Dispatchers.IO) {
+        runCatching { service.contentService.getChannelSortingOptionsObserve(channelId)?.collectAll() }.getOrNull().orEmpty()
+            .filterNotNull().mapIndexedNotNull { index, group -> group.toRow("channel-sort-$channelId-$index") }
+    }
+
+    /** Ids of the subscribed channels, fetched once per account (and kept up to date by [setSubscribed]). */
+    @Volatile
+    private var subscribedChannels: MutableSet<String>? = null
+
+    suspend fun isSubscribed(channelId: String): Boolean = withContext(Dispatchers.IO) {
+        if (!signedIn) return@withContext false
+        val known = subscribedChannels ?: runCatching {
+            service.contentService.subscribedChannels?.mediaItems.orEmpty().mapNotNull { it?.channelId }.toMutableSet()
+        }.getOrNull()?.also { subscribedChannels = it }
+        known?.contains(channelId) == true
+    }
+
+    // ---- Card menu --------------------------------------------------------------------------------
+
+    /** "Pas intéressé" ([channel] = false) or "Ne pas recommander la chaîne" can be offered for this card. */
+    fun hasFeedback(video: Video): Boolean = video.raw.feedbackToken != null || video.raw.feedbackToken2 != null || video.raw.feedbackEndpoint != null
+
+    /** Tells YouTube (as SmartTube does): this video, or this channel, no more in the recommendations. */
+    suspend fun notInterested(video: Video, channel: Boolean): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val item = video.raw
+            val endpoint = item.feedbackEndpoint
+            val token = if (endpoint != null) {
+                service.mediaItemService.getFeedbackTokensObserve(endpoint).timeout(10, TimeUnit.SECONDS).blockingFirst(emptyList())
+                    .getOrNull(if (channel) 1 else 0)
+            } else {
+                if (channel) item.feedbackToken2 else item.feedbackToken
+            } ?: return@runCatching false
+            service.mediaItemService.markAsNotInterested(token)
+            true
+        }.getOrDefault(false)
     }
 
     suspend fun formatInfo(videoId: String): MediaItemFormatInfo? = withContext(Dispatchers.IO) {
@@ -351,6 +409,7 @@ object YouTube {
     suspend fun setSubscribed(channelId: String, subscribed: Boolean) = withContext(Dispatchers.IO) {
         runCatching {
             if (subscribed) service.mediaItemService.subscribe(channelId) else service.mediaItemService.unsubscribe(channelId)
+            subscribedChannels?.let { if (subscribed) it += channelId else it -= channelId }
         }.isSuccess
     }
 

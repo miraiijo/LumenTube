@@ -21,6 +21,18 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) handleLink(intent)
     }
 
+    // "Regarder sur la TV": listened to only while LumenTube is on screen (Android 10 doesn't let a
+    // background app bring itself up anyway).
+    override fun onStart() {
+        super.onStart()
+        vm.onForeground(true)
+    }
+
+    override fun onStop() {
+        vm.onForeground(false)
+        super.onStop()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleLink(intent)

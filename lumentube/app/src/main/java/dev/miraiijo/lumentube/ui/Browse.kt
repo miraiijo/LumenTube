@@ -55,7 +55,9 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import dev.miraiijo.lumentube.ChannelHeader
 import dev.miraiijo.lumentube.Page
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import dev.miraiijo.lumentube.data.Video
 import dev.miraiijo.lumentube.data.VideoRow
 import kotlinx.coroutines.delay
@@ -88,6 +90,15 @@ fun BrowsePage(
     onSignIn: () -> Unit,
     /** "Réessayer" under an empty page's message. */
     showRetry: Boolean = true,
+    /** Long press (or the Menu key) on a card: its menu. */
+    onLongPress: (Video) -> Unit = {},
+    /** A channel page: its header (avatar, name, S'abonner, orders) instead of the video sheet. */
+    channel: ChannelHeader? = null,
+    signedIn: Boolean = false,
+    onSubscribe: () -> Unit = {},
+    onSort: (Int) -> Unit = {},
+    /** Room above the sheet (less under the search bar). */
+    top: androidx.compose.ui.unit.Dp = SHEET_TOP,
 ) {
     var focused by remember { mutableStateOf<Video?>(null) }
     var shown by remember { mutableStateOf<Video?>(null) }
@@ -106,8 +117,12 @@ fun BrowsePage(
     Box(Modifier.fillMaxSize()) {
         Backdrop(shown)
         Column(Modifier.fillMaxSize()) {
-            Spacer(Modifier.height(SHEET_TOP))
-            Sheet(shown, title)
+            Spacer(Modifier.height(top))
+            if (channel != null) {
+                ChannelSheet(channel, shown, signedIn, onSubscribe, onSort)
+            } else {
+                Sheet(shown, title)
+            }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 when {
                     needsAccount -> Message(
@@ -135,6 +150,7 @@ fun BrowsePage(
                                     onFocus = { focused = it },
                                     onSelect = onSelect,
                                     onLoadMore = onLoadMore,
+                                    onLongPress = onLongPress,
                                 )
                             }
                         }
@@ -152,6 +168,7 @@ private fun VideoRowView(
     onFocus: (Video) -> Unit,
     onSelect: (Video) -> Unit,
     onLoadMore: (VideoRow) -> Unit,
+    onLongPress: (Video) -> Unit,
 ) {
     Column {
         Text(
@@ -178,6 +195,7 @@ private fun VideoRowView(
                             if (index >= row.items.size - 4) onLoadMore(row)
                         },
                         onClick = { onSelect(video) },
+                        onLongClick = { onLongPress(video) },
                     )
                 }
             }
@@ -187,13 +205,15 @@ private fun VideoRowView(
 
 /** 16:9 thumbnail (duration badge, watched lane), title and channel below. */
 @Composable
-fun VideoCard(video: Video, modifier: Modifier = Modifier, onFocus: () -> Unit, onClick: () -> Unit) {
+fun VideoCard(video: Video, modifier: Modifier = Modifier, onFocus: () -> Unit, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
     if (video.isChannel) return ChannelCard(video, modifier, onFocus, onClick)
     var isFocused by remember { mutableStateOf(false) }
     Column(Modifier.width(CARD_WIDTH)) {
         Surface(
             onClick = onClick,
+            onLongClick = onLongClick,
             modifier = modifier
+                .menuKey(onLongClick)
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
                 .onFocusChanged {
@@ -317,6 +337,65 @@ private fun Sheet(video: Video?, pageTitle: String?) {
         }
     }
 }
+
+/** The remote's Menu key, when it has one, does what a long press does. */
+private fun Modifier.menuKey(action: (() -> Unit)?): Modifier = if (action == null) this else onPreviewKeyEvent { event ->
+    val native = event.nativeKeyEvent
+    if (native.keyCode != android.view.KeyEvent.KEYCODE_MENU) return@onPreviewKeyEvent false
+    if (native.action == android.view.KeyEvent.ACTION_DOWN && native.repeatCount == 0) action()
+    true
+}
+
+/**
+ * A channel page's header: round avatar, name, "S'abonner" / "Abonné", then its orders
+ * ("Accueil", "Plus récentes", "Populaires"…). The focused video's title shows under it.
+ */
+@Composable
+private fun ChannelSheet(channel: ChannelHeader, focused: Video?, signedIn: Boolean, onSubscribe: () -> Unit, onSort: (Int) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().height(SHEET_HEIGHT).padding(start = Dimens.Gutter, end = Dimens.Gutter),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Box(Modifier.size(56.dp).clip(CircleShape).background(Palette.Tile), contentAlignment = Alignment.Center) {
+                if (channel.avatar != null) {
+                    GlideImage(model = avatarUrl(channel.avatar), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                } else {
+                    Text(channel.name.take(1).uppercase(), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            Text(channel.name, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, letterSpacing = DisplayTracking, modifier = Modifier.weight(1f, fill = false))
+            if (signedIn && channel.subscribed != null) {
+                LumenButton(
+                    if (channel.subscribed) "Abonné" else "S'abonner",
+                    icon = if (channel.subscribed) LumenIcon.CHECK else LumenIcon.PLUS,
+                    containerColor = if (channel.subscribed) Palette.ControlIdle else Palette.Danger,
+                    onClick = onSubscribe,
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap), verticalAlignment = Alignment.CenterVertically) {
+            if (channel.sorts.isNotEmpty()) {
+                SortChip("Accueil", channel.sort == -1) { onSort(-1) }
+                channel.sorts.forEachIndexed { index, name -> SortChip(name, channel.sort == index) { onSort(index) } }
+            }
+            if (focused != null) {
+                Text(
+                    listOfNotNull(focused.title, focused.durationMs.takeIf { it > 0 }?.let(::formatDuration)).joinToString("  ·  "),
+                    fontSize = 14.sp,
+                    color = Palette.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SortChip(label: String, selected: Boolean, onClick: () -> Unit) =
+    LumenButton(label, icon = if (selected) LumenIcon.CHECK else null, containerColor = if (selected) Palette.Selected else Palette.ControlIdle, onClick = onClick)
 
 @Composable
 private fun Message(text: String, button: String? = null, buttonModifier: Modifier = Modifier, onClick: () -> Unit = {}) {

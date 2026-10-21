@@ -81,6 +81,7 @@ import dev.miraiijo.lumentube.data.Segment
 import dev.miraiijo.lumentube.data.Video
 import dev.miraiijo.lumentube.data.YouTube
 import dev.miraiijo.lumentube.player.LumenPlayer
+import dev.miraiijo.lumentube.remote.RemoteControl
 import dev.miraiijo.lumentube.player.PlayerPrefs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -130,6 +131,8 @@ fun PlayerScreen(
     onMinimize: () -> Unit = {},
     /** Small window → full screen (OK on the small window, which takes the focus like a card). */
     onRestore: () -> Unit = {},
+    /** "Voir la chaîne" from the panel: channel id and name. */
+    onOpenChannel: (String, String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier.fillMaxSize(),
 ) {
     val isMini by rememberUpdatedState(minimized)
@@ -206,6 +209,11 @@ fun PlayerScreen(
      *  compete with the one the picture waits for. */
     var infoReady by remember(videoId) { mutableStateOf(false) }
     var openedAt by remember(videoId) { mutableLongStateOf(0L) }
+    /** "Statistiques pour les curieux": shown, and how this video was opened (formats, client, timings). */
+    var stats by remember { mutableStateOf(prefs.stats) }
+    var streamInfo by remember(videoId) { mutableStateOf<String?>(null) }
+    var formatsMs by remember(videoId) { mutableLongStateOf(-1L) }
+    var firstFrameMs by remember(videoId) { mutableLongStateOf(-1L) }
     val scope = rememberCoroutineScope()
 
     fun closeMenu() {
@@ -256,7 +264,9 @@ fun PlayerScreen(
         val resumeAt = if (loadTick == 0) startSeconds * 1000L else player.exo.currentPosition
         openedAt = android.os.SystemClock.elapsedRealtime()
         val info = runCatching { YouTube.formatInfo(videoId) }.getOrNull()
-        android.util.Log.i(TIMING_TAG, "$videoId: formats in ${android.os.SystemClock.elapsedRealtime() - openedAt} ms (${info?.let { formatsKind(it) } ?: "none"})")
+        formatsMs = android.os.SystemClock.elapsedRealtime() - openedAt
+        android.util.Log.i(TIMING_TAG, "$videoId: formats in $formatsMs ms (${info?.let { formatsKind(it) } ?: "none"})")
+        streamInfo = info?.let { listOfNotNull(formatsKind(it), it.clientInfo?.clientName?.takeIf { name -> name.isNotBlank() }).joinToString(" · ") }
         infoReady = true
         when {
             info == null -> error = "YouTube ne répond pas."
@@ -303,7 +313,10 @@ fun PlayerScreen(
                 buffering = playbackState == Player.STATE_BUFFERING || playbackState == Player.STATE_IDLE
                 if (playbackState == Player.STATE_READY && !started) {
                     started = true
-                    android.util.Log.i(TIMING_TAG, "$videoId: first frame ready ${android.os.SystemClock.elapsedRealtime() - openedAt} ms after the request")
+                    firstFrameMs = android.os.SystemClock.elapsedRealtime() - openedAt
+                    android.util.Log.i(TIMING_TAG, "$videoId: first frame ready $firstFrameMs ms after the request")
+                    // A linked phone follows what plays here.
+                    RemoteControl.reportPlaying(videoId, player.exo.currentPosition, player.exo.duration.coerceAtLeast(0L), playWhenReady)
                 }
                 if (playbackState == Player.STATE_ENDED) {
                     val next = details?.next
@@ -318,6 +331,11 @@ fun PlayerScreen(
 
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
+                if (started) RemoteControl.reportState(player.exo.currentPosition, player.exo.duration.coerceAtLeast(0L), player.exo.playWhenReady)
+            }
+
+            override fun onSeekProcessed() {
+                if (started) RemoteControl.reportState(player.exo.currentPosition, player.exo.duration.coerceAtLeast(0L), player.exo.playWhenReady)
             }
         }
         player.exo.addListener(listener)
@@ -327,6 +345,7 @@ fun PlayerScreen(
             AppScope.launch { YouTube.savePosition(videoId, seconds) }
             player.exo.removeListener(listener)
             player.release()
+            RemoteControl.reportIdle()
         }
     }
 
@@ -347,6 +366,29 @@ fun PlayerScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // "Regarder sur la TV": the linked phone drives this video (the view model opens / stops videos).
+    LaunchedEffect(player) {
+        RemoteControl.events.collect { event ->
+            when (event) {
+                is RemoteControl.Event.Seek -> {
+                    player.exo.seekTo(event.positionMs)
+                    position = event.positionMs
+                }
+                // The phone sent the video that's already playing: only its position.
+                is RemoteControl.Event.Open -> if (event.videoId == videoId && event.startMs > 0) {
+                    player.exo.seekTo(event.startMs)
+                    position = event.startMs
+                }
+                RemoteControl.Event.Play -> player.exo.playWhenReady = true
+                RemoteControl.Event.Pause -> player.exo.playWhenReady = false
+                RemoteControl.Event.Next -> details?.next?.let(playNext)
+                RemoteControl.Event.StateRequest ->
+                    RemoteControl.reportPlaying(videoId, player.exo.currentPosition, player.exo.duration.coerceAtLeast(0L), player.exo.playWhenReady)
+                else -> Unit
+            }
+        }
     }
 
     // SponsorBlock segments and chapters, fetched next to the video (they never delay it).
@@ -645,10 +687,33 @@ fun PlayerScreen(
                     watchLaterDone = watchLaterDone,
                     onSubscribe = ::toggleSubscribe,
                     onWatchLater = ::addToWatchLater,
+                    onChannel = {
+                        val id = details?.channelId
+                        if (id != null) {
+                            closeMenu()
+                            onOpenChannel(id, details?.channel ?: shownChannel)
+                        }
+                    },
+                    stats = stats,
+                    onStats = {
+                        stats = !stats
+                        prefs.stats = stats
+                    },
                 ),
                 // A choice made in a list opened directly (subtitles button) closes the panel.
                 onMenu = { next -> if (next == null || (next == PlayerMenu.MAIN && menuRoot != PlayerMenu.MAIN)) closeMenu() else menu = next },
                 modifier = Modifier.align(Alignment.CenterEnd),
+            )
+        }
+
+        if (stats && !minimized) {
+            StatsOverlay(
+                player = player,
+                videoId = videoId,
+                streamInfo = streamInfo,
+                formatsMs = formatsMs,
+                firstFrameMs = firstFrameMs,
+                modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = Dimens.Gutter),
             )
         }
 
@@ -1098,5 +1163,38 @@ private class CenteredCues {
             }
         }
         if (shown.isBlank()) null else com.google.android.exoplayer2.text.Cue(shown)
+    }
+}
+
+/**
+ * "Statistiques pour les curieux", top left over the video (not focusable): what's played, how it
+ * was opened and how the box copes. Read again every second.
+ */
+@Composable
+private fun StatsOverlay(player: LumenPlayer, videoId: String, streamInfo: String?, formatsMs: Long, firstFrameMs: Long, modifier: Modifier) {
+    var lines by remember { mutableStateOf(emptyList<Pair<String, String>>()) }
+    LaunchedEffect(player, streamInfo, formatsMs, firstFrameMs) {
+        while (true) {
+            lines = buildList {
+                add("Vidéo n°" to videoId)
+                streamInfo?.let { add("Flux · client" to it) }
+                if (formatsMs >= 0) add("Démarrage" to "formats ${formatsMs} ms" + if (firstFrameMs >= 0) " · image ${firstFrameMs} ms" else "")
+                addAll(player.stats())
+            }
+            delay(1_000)
+        }
+    }
+    Column(
+        modifier
+            .background(Color.Black.copy(alpha = 0.72f), ControlShape)
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        lines.forEach { (label, value) ->
+            Row {
+                Text(label, fontSize = 12.sp, color = Color.White.copy(alpha = 0.65f), modifier = Modifier.width(120.dp))
+                Text(value, fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Medium)
+            }
+        }
     }
 }

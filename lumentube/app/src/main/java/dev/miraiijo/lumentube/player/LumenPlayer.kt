@@ -38,6 +38,12 @@ class LumenPlayer(context: Context) {
     private val handler = Handler(Looper.getMainLooper())
     private val selector = DefaultTrackSelector(AdaptiveTrackSelection.Factory())
 
+    /**
+     * Connection speed as measured on the video's downloads: our own meter (the same as ExoPlayer's
+     * default one) so "Statistiques pour les curieux" can read it.
+     */
+    private val bandwidth = com.google.android.exoplayer2.upstream.DefaultBandwidthMeter.Builder(context).build()
+
     val exo: SimpleExoPlayer = ExoPlayerFactory.newSimpleInstance(
         context,
         DefaultRenderersFactory(context)
@@ -47,9 +53,55 @@ class LumenPlayer(context: Context) {
         DefaultLoadControl.Builder()
             .setBufferDurationsMs(MIN_BUFFER_MS, MAX_BUFFER_MS, START_BUFFER_MS, REBUFFER_MS)
             .createDefaultLoadControl(),
+        null,
+        bandwidth,
     ).apply {
         setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.CONTENT_TYPE_MOVIE).build(), false)
     }
+
+
+    /**
+     * "Statistiques pour les curieux": what is being played and how (label to value), read again by
+     * the overlay every second.
+     */
+    fun stats(): List<Pair<String, String>> = buildList {
+        val video = exo.videoFormat
+        val audio = exo.audioFormat
+        if (video != null) {
+            val fps = video.frameRate.takeIf { it > 0f }?.let { " · ${"%.0f".format(Locale.US, it)} i/s" }.orEmpty()
+            add("Vidéo" to "${video.width}×${video.height}$fps · ${codecName(video)}")
+            if (video.bitrate > 0) add("Débit vidéo" to kbps(video.bitrate))
+        }
+        if (audio != null) {
+            val channels = audio.channelCount.takeIf { it > 0 }?.let { " · $it canaux" }.orEmpty()
+            val rate = audio.sampleRate.takeIf { it > 0 }?.let { " · ${it / 1000} kHz" }.orEmpty()
+            add("Audio" to "${codecName(audio)}$rate$channels" + (audio.language?.let { " · $it" } ?: ""))
+            if (audio.bitrate > 0) add("Débit audio" to kbps(audio.bitrate))
+        }
+        exo.videoDecoderCounters?.let { counters ->
+            counters.ensureUpdated()
+            add("Images perdues" to "${counters.droppedBufferCount} / ${counters.renderedOutputBufferCount + counters.droppedBufferCount}")
+        }
+        add("Tampon" to "%.1f s".format(Locale.US, (exo.bufferedPosition - exo.currentPosition).coerceAtLeast(0L) / 1000f))
+        bandwidth.bitrateEstimate.takeIf { it > 0 }?.let { add("Connexion" to kbps(it)) }
+        add("Volume" to "%.0f %%".format(Locale.US, exo.volume * 100) + if (boostMb > 0) " + ${"%.1f".format(Locale.US, boostMb / 100f)} dB" else "")
+    }
+
+    private fun codecName(format: Format): String {
+        val codec = format.codecs?.substringBefore('.')?.lowercase(Locale.US)
+        return when {
+            codec == null -> format.sampleMimeType?.substringAfter('/') ?: "?"
+            codec == "avc1" -> "H.264 ($codec)"
+            codec == "vp09" || codec == "vp9" -> "VP9"
+            codec == "av01" -> "AV1"
+            codec == "mp4a" -> "AAC"
+            else -> codec.replaceFirstChar { it.uppercase() }
+        }
+    }
+
+    private fun kbps(bits: Long): String = if (bits >= 1_000_000) "%.1f Mb/s".format(Locale.US, bits / 1_000_000f) else "${bits / 1000} kb/s"
+
+    private fun kbps(bits: Int): String = kbps(bits.toLong())
 
     /** Last error, once per error ("403": the caller switches YouTube client and reloads). */
     var onError: ((ExoPlaybackException) -> Unit)? = null

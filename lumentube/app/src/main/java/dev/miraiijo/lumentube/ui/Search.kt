@@ -48,6 +48,9 @@ import dev.miraiijo.lumentube.Page
 import dev.miraiijo.lumentube.data.Video
 import dev.miraiijo.lumentube.data.VideoRow
 import java.util.Locale
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import com.liskovsoft.mediaserviceinterfaces.data.SearchOptions
 
 /**
  * Rechercher: a search bar (OK opens the TV keyboard, its Search key runs the search) and the
@@ -61,6 +64,13 @@ fun SearchPage(
     onSearch: (String) -> Unit,
     onSelect: (Video) -> Unit,
     onLoadMore: (VideoRow) -> Unit,
+    /** YouTube's suggestions for what's being typed (shown instead of the filters). */
+    suggestions: List<String> = emptyList(),
+    onTyping: (String) -> Unit = {},
+    /** Filters: SearchOptions flags. */
+    options: Int = 0,
+    onOptions: (Int) -> Unit = {},
+    onLongPress: (Video) -> Unit = {},
 ) {
     val bar = remember { FocusRequester() }
     // Incremented on each search: the results take the focus when they arrive.
@@ -76,7 +86,30 @@ fun SearchPage(
         bar.tryRequestFocus()
     }
     Column(Modifier.fillMaxSize()) {
-        SearchBar(query, bar, ::search, Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 28.dp))
+        SearchBar(query, bar, ::search, onTyping, Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 28.dp))
+        // One line under the bar: the suggestions while typing, else the filters.
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = Dimens.Gutter, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (suggestions.isNotEmpty()) {
+                suggestions.forEach { suggestion -> LumenButton(suggestion, icon = LumenIcon.SEARCH) { search(suggestion) } }
+            } else {
+                SEARCH_FILTERS.forEach { filter ->
+                    val current = filter.choices.indexOfFirst { (flag, _) -> flag != 0 && options and flag != 0 }.coerceAtLeast(0)
+                    val (_, name) = filter.choices[current]
+                    LumenButton(
+                        if (current == 0) filter.label else "${filter.label} : $name",
+                        containerColor = if (current == 0) Palette.ControlIdle else Palette.Selected,
+                    ) {
+                        // OK = the next choice of this filter (then back to "all").
+                        val next = filter.choices[(current + 1) % filter.choices.size].first
+                        onOptions(options and filter.mask.inv() or next)
+                    }
+                }
+            }
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             BrowsePage(
                 page = if (query.isBlank() && page.rows.isEmpty() && !page.loading) page.copy(error = "Cherche une vidéo, une chaîne ou une playlist.") else page,
@@ -88,13 +121,15 @@ fun SearchPage(
                 needsAccount = false,
                 onSignIn = {},
                 showRetry = query.isNotBlank(),
+                onLongPress = onLongPress,
+                top = 4.dp,
             )
         }
     }
 }
 
 @Composable
-private fun SearchBar(query: String, requester: FocusRequester, onSearch: (String) -> Unit, modifier: Modifier) {
+private fun SearchBar(query: String, requester: FocusRequester, onSearch: (String) -> Unit, onTyping: (String) -> Unit, modifier: Modifier) {
     val context = LocalContext.current
     val keyboard = LocalSoftwareKeyboardController.current
     var text by remember(query) { mutableStateOf(query) }
@@ -149,7 +184,10 @@ private fun SearchBar(query: String, requester: FocusRequester, onSearch: (Strin
                 if (editing) {
                     BasicTextField(
                         value = text,
-                        onValueChange = { text = it },
+                        onValueChange = {
+                            text = it
+                            onTyping(it)
+                        },
                         singleLine = true,
                         textStyle = TextStyle(color = Palette.TextPrimary, fontSize = 18.sp, fontFamily = InterFamily),
                         cursorBrush = SolidColor(Palette.Highlight),
@@ -191,3 +229,50 @@ private fun SearchBar(query: String, requester: FocusRequester, onSearch: (Strin
         requester.tryRequestFocus()
     }
 }
+
+/** A search filter: OK on its pill goes through [choices] (SearchOptions flag to name, 0 = all). */
+private class SearchFilter(val label: String, val choices: List<Pair<Int, String>>) {
+    val mask = choices.fold(0) { acc, (flag, _) -> acc or flag }
+}
+
+private val SEARCH_FILTERS = listOf(
+    SearchFilter(
+        "Date",
+        listOf(
+            0 to "Toutes",
+            SearchOptions.UPLOAD_DATE_LAST_HOUR to "Dernière heure",
+            SearchOptions.UPLOAD_DATE_TODAY to "Aujourd'hui",
+            SearchOptions.UPLOAD_DATE_THIS_WEEK to "Cette semaine",
+            SearchOptions.UPLOAD_DATE_THIS_MONTH to "Ce mois-ci",
+            SearchOptions.UPLOAD_DATE_THIS_YEAR to "Cette année",
+        ),
+    ),
+    SearchFilter(
+        "Durée",
+        listOf(
+            0 to "Toutes",
+            SearchOptions.DURATION_UNDER_4 to "Moins de 4 min",
+            SearchOptions.DURATION_BETWEEN_4_20 to "4 à 20 min",
+            SearchOptions.DURATION_OVER_20 to "Plus de 20 min",
+        ),
+    ),
+    SearchFilter(
+        "Type",
+        listOf(
+            0 to "Tout",
+            SearchOptions.TYPE_VIDEO to "Vidéos",
+            SearchOptions.TYPE_CHANNEL to "Chaînes",
+            SearchOptions.TYPE_PLAYLIST to "Playlists",
+            SearchOptions.FEATURE_LIVE to "En direct",
+        ),
+    ),
+    SearchFilter(
+        "Tri",
+        listOf(
+            0 to "Pertinence",
+            SearchOptions.SORT_BY_UPLOAD_DATE to "Date",
+            SearchOptions.SORT_BY_VIEW_COUNT to "Vues",
+            SearchOptions.SORT_BY_RATING to "Note",
+        ),
+    ),
+)

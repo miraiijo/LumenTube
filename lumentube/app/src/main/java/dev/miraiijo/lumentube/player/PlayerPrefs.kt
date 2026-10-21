@@ -41,7 +41,17 @@ class PlayerPrefs(context: Context) {
         get() = prefs.getInt(KEY_PICTURE_FORMAT, 0)
         set(value) = prefs.edit().putInt(KEY_PICTURE_FORMAT, value).apply()
 
-    fun settings() = Settings(sponsorBlock = sponsorBlock, autoplay = autoplay, stableVolume = stableVolume, deArrow = deArrow)
+    /** "Statistiques pour les curieux" shown over the video. */
+    var stats: Boolean
+        get() = prefs.getBoolean(KEY_STATS, false)
+        set(value) = prefs.edit().putBoolean(KEY_STATS, value).apply()
+
+    /** "Regarder sur la TV": a linked phone can send videos and drive the player (off until a phone is linked). */
+    var remote: Boolean
+        get() = prefs.getBoolean(KEY_REMOTE, false)
+        set(value) = prefs.edit().putBoolean(KEY_REMOTE, value).apply()
+
+    fun settings() = Settings(sponsorBlock = sponsorBlock, autoplay = autoplay, stableVolume = stableVolume, deArrow = deArrow, remote = remote)
 
     private companion object {
         const val KEY_QUALITY = "quality"
@@ -51,5 +61,7 @@ class PlayerPrefs(context: Context) {
         const val KEY_STABLE_VOLUME = "stable_volume"
         const val KEY_DEARROW = "dearrow"
         const val KEY_PICTURE_FORMAT = "picture_format"
+        const val KEY_STATS = "stats"
+        const val KEY_REMOTE = "remote"
     }
 }

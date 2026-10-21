@@ -96,6 +96,11 @@ fun Root(vm: MainViewModel) {
                         onSearch = vm::search,
                         onSelect = vm::select,
                         onLoadMore = vm::loadMore,
+                        suggestions = state.suggestions,
+                        onTyping = vm::suggest,
+                        options = state.searchOptions,
+                        onOptions = vm::setSearchOptions,
+                        onLongPress = vm::openCardMenu,
                     )
                 } else {
                     BrowsePage(
@@ -107,6 +112,11 @@ fun Root(vm: MainViewModel) {
                         onRetry = vm::reload,
                         needsAccount = state.section.account && !state.signedIn && state.opened == null,
                         onSignIn = vm::startSignIn,
+                        onLongPress = vm::openCardMenu,
+                        channel = state.opened?.channel,
+                        signedIn = state.signedIn,
+                        onSubscribe = vm::toggleChannelSubscription,
+                        onSort = vm::chooseChannelSort,
                     )
                 }
             }
@@ -137,8 +147,29 @@ fun Root(vm: MainViewModel) {
                 settings = state.settings,
                 accountName = state.accountName.takeIf { state.signedIn },
                 onSettings = vm::updateSettings,
+                onPair = vm::openPairing,
                 onSignOut = vm::signOut,
                 onDismiss = vm::closeSettings,
+            )
+        } else if (state.pairing != null) {
+            PairingDialog(state.pairing!!, onRetry = vm::openPairing, onDismiss = vm::closePairing)
+        } else if (state.cardMenu != null) {
+            val video = state.cardMenu!!
+            CardMenuDialog(
+                video = video,
+                signedIn = state.signedIn,
+                canGiveFeedback = remember(video.key) { dev.miraiijo.lumentube.data.YouTube.hasFeedback(video) },
+                onPlay = {
+                    vm.closeCardMenu()
+                    vm.select(video)
+                },
+                onWatchLater = { vm.cardWatchLater(video) },
+                onChannel = {
+                    vm.cardOpenChannel(video)
+                    pageFocusTick++
+                },
+                onNotInterested = { channel -> vm.cardNotInterested(video, channel) },
+                onDismiss = vm::closeCardMenu,
             )
         }
         // The video plays over the pages (they stay composed: Back returns to the same card).
@@ -166,6 +197,10 @@ fun Root(vm: MainViewModel) {
                     returnFocusTick++
                 },
                 onRestore = vm::restore,
+                onOpenChannel = { id, name ->
+                    vm.openChannelFromPlayer(id, name)
+                    returnFocusTick++
+                },
                 modifier = if (state.minimized) {
                     Modifier.align(Alignment.BottomEnd).padding(end = 32.dp, bottom = 32.dp).size(MINI_WIDTH, MINI_WIDTH * 9 / 16)
                 } else {
@@ -173,6 +208,7 @@ fun Root(vm: MainViewModel) {
                 },
             ) }
         }
+        Notice(state.notice, Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp))
     }
     LaunchedEffect(returnFocusTick) {
         if (returnFocusTick == 0) return@LaunchedEffect

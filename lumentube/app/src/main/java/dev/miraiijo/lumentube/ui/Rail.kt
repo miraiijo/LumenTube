@@ -346,7 +346,7 @@ private fun ProfileTile(name: String, caption: String?, modifier: Modifier, onCl
  * centered panel that never touches the top or bottom of the screen; its list scrolls if needed.
  */
 @Composable
-fun SettingsDialog(settings: Settings, accountName: String?, onSettings: (Settings) -> Unit, onSignOut: () -> Unit, onDismiss: () -> Unit) {
+fun SettingsDialog(settings: Settings, accountName: String?, onSettings: (Settings) -> Unit, onPair: () -> Unit, onSignOut: () -> Unit, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         val first = remember { FocusRequester() }
         val maxHeight = (LocalConfiguration.current.screenHeightDp * 0.8f).dp
@@ -368,6 +368,9 @@ fun SettingsDialog(settings: Settings, accountName: String?, onSettings: (Settin
                 DialogRow("Volume stable", if (settings.stableVolume) "Activé" else "Désactivé") { onSettings(settings.copy(stableVolume = !settings.stableVolume)) }
                 SectionLabel("AFFICHAGE")
                 DialogRow("DeArrow (titres et miniatures sans racolage)", if (settings.deArrow) "Activé" else "Désactivé") { onSettings(settings.copy(deArrow = !settings.deArrow)) }
+                SectionLabel("TÉLÉPHONE")
+                DialogRow("Lier un téléphone (Regarder sur la TV)", icon = LumenIcon.PLUS, onClick = onPair)
+                DialogRow("Commande depuis le téléphone", if (settings.remote) "Activée" else "Désactivée") { onSettings(settings.copy(remote = !settings.remote)) }
                 if (accountName != null) {
                     SectionLabel("COMPTE")
                     DialogRow("Se déconnecter de $accountName", icon = LumenIcon.CLOSE, onClick = onSignOut)
@@ -382,7 +385,7 @@ fun SettingsDialog(settings: Settings, accountName: String?, onSettings: (Settin
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String) {
     Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary, modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 2.dp))
 }
 
@@ -390,7 +393,7 @@ private val PROFILE_AVATAR = 96.dp
 private val PROFILE_TILE = 128.dp
 
 @Composable
-private fun DialogRow(
+internal fun DialogRow(
     label: String,
     value: String? = null,
     modifier: Modifier = Modifier,

@@ -36,6 +36,13 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.7.0
+- **Regarder sur la TV** : Réglages › « Lier un téléphone » affiche un code TV à saisir dans l'app YouTube du téléphone (photo de profil › Paramètres › Regarder sur la TV › Saisir le code TV). Le bouton Caster du téléphone envoie alors la vidéo ici, et le téléphone sert de télécommande (lecture, pause, position, suivante, arrêt, volume). Écoute uniquement quand LumenTube est à l'écran, et désactivable (« Commande depuis le téléphone »). Désactivé tant qu'aucun téléphone n'a été lié.
+- **Menu d'une carte** : appui long sur OK (ou touche Menu) : Lire, À regarder plus tard, Ouvrir la chaîne, Pas intéressé, Ne pas recommander cette chaîne. La carte disparaît des rangées tout de suite.
+- **Pages de chaîne** : avatar, nom, bouton « S'abonner » / « Abonné », et les tris de la chaîne (Accueil, Plus récentes, Populaires…). Accessible depuis une carte de chaîne, le menu d'une carte, ou « Voir la chaîne » dans les réglages du lecteur (la vidéo passe en petite fenêtre).
+- **Recherche** : suggestions de YouTube pendant la saisie (sous la barre, Bas pour y aller), et filtres Date, Durée, Type (vidéos, chaînes, playlists, en direct) et Tri (pertinence, date, vues, note) ; OK sur un filtre passe au choix suivant.
+- **Statistiques pour les curieux** (réglages du lecteur) : résolution, i/s, codec, débits vidéo et audio, images perdues, tampon, débit de la connexion, volume, type de flux et client YouTube, temps de démarrage (formats et première image).
+
 ### 0.6.0
 - **Flux Lumen, plusieurs comptes** (contrat figé, utilisé par Lumen 3.6.0) :
   - `query /accounts` : une ligne par compte lié, avec `account_id`, `name`, `avatar_url` (https ou null) et `selected` (`"1"` ou `"0"`). `account_id` est un HMAC-SHA256 (64 caractères hexadécimaux) de l'identité du compte, calculé avec une clé aléatoire propre au Player : il est stable d'un redémarrage à l'autre, et on ne peut pas remonter à l'e-mail. Aucun e-mail, jeton ou cookie n'est exposé ;
