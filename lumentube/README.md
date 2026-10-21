@@ -36,6 +36,9 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.3.2
+- Lecteur : la touche Accueil de la télécommande (ou une autre app au premier plan) met la vidéo en pause et enregistre la position. Au retour, la vidéo attend en pause, commandes affichées.
+
 ### 0.3.1
 - Sous-titres ouverts par leur bouton : Retour, ou le choix d'une langue, ferme le panneau au lieu d'afficher les réglages.
 

@@ -250,6 +250,25 @@ fun PlayerScreen(
         }
     }
 
+    // Remote's Home (or another app on top): pause and save the position; back in the app, the
+    // video waits paused with its controls shown.
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, player) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            when (event) {
+                androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
+                    player.exo.playWhenReady = false
+                    val seconds = player.exo.currentPosition / 1000f
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { YouTube.savePosition(videoId, seconds) }
+                }
+                androidx.lifecycle.Lifecycle.Event.ON_START -> show()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     // SponsorBlock segments and chapters, fetched next to the video (they never delay it).
     LaunchedEffect(videoId, sponsorBlock) {
         segments = if (sponsorBlock) YouTube.skipSegments(videoId) else emptyList()
