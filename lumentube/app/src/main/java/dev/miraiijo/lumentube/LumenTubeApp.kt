@@ -11,5 +11,7 @@ class LumenTubeApp : Application() {
         // exist before any YouTube call (SmartTube does it at the very start too).
         GlobalPreferences.instance(this)
         FeedCache.attach(this)
+        // Account changes made in LumenTube reach Lumen (content://dev.miraiijo.lumentube.feed/).
+        dev.miraiijo.lumentube.data.YouTube.watchAccountChanges()
     }
 }

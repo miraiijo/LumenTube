@@ -167,18 +167,94 @@ object YouTube {
 
     /** The account's subscriptions feed, also written to Lumen's feed cache. Blocking. */
     private fun subscriptionsForFeed(): MediaGroup? {
-        val generation = FeedCache.generation()
+        // The account it's fetched for, taken before: a switch meanwhile never mixes accounts.
+        val accountId = currentAccountId()
         return service.contentService.subscriptions?.also {
-            FeedCache.store(FeedCache.SUBSCRIPTIONS, FeedCache.itemsFrom(it.mediaItems.orEmpty(), FeedCache.SUBSCRIPTIONS), generation)
+            if (accountId != null) FeedCache.store(FeedCache.SUBSCRIPTIONS, FeedCache.itemsFrom(it.mediaItems.orEmpty(), FeedCache.SUBSCRIPTIONS), accountId)
         }
     }
 
     /** The account's history, also written to Lumen's feed cache ("continue"). Blocking. */
     private fun historyForFeed(): MediaGroup? {
-        val generation = FeedCache.generation()
+        val accountId = currentAccountId()
         return service.contentService.history?.also {
-            FeedCache.store(FeedCache.CONTINUE, FeedCache.itemsFrom(it.mediaItems.orEmpty(), FeedCache.CONTINUE), generation)
+            if (accountId != null) FeedCache.store(FeedCache.CONTINUE, FeedCache.itemsFrom(it.mediaItems.orEmpty(), FeedCache.CONTINUE), accountId)
         }
+    }
+
+    /** An account as Lumen sees it: opaque id, display name, https avatar. */
+    data class FeedAccount(val id: String, val name: String, val avatarUrl: String?, val selected: Boolean)
+
+    /**
+     * What identifies an account in the engine (never sent anywhere: only its HMAC leaves, see
+     * FeedCache.accountId). The e-mail when known, else the account's refresh token, else its name.
+     */
+    private fun identity(account: com.liskovsoft.mediaserviceinterfaces.oauth.Account): String? {
+        val token = (account as? com.liskovsoft.googlecommon.service.oauth.YouTubeAccount)?.refreshToken
+        return account.email?.takeIf { it.isNotBlank() } ?: token?.takeIf { it.isNotBlank() } ?: account.name?.takeIf { it.isNotBlank() }
+    }
+
+    private fun feedId(account: com.liskovsoft.mediaserviceinterfaces.oauth.Account): String? = identity(account)?.let(FeedCache::accountId)
+
+    /** Opaque id of the selected account (null: signed out). Blocking (prefs). */
+    fun currentAccountId(): String? = runCatching {
+        if (!service.signInService.isSigned) null else service.signInService.selectedAccount?.let(::feedId)
+    }.getOrNull()
+
+    fun feedAccounts(): List<FeedAccount> = runCatching { service.signInService.accounts }.getOrNull().orEmpty()
+        .filterNotNull()
+        .filter { !it.isEmpty }
+        .mapNotNull { account ->
+            val id = feedId(account) ?: return@mapNotNull null
+            FeedAccount(id, account.name?.takeIf { it.isNotBlank() } ?: "Compte", httpsAvatar(account.avatarImageUrl), account.isSelected)
+        }
+
+    /** Lumen's account switch: true when [accountId] is a linked account. */
+    fun selectFeedAccount(accountId: String): Boolean {
+        val account = runCatching { service.signInService.accounts }.getOrNull().orEmpty()
+            .filterNotNull().firstOrNull { feedId(it) == accountId } ?: return false
+        return runCatching {
+            service.signInService.selectAccount(account)
+            service.invalidateCache()
+        }.isSuccess
+    }
+
+    private fun httpsAvatar(url: String?): String? = when {
+        url.isNullOrBlank() -> null
+        url.startsWith("//") -> "https:$url"
+        url.startsWith("https://") -> url
+        url.startsWith("http://") -> "https://" + url.removePrefix("http://")
+        else -> null
+    }
+
+    /** Held here: the engine keeps its listeners weakly. */
+    private var accountListener: com.liskovsoft.mediaserviceinterfaces.SignInService.OnAccountChange? = null
+    private val appAccountListeners = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
+
+    /**
+     * Account switched, added or removed (in LumenTube or by Lumen): Lumen is told
+     * (content://…feed/ and its paths), and so is the app ([onAccountChanged]).
+     */
+    @Synchronized
+    fun watchAccountChanges() {
+        if (accountListener != null) return
+        val listener = com.liskovsoft.mediaserviceinterfaces.SignInService.OnAccountChange {
+            FeedCache.notifyReaders()
+            appAccountListeners.forEach { it() }
+        }
+        accountListener = listener
+        runCatching { service.signInService.addOnAccountChange(listener) }
+    }
+
+    /** The app's own reaction to an account change made elsewhere (Lumen). */
+    fun onAccountChanged(listener: () -> Unit): () -> Unit {
+        watchAccountChanges()
+        appAccountListeners += listener
+        return listener
+    }
+
+    fun removeAccountListener(listener: () -> Unit) {
+        appAccountListeners -= listener
     }
 
     /** Refresh of one feed list for the provider (off the main thread). True when it was written. */
@@ -325,7 +401,6 @@ object YouTube {
         runCatching {
             service.signInService.selectAccount(account.raw)
             service.invalidateCache()
-            if (!account.selected) FeedCache.clear()
         }
     }
 
@@ -343,16 +418,18 @@ object YouTube {
             .observeOn(io.reactivex.android.schedulers.AndroidSchedulers.mainThread())
             .subscribe({ onCode(it) }, { onError(it.message ?: "Connexion impossible") }, {
                 service.invalidateCache()
-                FeedCache.clear()
                 onDone()
             })
 
     fun signOut() {
         runCatching {
             val signIn = service.signInService
-            signIn.selectedAccount?.let(signIn::removeAccount)
+            signIn.selectedAccount?.let { account ->
+                // That account's feed cache goes with it.
+                feedId(account)?.let(FeedCache::delete)
+                signIn.removeAccount(account)
+            }
             service.invalidateCache()
-            FeedCache.clear()
         }
     }
 

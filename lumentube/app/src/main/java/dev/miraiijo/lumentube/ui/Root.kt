@@ -165,6 +165,7 @@ fun Root(vm: MainViewModel) {
                     vm.minimize()
                     returnFocusTick++
                 },
+                onRestore = vm::restore,
                 modifier = if (state.minimized) {
                     Modifier.align(Alignment.BottomEnd).padding(end = 32.dp, bottom = 32.dp).size(MINI_WIDTH, MINI_WIDTH * 9 / 16)
                 } else {

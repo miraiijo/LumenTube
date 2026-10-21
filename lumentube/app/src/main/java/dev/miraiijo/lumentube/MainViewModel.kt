@@ -98,8 +98,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var signIn: Disposable? = null
     /** Rows whose next page is being fetched (one request at a time per row). */
     private val loadingMore = mutableSetOf<String>()
+    /** Declared before init (which sets it): initializers run in order. */
+    private var accountListener: (() -> Unit)? = null
 
     init {
+        // Account switched from Lumen (or anywhere else): the pages reload for the new account.
+        accountListener = YouTube.onAccountChanged {
+            viewModelScope.launch {
+                val name = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { YouTube.accountName }
+                if (name != _state.value.accountName && !_state.value.choosingAccount) {
+                    loads.values.forEach { it.cancel() }
+                    _state.update { it.copy(pages = emptyMap(), resume = null, search = null, opened = null) }
+                    refreshAccount()
+                    show(_state.value.section.takeIf { it != Section.SEARCH } ?: Section.HOME)
+                }
+            }
+        }
         viewModelScope.launch {
             val accounts = YouTube.accounts()
             // Several accounts: "Qui regarde ?" first, Accueil loads for the one picked.
@@ -353,6 +367,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        accountListener?.let(YouTube::removeAccountListener)
         signIn?.dispose()
     }
 

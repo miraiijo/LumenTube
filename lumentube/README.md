@@ -36,6 +36,15 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.6.0
+- **Flux Lumen, plusieurs comptes** (contrat figé, utilisé par Lumen 3.6.0) :
+  - `query /accounts` : une ligne par compte lié, avec `account_id`, `name`, `avatar_url` (https ou null) et `selected` (`"1"` ou `"0"`). `account_id` est un HMAC-SHA256 (64 caractères hexadécimaux) de l'identité du compte, calculé avec une clé aléatoire propre au Player : il est stable d'un redémarrage à l'autre, et on ne peut pas remonter à l'e-mail. Aucun e-mail, jeton ou cookie n'est exposé ;
+  - `call(content://dev.miraiijo.lumentube.feed/, "select_account", account_id)` sélectionne le compte, marque son flux comme périmé (son dernier contenu reste affiché tout de suite) et rafraîchit `/continue` et `/subscriptions` sur un thread à part. Il renvoie `ok` = true, ou false si le compte est inconnu, et `null` pour une méthode inconnue ;
+  - un cache par compte (`lumen_feed_<account_id>.json`) : un changement de profil affiche tout de suite le bon contenu, et un chargement lancé avant un changement ne peut écrire que dans le cache de son compte ; la déconnexion supprime le cache du compte ;
+  - `notifyChange` sur `content://dev.miraiijo.lumentube.feed/` et ses chemins à chaque rafraîchissement et à chaque changement de compte, y compris depuis LumenTube ;
+  - LumenTube suit un changement de compte fait depuis Lumen : ses pages se rechargent pour le nouveau compte.
+- **Lecteur réduit** : la petite fenêtre prend le focus comme une carte (Bas ou Droite depuis la page, cadre blanc) et OK la remet en plein écran. Indispensable pour les télécommandes sans touche lecture/pause.
+
 ### 0.5.3
 - « À suivre » plus compact, en bas à droite (miniature 144 dp, titre sur deux lignes, boutons « Lire » et « Annuler ») : la fin de la vidéo reste visible.
 - Audio : la langue originale est choisie par défaut sur les vidéos doublées, et elle est en tête de la liste « Piste audio ». Les types de piste sont traduits : originale, doublée, doublage automatique, audiodescription.

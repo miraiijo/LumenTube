@@ -42,14 +42,10 @@ object FeedCache {
     @Volatile
     private var context: Context? = null
 
-    /**
-     * Account generation: bumped by [clear]. A request started before an account switch carries the
-     * old value, and its result is dropped instead of showing the previous account's videos.
-     */
-    private val generation = java.util.concurrent.atomic.AtomicInteger()
-
-    /** Taken before fetching, passed back to [store]. */
-    fun generation(): Int = generation.get()
+    /** Contract with Lumen (frozen): the /accounts columns. */
+    val ACCOUNT_COLUMNS = arrayOf("account_id", "name", "avatar_url", "selected")
+    const val ACCOUNTS = "accounts"
+    private val ACCOUNT_ID = Regex("[0-9a-f]{64}")
 
     /** Called by the app and by the provider (whichever starts first). */
     fun attach(context: Context) {
@@ -57,6 +53,44 @@ object FeedCache {
     }
 
     fun uri(list: String): Uri = Uri.parse("content://$AUTHORITY/$list")
+
+    /** content://dev.miraiijo.lumentube.feed/ — Lumen watches it with notifyForDescendants. */
+    val ROOT: Uri get() = Uri.parse("content://$AUTHORITY/")
+
+    /**
+     * Tells Lumen something changed: the root (its observer has notifyForDescendants) and each path,
+     * for observers registered on a single path.
+     */
+    fun notifyReaders() {
+        val resolver = context?.contentResolver ?: return
+        runCatching {
+            resolver.notifyChange(ROOT, null)
+            listOf(CONTINUE, SUBSCRIPTIONS, ACCOUNTS).forEach { resolver.notifyChange(uri(it), null) }
+        }
+    }
+
+    /**
+     * An account's opaque id for Lumen: HMAC-SHA256 of the engine's account identity with a random
+     * key kept on this box. Stable across restarts, 64 hex characters, and it gives away nothing
+     * (no e-mail, not even a hash anyone could recompute from an e-mail).
+     */
+    fun accountId(identity: String): String? {
+        val ctx = context ?: return null
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val key = synchronized(this) {
+            prefs.getString(KEY_SALT, null) ?: android.util.Base64.encodeToString(
+                ByteArray(32).also { java.security.SecureRandom().nextBytes(it) },
+                android.util.Base64.NO_WRAP,
+            ).also { prefs.edit().putString(KEY_SALT, it).commit() }
+        }
+        val mac = javax.crypto.Mac.getInstance("HmacSHA256")
+        mac.init(javax.crypto.spec.SecretKeySpec(android.util.Base64.decode(key, android.util.Base64.NO_WRAP), "HmacSHA256"))
+        return mac.doFinal(identity.toByteArray()).joinToString("") { "%02x".format(it) }
+    }
+
+    private const val PREFS = "lumen_feed"
+    private const val KEY_SALT = "account_id_key"
+
 
     /** Feed rows from engine items: videos only (no Shorts, no channels / playlists), at most [MAX_ROWS]. */
     fun itemsFrom(items: List<MediaItem?>, list: String): List<Item> = items.asSequence()
@@ -85,52 +119,71 @@ object FeedCache {
         .take(MAX_ROWS)
         .toList()
 
-    /** Replaces one list and tells the readers (Lumen) it changed; dropped if the account changed since [fetchedIn]. */
-    fun store(list: String, items: List<Item>, fetchedIn: Int) {
+    /**
+     * Replaces one list of [accountId]'s cache (the account the data was fetched for: a switch while
+     * it loaded never mixes accounts) and tells Lumen.
+     */
+    fun store(list: String, items: List<Item>, accountId: String) {
         val ctx = context ?: return
+        if (!ACCOUNT_ID.matches(accountId)) return
         synchronized(this) {
-            if (fetchedIn != generation.get()) return
-            val root = readRoot(ctx)
+            val root = readRoot(ctx, accountId)
             root.put(list, JSONObject().put("updated_ms", System.currentTimeMillis()).put("items", JSONArray(items.map { it.toJson() })))
-            // AtomicFile: written to a side file, synced, then swapped (a power cut never leaves it empty).
-            val file = android.util.AtomicFile(File(ctx.filesDir, FILE))
-            runCatching {
-                val out = file.startWrite()
-                try {
-                    out.write(root.toString().toByteArray())
-                    file.finishWrite(out)
-                } catch (e: java.io.IOException) {
-                    file.failWrite(out)
-                }
-            }
+            write(ctx, accountId, root)
         }
-        runCatching { ctx.contentResolver.notifyChange(uri(list), null) }
+        notifyReaders()
     }
 
-    /** Account changed or signed out: nothing of the previous account stays readable. */
-    fun clear() {
+    /** Content kept for an instant display, but refreshed at the next query (account just selected). */
+    fun markStale(accountId: String) {
         val ctx = context ?: return
+        if (!ACCOUNT_ID.matches(accountId)) return
         synchronized(this) {
-            generation.incrementAndGet()
-            runCatching { android.util.AtomicFile(File(ctx.filesDir, FILE)).delete() }
-        }
-        runCatching {
-            ctx.contentResolver.notifyChange(uri(CONTINUE), null)
-            ctx.contentResolver.notifyChange(uri(SUBSCRIPTIONS), null)
+            val root = readRoot(ctx, accountId)
+            listOf(CONTINUE, SUBSCRIPTIONS).forEach { list -> root.optJSONObject(list)?.put("updated_ms", 0L) }
+            write(ctx, accountId, root)
         }
     }
 
-    /** A list and when it was written (0: never). */
-    fun load(list: String): Pair<Long, List<Item>> {
+    /** Signed out of an account: its cache goes. */
+    fun delete(accountId: String) {
+        val ctx = context ?: return
+        if (!ACCOUNT_ID.matches(accountId)) return
+        synchronized(this) { runCatching { file(ctx, accountId).delete() } }
+        notifyReaders()
+    }
+
+    /** A list of [accountId]'s cache and when it was written (0: never or stale). */
+    fun load(list: String, accountId: String): Pair<Long, List<Item>> {
         val ctx = context ?: return 0L to emptyList()
-        val entry = synchronized(this) { readRoot(ctx).optJSONObject(list) } ?: return 0L to emptyList()
+        if (!ACCOUNT_ID.matches(accountId)) return 0L to emptyList()
+        val entry = synchronized(this) { readRoot(ctx, accountId).optJSONObject(list) } ?: return 0L to emptyList()
         val array = entry.optJSONArray("items") ?: JSONArray()
         val items = (0 until array.length()).mapNotNull { array.optJSONObject(it)?.toItem() }
         return entry.optLong("updated_ms", 0L) to items.take(MAX_ROWS)
     }
 
-    private fun readRoot(ctx: Context): JSONObject =
-        runCatching { JSONObject(String(android.util.AtomicFile(File(ctx.filesDir, FILE)).readFully())) }.getOrDefault(JSONObject())
+    /** One file per account: lumen_feed_<account_id>.json (the id is 64 hex characters, safe as a name). */
+    private fun file(ctx: Context, accountId: String) = android.util.AtomicFile(File(ctx.filesDir, "lumen_feed_$accountId.json"))
+
+    private fun readRoot(ctx: Context, accountId: String): JSONObject =
+        runCatching { JSONObject(String(file(ctx, accountId).readFully())) }.getOrDefault(JSONObject())
+
+    /** AtomicFile: written to a side file, synced, then swapped (a power cut never leaves it empty). */
+    private fun write(ctx: Context, accountId: String, root: JSONObject) {
+        val file = file(ctx, accountId)
+        runCatching {
+            val out = file.startWrite()
+            try {
+                out.write(root.toString().toByteArray())
+                file.finishWrite(out)
+            } catch (e: java.io.IOException) {
+                file.failWrite(out)
+            }
+        }
+        // The single-file cache of 0.5.x is gone with the first write of the per-account one.
+        runCatching { File(ctx.filesDir, FILE).delete() }
+    }
 
     private fun httpsThumbnail(url: String?, videoId: String): String = when {
         url.isNullOrBlank() -> "https://i.ytimg.com/vi/$videoId/hqdefault.jpg"

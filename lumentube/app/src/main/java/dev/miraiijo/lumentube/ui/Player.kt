@@ -128,6 +128,8 @@ fun PlayerScreen(
     /** In-app picture-in-picture: small window in a corner, no controls, browsing goes on. */
     minimized: Boolean = false,
     onMinimize: () -> Unit = {},
+    /** Small window → full screen (OK on the small window, which takes the focus like a card). */
+    onRestore: () -> Unit = {},
     modifier: Modifier = Modifier.fillMaxSize(),
 ) {
     val isMini by rememberUpdatedState(minimized)
@@ -659,19 +661,40 @@ fun PlayerScreen(
             )
         }
 
-        // Small window: how to get it back.
-        if (minimized && error == null) {
-            Text(
-                "⏯  Plein écran",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.White,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(8.dp)
-                    .background(Color.Black.copy(alpha = 0.65f), ControlShape)
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            )
+        // Small window: focusable like a card (reached with Down / Right from the page); OK brings
+        // it back full screen. Remotes without a play key need this.
+        if (minimized) {
+            var miniFocused by remember { mutableStateOf(false) }
+            androidx.tv.material3.Surface(
+                onClick = onRestore,
+                modifier = Modifier.fillMaxSize().onFocusChanged { miniFocused = it.isFocused },
+                shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(0.dp)),
+                scale = androidx.tv.material3.ClickableSurfaceDefaults.scale(focusedScale = 1f),
+                colors = androidx.tv.material3.ClickableSurfaceDefaults.colors(
+                    containerColor = Color.Transparent,
+                    focusedContainerColor = Color.Transparent,
+                    pressedContainerColor = Color.Transparent,
+                ),
+                border = androidx.tv.material3.ClickableSurfaceDefaults.border(
+                    focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(3.dp, Color.White)),
+                ),
+            ) {
+                Box(Modifier.fillMaxSize()) {
+                    if (error == null && miniFocused) {
+                        Text(
+                            "OK : plein écran",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White,
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(8.dp)
+                                .background(Color.Black.copy(alpha = 0.65f), ControlShape)
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+            }
         }
 
         if (error != null && minimized) {
