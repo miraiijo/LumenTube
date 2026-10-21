@@ -29,9 +29,10 @@ import dev.miraiijo.lumentube.player.upstream.ExoMediaSourceFactory
  * The ExoPlayer of SmartTube's fork (it reads SABR), with its format choice, and two fixes for
  * "the video starts slowly / needs OK again to really start":
  *  - playback starts after 1 s of buffer (2.5 s in SmartTube), the rest keeps buffering while it plays;
- *  - no audio focus handling (a TV box has no competing audio; a focus request answered late or
- *    refused left the player READY but paused), and a watchdog: READY + should play + not playing
- *    for [STUCK_MS] → play again.
+ *  - audio focus handled here, not by ExoPlayer (its handling left the player READY but paused
+ *    when the box answered the request late or refused it): asked when playback starts, paused on
+ *    a loss; a refused or delayed request never blocks playback. And a watchdog: READY + should
+ *    play + not playing for [STUCK_MS] → play again.
  */
 class LumenPlayer(context: Context) {
     private val sources = ExoMediaSourceFactory(context)
@@ -103,6 +104,58 @@ class LumenPlayer(context: Context) {
 
     private fun kbps(bits: Int): String = kbps(bits.toLong())
 
+    // ---- Audio focus ----------------------------------------------------------------------------
+
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+    private var hasFocus = false
+    /** Paused by a short loss (call, voice assistant…): playback resumes when the focus is back. */
+    private var pausedByTransientLoss = false
+
+    private val focusListener = android.media.AudioManager.OnAudioFocusChangeListener { change ->
+        when (change) {
+            android.media.AudioManager.AUDIOFOCUS_LOSS -> {
+                // Another app plays for good: pause, no automatic resume.
+                hasFocus = false
+                pausedByTransientLoss = false
+                exo.playWhenReady = false
+            }
+            android.media.AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                hasFocus = false
+                if (exo.playWhenReady) {
+                    pausedByTransientLoss = true
+                    exo.playWhenReady = false
+                }
+            }
+            android.media.AudioManager.AUDIOFOCUS_GAIN -> {
+                hasFocus = true
+                if (pausedByTransientLoss) {
+                    pausedByTransientLoss = false
+                    exo.playWhenReady = true
+                }
+            }
+            // "Can duck": the system lowers the volume by itself (Android 8+), playback goes on.
+            else -> Unit
+        }
+    }
+
+    private val focusRequest = android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN)
+        .setAudioAttributes(
+            android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MOVIE)
+                .build(),
+        )
+        .setWillPauseWhenDucked(false)
+        .setOnAudioFocusChangeListener(focusListener, handler)
+        .build()
+
+    /** Playback starting (or resuming): the focus, once. Refused or delayed: it plays anyway. */
+    private fun requestFocus() {
+        if (hasFocus) return
+        val result = runCatching { audioManager.requestAudioFocus(focusRequest) }.getOrDefault(android.media.AudioManager.AUDIOFOCUS_REQUEST_FAILED)
+        hasFocus = result == android.media.AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+    }
+
     /** Last error, once per error ("403": the caller switches YouTube client and reloads). */
     var onError: ((ExoPlaybackException) -> Unit)? = null
 
@@ -140,6 +193,14 @@ class LumenPlayer(context: Context) {
 
             override fun onTracksChanged(trackGroups: TrackGroupArray, trackSelections: TrackSelectionArray) {
                 onTracksChanged?.invoke()
+            }
+
+            override fun onPlayerStateChanged(playWhenReady: Boolean, playbackState: Int) {
+                if (playWhenReady) {
+                    // Played again by hand after a short loss: no automatic resume pending anymore.
+                    pausedByTransientLoss = false
+                    requestFocus()
+                }
             }
         })
         exo.addAudioListener(object : AudioListener {
@@ -308,6 +369,8 @@ class LumenPlayer(context: Context) {
 
     fun release() {
         handler.removeCallbacks(watchdog)
+        runCatching { audioManager.abandonAudioFocusRequest(focusRequest) }
+        hasFocus = false
         onError = null
         onTracksChanged = null
         enhancer?.release()

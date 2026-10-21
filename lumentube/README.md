@@ -36,6 +36,21 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.9.2
+- **Focus audio** : le lecteur demande `AUDIOFOCUS_GAIN` au démarrage de la lecture (et à chaque reprise) et se met en pause sur `AUDIOFOCUS_LOSS` (sans reprise automatique) ou `AUDIOFOCUS_LOSS_TRANSIENT` (reprise automatique au retour du focus, sauf si la lecture a été relancée à la main entre-temps). « Peut baisser le son » : le système baisse le volume lui-même, la lecture continue. Le focus est rendu à la fermeture du lecteur. Géré par LumenTube et non par ExoPlayer, dont la gestion laissait parfois la vidéo prête mais en pause sur la box : une demande refusée ou différée ne bloque jamais la lecture.
+- Arrière-plan (bouton Accueil, autre appli) : inchangé, déjà en place : pause et sauvegarde de la position (`updateHistoryPosition`) dans `onStop`, et au retour la vidéo attend en pause, à la même position, commandes affichées.
+
+### 0.9.1
+- À propos : description en plus petit (13 sp au lieu de 15, interligne 19), plus de texte visible à la fois pour les longues descriptions.
+
+### 0.9.0
+- **À propos** : bouton rond (i) dans la rangée de commandes, qui ouvre le panneau de droite avec les chiffres (vues, date, j'aime) et la description (Haut/Bas pour la faire défiler). Renommé aussi dans Réglages (ex-« Infos sur la vidéo »).
+- **Chapitres** : bouton rond (liste) quand la vidéo en a, aussi dans Réglages : chaque chapitre avec son heure de début, celui en cours coché ; OK saute au chapitre et ferme la liste.
+- Retour depuis ces panneaux remet le focus sur le bouton qui les a ouverts.
+
+### 0.8.3
+- Lecteur : plus d'espace autour des compteurs J'aime / Je n'aime pas (10 dp après le cercle, 16 dp avant le bouton suivant) : le cercle agrandi au focus ne touche plus le texte.
+
 ### 0.8.2
 - Lecteur : J'aime et Je n'aime pas sont des boutons ronds identiques aux autres (même taille, même hauteur, cercle blanc au focus), avec le compteur affiché à côté du cercle.
 

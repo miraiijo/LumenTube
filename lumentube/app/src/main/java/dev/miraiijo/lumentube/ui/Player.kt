@@ -208,6 +208,8 @@ fun PlayerScreen(
     /** Panel just closed: the focus goes back to the comments button, not play / pause. */
     var refocusComments by remember { mutableStateOf(false) }
     val commentsButton = remember { FocusRequester() }
+    val infoButton = remember { FocusRequester() }
+    val chaptersButton = remember { FocusRequester() }
     var subscribed by remember(videoId) { mutableStateOf(false) }
     var watchLaterDone by remember(videoId) { mutableStateOf(false) }
     var storyboard by remember(videoId) { mutableStateOf<MediaItemStoryboard?>(null) }
@@ -556,7 +558,13 @@ fun PlayerScreen(
         if (menuClosed == 0) return@LaunchedEffect
         withFrameNanos { }
         // Back to the button the panel was opened from (subtitles or settings).
-        if (menuRoot == PlayerMenu.SUBTITLES && subtitlesButton.tryRequestFocus()) return@LaunchedEffect
+        val origin = when (menuRoot) {
+            PlayerMenu.SUBTITLES -> subtitlesButton
+            PlayerMenu.INFO -> infoButton
+            PlayerMenu.CHAPTERS -> chaptersButton
+            else -> null
+        }
+        if (origin?.tryRequestFocus() == true) return@LaunchedEffect
         settingsButton.tryRequestFocus()
     }
 
@@ -699,6 +707,18 @@ fun PlayerScreen(
                 hasComments = details?.commentsKey != null,
                 commentsButton = commentsButton,
                 onComments = ::openComments,
+                hasInfo = details != null,
+                infoButton = infoButton,
+                onInfo = {
+                    menuRoot = PlayerMenu.INFO
+                    menu = PlayerMenu.INFO
+                },
+                hasChapters = chapters.isNotEmpty(),
+                chaptersButton = chaptersButton,
+                onChapters = {
+                    menuRoot = PlayerMenu.CHAPTERS
+                    menu = PlayerMenu.CHAPTERS
+                },
                 storyboard = storyboard,
                 previewing = preview != null,
             )
@@ -764,6 +784,12 @@ fun PlayerScreen(
                     onStats = {
                         stats = !stats
                         prefs.stats = stats
+                    },
+                    chapters = chapters,
+                    currentChapter = chapters.indexOfLast { it.startMs <= position },
+                    onChapter = { chapter ->
+                        player.exo.seekTo(chapter.startMs)
+                        position = chapter.startMs
                     },
                 ),
                 // A choice made in a list opened directly (subtitles button) closes the panel.
@@ -894,6 +920,12 @@ private fun Controls(
     hasComments: Boolean,
     commentsButton: FocusRequester,
     onComments: () -> Unit,
+    hasInfo: Boolean,
+    infoButton: FocusRequester,
+    onInfo: () -> Unit,
+    hasChapters: Boolean,
+    chaptersButton: FocusRequester,
+    onChapters: () -> Unit,
     storyboard: MediaItemStoryboard?,
     previewing: Boolean,
     onMinimize: () -> Unit,
@@ -939,6 +971,8 @@ private fun Controls(
                         RateButton(if (disliked) LumenIcon.THUMB_DOWN else LumenIcon.THUMB_DOWN_OUTLINE, dislikes, canRate, disliked, up = progress, onDown = onHide, onClick = onDislike)
                     }
                     if (hasComments) ControlButton(LumenIcon.COMMENT, Modifier.focusRequester(commentsButton), up = progress, onDown = onHide, onClick = onComments)
+                    if (hasInfo) ControlButton(LumenIcon.INFO, Modifier.focusRequester(infoButton), up = progress, onDown = onHide, onClick = onInfo)
+                    if (hasChapters) ControlButton(LumenIcon.PLAYLIST, Modifier.focusRequester(chaptersButton), up = progress, onDown = onHide, onClick = onChapters)
                     if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, Modifier.focusRequester(subtitlesButton), up = progress, onDown = onHide, onClick = onSubtitles)
                     // Small window in a corner: keep watching while browsing ("Lecture en cours" in the menu brings it back).
                     ControlButton(LumenIcon.PIP, up = progress, onDown = onHide, onClick = onMinimize)
@@ -976,7 +1010,7 @@ private fun RateButton(
             Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) { Icon(icon, size = 24.dp, color = Color.White) }
         }
         if (count != null) {
-            Text(count, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 2.dp, end = 8.dp))
+            Text(count, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 10.dp, end = 16.dp))
         }
     }
 }

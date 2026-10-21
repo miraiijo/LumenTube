@@ -49,7 +49,7 @@ import kotlinx.coroutines.launch
 import dev.miraiijo.lumentube.player.PlayerPrefs
 
 /** The player's settings panel: a main list, and one list per setting. */
-enum class PlayerMenu { MAIN, QUALITY, SUBTITLES, SPEED, AUDIO, FORMAT, INFO }
+enum class PlayerMenu { MAIN, QUALITY, SUBTITLES, SPEED, AUDIO, FORMAT, INFO, CHAPTERS }
 
 private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
 
@@ -68,6 +68,10 @@ class VideoActions(
     /** "Statistiques pour les curieux" shown. */
     val stats: Boolean = false,
     val onStats: () -> Unit = {},
+    /** The video's chapters, the one playing (-1: none yet) and a jump to one. */
+    val chapters: List<dev.miraiijo.lumentube.data.Chapter> = emptyList(),
+    val currentChapter: Int = -1,
+    val onChapter: (dev.miraiijo.lumentube.data.Chapter) -> Unit = {},
 )
 
 private class Entry(
@@ -107,7 +111,7 @@ fun PlayerMenuPanel(
 ) {
     // Bumped after each choice: the values shown are read from the player again.
     var version by remember { mutableIntStateOf(0) }
-    val entries = remember(menu, tracksTick, version, sponsorBlock, pictureFormat, actions.details, actions.watchLaterDone, actions.stats) {
+    val entries = remember(menu, tracksTick, version, sponsorBlock, pictureFormat, actions.details, actions.watchLaterDone, actions.stats, actions.currentChapter) {
         buildEntries(menu, player, prefs, live, sponsorBlock, onSponsorBlock, pictureFormat, onPictureFormat, actions, onMenu) { version++ }
     }
     val title = when (menu) {
@@ -117,7 +121,8 @@ fun PlayerMenuPanel(
         PlayerMenu.SPEED -> "Vitesse"
         PlayerMenu.AUDIO -> "Piste audio"
         PlayerMenu.FORMAT -> "Format de l'image"
-        PlayerMenu.INFO -> "Infos sur la vidéo"
+        PlayerMenu.INFO -> "À propos"
+        PlayerMenu.CHAPTERS -> "Chapitres"
     }
     // A list of choices opens on the current one; the main list on its first line.
     val focusIndex = if (menu == PlayerMenu.MAIN) 0 else entries.indexOfFirst { it.selected }.coerceAtLeast(0)
@@ -179,7 +184,10 @@ private fun buildEntries(
         if (actions.signedIn) {
             add(Entry("À regarder plus tard", if (actions.watchLaterDone) "Ajoutée" else null, selected = actions.watchLaterDone, onClick = actions.onWatchLater))
         }
-        if (details != null) add(Entry("Infos sur la vidéo", submenu = true) { onMenu(PlayerMenu.INFO) })
+        if (details != null) add(Entry("À propos", submenu = true) { onMenu(PlayerMenu.INFO) })
+        if (actions.chapters.isNotEmpty()) {
+            add(Entry("Chapitres", actions.chapters.getOrNull(actions.currentChapter)?.title, submenu = true) { onMenu(PlayerMenu.CHAPTERS) })
+        }
         val qualities = player.qualities()
         if (qualities.isNotEmpty()) {
             val value = if (prefs.quality == 0) "Auto" + (player.playingQuality?.let { " · ${qualityName(it)}" } ?: "") else qualityName(prefs.quality)
@@ -205,6 +213,13 @@ private fun buildEntries(
         }
     }
     PlayerMenu.INFO -> emptyList()
+    // Each chapter with its start time; OK jumps there (the one playing is checked).
+    PlayerMenu.CHAPTERS -> actions.chapters.mapIndexed { index, chapter ->
+        Entry(chapter.title.ifBlank { "Chapitre ${index + 1}" }, formatDuration(chapter.startMs).ifEmpty { "0:00" }, selected = index == actions.currentChapter) {
+            actions.onChapter(chapter)
+            onMenu(PlayerMenu.MAIN)
+        }
+    }
     PlayerMenu.QUALITY -> buildList {
         fun pick(quality: Int) {
             prefs.quality = quality
@@ -278,8 +293,8 @@ private fun InfoText(details: Details?, modifier: Modifier) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         val figures = listOfNotNull(details?.views, details?.published, details?.likes?.let { "$it J'aime" }).joinToString("  ·  ")
-        if (figures.isNotEmpty()) Text(figures, fontSize = 14.sp, color = Palette.TextSecondary)
-        Text(details?.description?.takeIf { it.isNotBlank() } ?: "Pas de description.", fontSize = 15.sp, lineHeight = 22.sp, color = Palette.TextPrimary)
+        if (figures.isNotEmpty()) Text(figures, fontSize = 13.sp, color = Palette.TextSecondary)
+        Text(details?.description?.takeIf { it.isNotBlank() } ?: "Pas de description.", fontSize = 13.sp, lineHeight = 19.sp, color = Palette.TextPrimary.copy(alpha = 0.9f))
         Spacer(Modifier.height(24.dp))
     }
 }
