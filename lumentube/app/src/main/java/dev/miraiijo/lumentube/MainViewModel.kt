@@ -49,7 +49,9 @@ data class UiState(
     val accounts: List<Account> = emptyList(),
     /** "Qui regarde ?" at launch (several accounts), before Accueil loads. */
     val choosingAccount: Boolean = false,
-    /** "Compte et réglages" dialog open. */
+    /** "Qui regarde ?" opened from the account at the top of the menu. */
+    val accountsOpen: Boolean = false,
+    /** Réglages dialog open. */
     val settingsOpen: Boolean = false,
     val settings: Settings = Settings(sponsorBlock = true, autoplay = true, stableVolume = true, deArrow = false),
     /** "Reprendre" row at the top of Accueil (null: none, or not signed in). */
@@ -253,6 +255,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openSettings() = _state.update { it.copy(settingsOpen = true) }
 
+    fun openAccounts() {
+        _state.update { it.copy(accountsOpen = true) }
+        refreshAccount()
+    }
+
+    fun closeAccounts() = _state.update { it.copy(accountsOpen = false) }
+
     fun closeSettings() = _state.update { it.copy(settingsOpen = false) }
 
     fun updateSettings(settings: Settings) {
@@ -277,7 +286,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             onError = { message -> _state.update { it.copy(signInError = message) } },
             onDone = {
                 // A new account is the selected one: everything reloads for it.
-                _state.update { it.copy(signingIn = false, signInCode = null, choosingAccount = false, settingsOpen = false, pages = emptyMap(), resume = null) }
+                _state.update { it.copy(signingIn = false, signInCode = null, choosingAccount = false, accountsOpen = false, settingsOpen = false, pages = emptyMap(), resume = null) }
                 refreshAccount()
                 show(Section.HOME)
             },
@@ -289,7 +298,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             if (!account.selected) YouTube.selectAccount(account)
             loads.values.forEach { it.cancel() }
-            _state.update { it.copy(choosingAccount = false, settingsOpen = false, pages = emptyMap(), resume = null, search = null, section = Section.HOME, opened = null) }
+            _state.update { it.copy(choosingAccount = false, accountsOpen = false, settingsOpen = false, pages = emptyMap(), resume = null, search = null, section = Section.HOME, opened = null) }
             refreshAccount()
             show(Section.HOME)
         }

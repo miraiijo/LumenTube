@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import dev.miraiijo.lumentube.MainViewModel
 
 /**
@@ -58,7 +59,26 @@ fun Root(vm: MainViewModel) {
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Palette.Background)) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Palette.Background)
+            // Shortcut: the remote's play / pause key brings the small window back to full screen.
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (!state.minimized || native.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                when (native.keyCode) {
+                    android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+                    android.view.KeyEvent.KEYCODE_MEDIA_PLAY,
+                    android.view.KeyEvent.KEYCODE_MEDIA_PAUSE,
+                    -> {
+                        vm.restore()
+                        true
+                    }
+                    else -> false
+                }
+            },
+    ) {
         Box(
             Modifier
                 .fillMaxSize()
@@ -99,22 +119,26 @@ fun Root(vm: MainViewModel) {
                 vm.show(section)
                 pageFocusTick++
             },
-            onAccount = vm::openSettings,
+            onAccount = vm::openAccounts,
+            onSettings = vm::openSettings,
             onRestorePlayer = vm::restore,
         )
         if (state.signingIn) {
             SignInDialog(code = state.signInCode, error = state.signInError, onRetry = vm::startSignIn, onDismiss = vm::cancelSignIn)
-        } else if (state.choosingAccount || state.settingsOpen) {
-            AccountDialog(
-                launch = state.choosingAccount,
+        } else if (state.choosingAccount || state.accountsOpen) {
+            ProfileDialog(
                 accounts = state.accounts,
-                signedIn = state.signedIn,
-                settings = state.settings,
                 onChoose = vm::chooseAccount,
                 onAdd = vm::startSignIn,
-                onSignOut = vm::signOut,
+                onDismiss = { if (state.choosingAccount) vm.skipAccountChoice() else vm.closeAccounts() },
+            )
+        } else if (state.settingsOpen) {
+            SettingsDialog(
+                settings = state.settings,
+                accountName = state.accountName.takeIf { state.signedIn },
                 onSettings = vm::updateSettings,
-                onDismiss = { if (state.choosingAccount) vm.skipAccountChoice() else vm.closeSettings() },
+                onSignOut = vm::signOut,
+                onDismiss = vm::closeSettings,
             )
         }
         // The video plays over the pages (they stay composed: Back returns to the same card).

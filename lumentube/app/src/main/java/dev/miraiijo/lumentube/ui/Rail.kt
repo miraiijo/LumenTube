@@ -55,6 +55,10 @@ import androidx.tv.material3.Text
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.tv.material3.Border
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -84,8 +88,10 @@ fun SideRail(
     modifier: Modifier,
     onFocusChange: (Boolean) -> Unit,
     onSection: (Section) -> Unit,
-    /** Account / settings dialog. */
+    /** "Qui regarde ?" (account at the top). */
     onAccount: () -> Unit,
+    /** Réglages (bottom). */
+    onSettings: () -> Unit,
     /** Back to the video playing in the small window. */
     onRestorePlayer: () -> Unit = {},
 ) {
@@ -135,7 +141,7 @@ fun SideRail(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                RailItem("Compte et réglages", open, icon = LumenIcon.SETTINGS, onClick = onAccount)
+                RailItem("Réglages", open, icon = LumenIcon.SETTINGS, onClick = onSettings)
             }
             Box(
                 Modifier
@@ -148,14 +154,18 @@ fun SideRail(
 }
 
 @Composable
-private fun Avatar(url: String?, name: String?) {
-    Box(Modifier.size(32.dp).clip(CircleShape).background(Palette.ControlIdle), contentAlignment = Alignment.Center) {
+private fun Avatar(url: String?, name: String?) = AvatarPicture(url, name, 32.dp, 15.sp)
+
+/** Round account picture (sharp: asked in 256 px), else the name's initial. */
+@Composable
+private fun AvatarPicture(url: String?, name: String?, size: androidx.compose.ui.unit.Dp, initialSize: androidx.compose.ui.unit.TextUnit) {
+    Box(Modifier.size(size).clip(CircleShape).background(Palette.ControlIdle), contentAlignment = Alignment.Center) {
         if (url != null) {
-            GlideImage(model = url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            GlideImage(model = avatarUrl(url), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         } else if (name != null) {
-            Text(name.take(1).uppercase(), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(name.take(1).uppercase(), fontSize = initialSize, fontWeight = FontWeight.SemiBold)
         } else {
-            Icon(LumenIcon.PLAY, size = 16.dp, color = Palette.Danger)
+            Icon(LumenIcon.PLAY, size = size / 2, color = Palette.Danger)
         }
     }
 }
@@ -267,51 +277,42 @@ private fun QrCode(content: String, modifier: Modifier) {
 }
 
 /**
- * "Qui regarde ?" at launch ([launch] = true, several accounts) or "Compte et réglages" from the
- * menu: the linked accounts (OK switches), add one, sign out, and the app's switches.
+ * "Qui regarde ?": the linked accounts as round avatars, and "Ajouter". Opened by the account at
+ * the top of the menu, and at launch when several accounts are linked. OK switches account.
  */
 @Composable
-fun AccountDialog(
-    launch: Boolean,
-    accounts: List<Account>,
-    signedIn: Boolean,
-    settings: Settings,
-    onChoose: (Account) -> Unit,
-    onAdd: () -> Unit,
-    onSignOut: () -> Unit,
-    onSettings: (Settings) -> Unit,
-    onDismiss: () -> Unit,
-) {
+fun ProfileDialog(accounts: List<Account>, onChoose: (Account) -> Unit, onAdd: () -> Unit, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         val first = remember { FocusRequester() }
         Column(
             Modifier
-                .width(620.dp)
-                .heightIn(max = 600.dp)
                 .background(Palette.Panel, DialogShape)
-                .padding(28.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(horizontal = 40.dp, vertical = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(if (launch) "Qui regarde ?" else "Compte et réglages", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Qui regarde ?", fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(28.dp))
+            Row(
+                Modifier.widthIn(max = 840.dp).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+            ) {
+                // The current account first takes the focus.
+                val focusIndex = accounts.indexOfFirst { it.selected }.coerceAtLeast(0)
                 accounts.forEachIndexed { index, account ->
-                    DialogRow(
-                        label = account.name,
-                        value = if (account.selected) "Compte actuel" else null,
-                        modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
-                        leading = { Avatar(account.avatar, account.name) },
+                    ProfileTile(
+                        name = account.name,
+                        caption = if (account.selected) "Compte actuel" else null,
+                        modifier = if (index == focusIndex) Modifier.focusRequester(first) else Modifier,
                         onClick = { onChoose(account) },
-                    )
+                    ) { AvatarPicture(account.avatar, account.name, PROFILE_AVATAR, 34.sp) }
                 }
-                DialogRow("Ajouter un compte", modifier = if (accounts.isEmpty()) Modifier.focusRequester(first) else Modifier, icon = LumenIcon.PLUS, onClick = onAdd)
-                if (!launch) {
-                    if (signedIn) DialogRow("Se déconnecter du compte actuel", icon = LumenIcon.CLOSE, onClick = onSignOut)
-                    Spacer(Modifier.height(10.dp))
-                    Text("LECTURE", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary, modifier = Modifier.padding(start = 12.dp))
-                    DialogRow("Lecture automatique", if (settings.autoplay) "Activée" else "Désactivée") { onSettings(settings.copy(autoplay = !settings.autoplay)) }
-                    DialogRow("SponsorBlock", if (settings.sponsorBlock) "Activé" else "Désactivé") { onSettings(settings.copy(sponsorBlock = !settings.sponsorBlock)) }
-                    DialogRow("Volume stable", if (settings.stableVolume) "Activé" else "Désactivé") { onSettings(settings.copy(stableVolume = !settings.stableVolume)) }
-                    DialogRow("DeArrow (titres et miniatures sans racolage)", if (settings.deArrow) "Activé" else "Désactivé") { onSettings(settings.copy(deArrow = !settings.deArrow)) }
+                ProfileTile(
+                    name = "Ajouter",
+                    caption = null,
+                    modifier = if (accounts.isEmpty()) Modifier.focusRequester(first) else Modifier,
+                    onClick = onAdd,
+                ) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(LumenIcon.PLUS, size = 36.dp) }
                 }
             }
         }
@@ -321,6 +322,72 @@ fun AccountDialog(
         }
     }
 }
+
+@Composable
+private fun ProfileTile(name: String, caption: String?, modifier: Modifier, onClick: () -> Unit, picture: @Composable () -> Unit) {
+    Column(Modifier.width(PROFILE_TILE), horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(
+            onClick = onClick,
+            modifier = modifier.size(PROFILE_AVATAR),
+            shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = FocusScale.Avatar),
+            border = ClickableSurfaceDefaults.border(
+                focusedBorder = Border(androidx.compose.foundation.BorderStroke(3.dp, Color.White), shape = CircleShape),
+            ),
+            colors = ClickableSurfaceDefaults.colors(containerColor = Palette.ControlIdle, focusedContainerColor = Palette.Selected),
+        ) { picture() }
+        Text(name, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 12.dp))
+        Text(caption.orEmpty(), fontSize = 12.sp, color = Palette.TextSecondary, maxLines = 1, textAlign = TextAlign.Center)
+    }
+}
+
+/**
+ * Réglages (bottom of the menu): the app's switches, and signing out of the current account. A
+ * centered panel that never touches the top or bottom of the screen; its list scrolls if needed.
+ */
+@Composable
+fun SettingsDialog(settings: Settings, accountName: String?, onSettings: (Settings) -> Unit, onSignOut: () -> Unit, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        val first = remember { FocusRequester() }
+        val maxHeight = (LocalConfiguration.current.screenHeightDp * 0.8f).dp
+        Column(
+            Modifier
+                .width(600.dp)
+                .heightIn(max = maxHeight)
+                .background(Palette.Panel, DialogShape)
+                .padding(28.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text("Réglages", fontSize = 22.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp))
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                SectionLabel("LECTURE")
+                DialogRow("Lecture automatique", if (settings.autoplay) "Activée" else "Désactivée", modifier = Modifier.focusRequester(first)) {
+                    onSettings(settings.copy(autoplay = !settings.autoplay))
+                }
+                DialogRow("SponsorBlock", if (settings.sponsorBlock) "Activé" else "Désactivé") { onSettings(settings.copy(sponsorBlock = !settings.sponsorBlock)) }
+                DialogRow("Volume stable", if (settings.stableVolume) "Activé" else "Désactivé") { onSettings(settings.copy(stableVolume = !settings.stableVolume)) }
+                SectionLabel("AFFICHAGE")
+                DialogRow("DeArrow (titres et miniatures sans racolage)", if (settings.deArrow) "Activé" else "Désactivé") { onSettings(settings.copy(deArrow = !settings.deArrow)) }
+                if (accountName != null) {
+                    SectionLabel("COMPTE")
+                    DialogRow("Se déconnecter de $accountName", icon = LumenIcon.CLOSE, onClick = onSignOut)
+                }
+            }
+        }
+        LaunchedEffect(Unit) {
+            withFrameNanos { }
+            first.tryRequestFocus()
+        }
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary, modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 2.dp))
+}
+
+private val PROFILE_AVATAR = 96.dp
+private val PROFILE_TILE = 128.dp
 
 @Composable
 private fun DialogRow(

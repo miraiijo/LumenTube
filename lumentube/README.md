@@ -36,6 +36,22 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.4.4
+- Sous-titres : français et anglais en tête, sous « Préférées » (ceux de la vidéo puis les traductions automatiques), puis « Autres langues ».
+- Lecteur, commandes masquées : Gauche/Droite avancent ou reculent sans afficher les boutons ni leur donner le focus. Les appuis s'additionnent : 10 s par appui, puis 30 s et 60 s quand la touche reste enfoncée. La barre de temps montre la cible et son image, et le lecteur ne saute qu'une fois, 0,6 s après le dernier appui, au lieu de recharger la vidéo à chaque appui.
+- Lecteur : le bouton ⚙ Réglages est le dernier de la rangée, après ▣.
+
+### 0.4.3
+- Lecteur : Retour (ou la fin du délai) qui masque les commandes ne fait plus perdre le focus ; la télécommande garde la main (OK, ±10 s).
+
+### 0.4.2
+- Compte et Réglages séparés :
+  - le compte, en haut du menu, ouvre « Qui regarde ? » : une petite fenêtre centrée avec les avatars ronds et « Ajouter » ;
+  - « Réglages », en bas du menu, ouvre une fenêtre qui ne touche ni le haut ni le bas de l'écran (sa liste défile si besoin), avec la déconnexion du compte actuel.
+- Avatars des comptes en 256 px.
+- Lecteur réduit : la touche lecture/pause de la télécommande le remet en plein écran (rappel « ⏯ Plein écran » dans la petite fenêtre).
+- Chargement d'une vidéo : plus de titre sous les points, il est déjà dans les commandes.
+
 ### 0.4.1
 - Chaînes (« Vos chaînes préférées », résultats de recherche…) : avatar rond et plus petit, demandé en 256 px au serveur d'images de Google au lieu de 88 px. En haut à droite, une chaîne sélectionnée s'affiche en rond, sans image 16:9 pixelisée.
 

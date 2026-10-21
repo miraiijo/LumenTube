@@ -70,8 +70,15 @@ private class Entry(
     val value: String? = null,
     val selected: Boolean = false,
     val submenu: Boolean = false,
+    /** A section title in the list (not focusable). */
+    val header: Boolean = false,
     val onClick: () -> Unit,
 )
+
+/** Subtitle languages listed first, under "Préférées" (names are in the app's language or English). */
+private val PREFERRED_SUBTITLES = listOf("français", "french", "anglais", "english")
+
+private fun isPreferredSubtitle(name: String) = name.lowercase().let { n -> PREFERRED_SUBTITLES.any { it in n } }
 
 /**
  * Nuvio-like side panel on the right of the player. OK opens a setting or picks a value (back to
@@ -129,7 +136,11 @@ fun PlayerMenuPanel(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             entries.forEachIndexed { index, entry ->
-                MenuRow(entry, if (index == focusIndex) Modifier.focusRequester(first) else Modifier)
+                if (entry.header) {
+                    Text(entry.label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary, modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 2.dp))
+                } else {
+                    MenuRow(entry, if (index == focusIndex) Modifier.focusRequester(first) else Modifier)
+                }
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -206,7 +217,16 @@ private fun buildEntries(
             onMenu(PlayerMenu.MAIN)
         }
         add(Entry("Désactivés", selected = player.selectedSubtitle < 0) { pick(-1) })
-        tracks.forEachIndexed { index, name -> add(Entry(name, selected = player.selectedSubtitle == index) { pick(index) }) }
+        // Français and English first (the video's own, then the automatic translations), then the rest.
+        val (preferred, others) = tracks.indices.partition { isPreferredSubtitle(tracks[it]) }
+        if (preferred.isNotEmpty()) {
+            add(Entry("PRÉFÉRÉES", header = true) {})
+            preferred.forEach { index -> add(Entry(tracks[index], selected = player.selectedSubtitle == index) { pick(index) }) }
+        }
+        if (others.isNotEmpty()) {
+            if (preferred.isNotEmpty()) add(Entry("AUTRES LANGUES", header = true) {})
+            others.forEach { index -> add(Entry(tracks[index], selected = player.selectedSubtitle == index) { pick(index) }) }
+        }
     }
     PlayerMenu.SPEED -> SPEEDS.map { speed ->
         Entry(speedName(speed), selected = player.speed == speed) {

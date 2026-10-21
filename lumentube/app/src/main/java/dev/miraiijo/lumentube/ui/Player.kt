@@ -94,6 +94,9 @@ private const val CONTROLS_HIDE_MS = 4_000L
 private const val SAVE_EVERY_MS = 30_000L
 private const val SKIP_NOTICE_MS = 3_000L
 private const val UP_NEXT_SECONDS = 10
+private const val SEEK_LINE_MS = 1_500L
+/** Pause after the last Left/Right before seeking (the presses in between add up). */
+private const val SEEK_COMMIT_MS = 600L
 /** adb logcat -s LumenTube.Timing: how long a video takes to start, step by step. */
 private const val TIMING_TAG = "LumenTube.Timing"
 
@@ -155,6 +158,27 @@ fun PlayerScreen(
     val root = remember { FocusRequester() }
     val settingsButton = remember { FocusRequester() }
     var swallowOkUp by remember { mutableStateOf(false) }
+    /** Incremented on each Left/Right with the controls hidden: the time line shows a moment. */
+    var seekFlash by remember { mutableIntStateOf(0) }
+    var seekLineShown by remember { mutableStateOf(false) }
+    /** Target of the Left/Right presses not applied yet. */
+    var pendingSeek by remember(videoId) { mutableStateOf<Long?>(null) }
+    LaunchedEffect(seekFlash) {
+        if (seekFlash == 0) return@LaunchedEffect
+        // The presses stopped for a moment: one seek to where they lead.
+        delay(SEEK_COMMIT_MS)
+        pendingSeek?.let {
+            player.exo.seekTo(it)
+            position = it
+        }
+        pendingSeek = null
+    }
+    LaunchedEffect(seekFlash) {
+        if (seekFlash == 0) return@LaunchedEffect
+        seekLineShown = true
+        delay(SEEK_LINE_MS)
+        seekLineShown = false
+    }
     /** Settings panel level shown (null = closed). */
     var menu by remember(videoId) { mutableStateOf<PlayerMenu?>(null) }
     /** Level the panel was opened on: Settings button = the main list, subtitles button = its list. */
@@ -199,12 +223,30 @@ fun PlayerScreen(
         show()
     }
 
+    /** ±10 s from the buttons: immediate, controls stay shown. */
     fun seekBy(delta: Long) {
         if (live && duration <= 0) return
         val target = (player.exo.currentPosition + delta).coerceIn(0L, (duration - 1_000L).coerceAtLeast(0L))
         player.exo.seekTo(target)
         position = target
         show()
+    }
+
+    /**
+     * Left/Right with the controls hidden: the presses add up into one target (10 s each, faster
+     * when the key is held), shown on the time line with its picture; the player seeks once,
+     * when the presses stop — not a reload per press.
+     */
+    fun nudge(direction: Int, repeatCount: Int) {
+        if (live && duration <= 0) return
+        val step = SEEK_STEP_MS * when {
+            repeatCount >= 20 -> 6
+            repeatCount >= 8 -> 3
+            else -> 1
+        }
+        val from = pendingSeek ?: player.exo.currentPosition
+        pendingSeek = (from + direction * step).coerceIn(0L, (duration - 1_000L).coerceAtLeast(0L))
+        seekFlash++
     }
 
     // Load (and reload after a 403: SmartTube switches to another YouTube client and retries).
@@ -416,10 +458,13 @@ fun PlayerScreen(
             .then(
                 // Small window: not focusable, the page keeps the remote.
                 if (minimized) Modifier else Modifier
-                    .focusRequester(root)
                     // The page under the player never gets the focus.
                     .focusProperties { exit = { FocusRequester.Cancel } }
                     .focusGroup()
+                    // The requester sits on the focusable box itself, not on the group: on the group,
+                    // a request entered its children, i.e. the controls fading out, and the focus was
+                    // lost with them (Back while the progress bar was shown).
+                    .focusRequester(root)
                     .focusable(),
             )
             .onPreviewKeyEvent { event ->
@@ -443,8 +488,9 @@ fun PlayerScreen(
                     // play-pause key still toggles directly.
                     AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER -> { swallowOkUp = true; show(); true }
                     AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { togglePlay(); true }
-                    AndroidKeyEvent.KEYCODE_DPAD_LEFT, AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> { seekBy(-SEEK_STEP_MS); true }
-                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT, AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { seekBy(SEEK_STEP_MS); true }
+                    // Seek without bringing the buttons (nor their focus): only the time line flashes.
+                    AndroidKeyEvent.KEYCODE_DPAD_LEFT, AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> { nudge(-1, native.repeatCount); true }
+                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT, AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { nudge(1, native.repeatCount); true }
                     AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_DPAD_DOWN -> { show(); true }
                     else -> false
                 }
@@ -482,15 +528,13 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        // Before the first frame: the thumbnail, dimmed, with the title.
+        // Before the first frame: the thumbnail, dimmed.
         AnimatedVisibility(visible = !started && error == null, enter = fadeIn(), exit = fadeOut(tween(400))) {
             Box(Modifier.fillMaxSize()) {
                 Thumbnail(videoId, thumbnail, Modifier.fillMaxSize())
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)))
-                Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    LoadingDots()
-                    Text(shownTitle, fontSize = 18.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White.copy(alpha = 0.9f))
-                }
+                // Just the dots: the title is already in the controls shown at the bottom.
+                LoadingDots(Modifier.align(Alignment.Center))
             }
         }
         if (started && buffering && error == null) LoadingDots(Modifier.align(Alignment.Center))
@@ -508,7 +552,7 @@ fun PlayerScreen(
                 playPause = playPause,
                 progress = progress,
                 onPlayPause = ::togglePlay,
-                onSeekBy = ::seekBy,
+                onSeekBy = { seekBy(it) },
                 onPreview = { delta ->
                     preview = ((preview ?: position) + delta).coerceIn(0L, duration.coerceAtLeast(0L))
                     activity++
@@ -537,6 +581,16 @@ fun PlayerScreen(
                 storyboard = storyboard,
                 previewing = preview != null,
             )
+        }
+
+        // Left/Right with the controls hidden: the time line alone, at the bottom, not focusable.
+        AnimatedVisibility(
+            visible = seekLineShown && !controls && !minimized && error == null,
+            enter = fadeIn(tween(100)),
+            exit = fadeOut(tween(300)),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            SeekLine(pendingSeek ?: position, duration, buffered, storyboard = storyboard.takeIf { pendingSeek != null })
         }
 
         // SponsorBlock: what was just skipped, top left.
@@ -591,6 +645,21 @@ fun PlayerScreen(
                 onPlay = { onNext(next) },
                 onCancel = onExit,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = Dimens.Gutter, bottom = 48.dp),
+            )
+        }
+
+        // Small window: how to get it back.
+        if (minimized && error == null) {
+            Text(
+                "⏯  Plein écran",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(8.dp)
+                    .background(Color.Black.copy(alpha = 0.65f), ControlShape)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             )
         }
 
@@ -690,9 +759,10 @@ private fun Controls(
                     }
                     if (showLike) ControlButton(LumenIcon.THUMB_UP, up = progress, onDown = onHide, active = liked, onClick = onLike)
                     if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, up = progress, onDown = onHide, onClick = onSubtitles)
-                    ControlButton(LumenIcon.SETTINGS, Modifier.focusRequester(settingsButton), up = progress, onDown = onHide, onClick = onSettings)
                     // Small window in a corner: keep watching while browsing ("Lecture en cours" in the menu brings it back).
                     ControlButton(LumenIcon.PIP, up = progress, onDown = onHide, onClick = onMinimize)
+                    // Settings always last.
+                    ControlButton(LumenIcon.SETTINGS, Modifier.focusRequester(settingsButton), up = progress, onDown = onHide, onClick = onSettings)
                 }
                 Text(
                     if (live && duration <= 0) "En direct" else "${formatTime(position)} / ${formatTime(duration)}",
@@ -913,4 +983,34 @@ private fun resizeModeOf(pictureFormat: Int) = when (pictureFormat) {
     1 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
     2 -> AspectRatioFrameLayout.RESIZE_MODE_FILL
     else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+}
+
+/** Time line alone (seeking with the controls hidden): bar and time, nothing to focus. */
+@Composable
+private fun SeekLine(position: Long, duration: Long, buffered: Long, storyboard: MediaItemStoryboard?) {
+    val played = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+    val loaded = if (duration > 0) (buffered.toFloat() / duration).coerceIn(0f, 1f) else 0f
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)))),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = Dimens.Gutter, vertical = 28.dp)) {
+            // The picture at the target, above its place on the bar.
+            if (storyboard != null && duration > 0) {
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    val x = (maxWidth * played - PREVIEW_WIDTH / 2).coerceIn(0.dp, maxWidth - PREVIEW_WIDTH)
+                    StoryboardFrame(storyboard, position, Modifier.offset(x = x).width(PREVIEW_WIDTH).aspectRatio(16f / 9f).clip(ControlShape).background(Color.Black))
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+            Text("${formatTime(position)} / ${formatTime(duration)}", fontSize = 15.sp, color = Color.White.copy(alpha = 0.9f), modifier = Modifier.align(Alignment.End))
+            Spacer(Modifier.height(10.dp))
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Palette.Track)) {
+                Box(Modifier.fillMaxWidth(loaded).fillMaxHeight().background(Color.White.copy(alpha = 0.35f)))
+                Box(Modifier.fillMaxWidth(played).fillMaxHeight().background(Color.White))
+            }
+        }
+    }
 }

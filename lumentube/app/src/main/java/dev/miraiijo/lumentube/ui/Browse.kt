@@ -359,13 +359,6 @@ private fun ChannelCard(video: Video, modifier: Modifier, onFocus: () -> Unit, o
     }
 }
 
-/**
- * Channel avatars come small (88 px). Their Google image server resizes on demand: "=s88-…" asked
- * as "=s256-…" gives a sharp picture at the same address.
- */
-private fun avatarUrl(url: String?): String? = url?.replace(Regex("=s\\d+"), "=s$AVATAR_PX")?.let { if (it.startsWith("//")) "https:$it" else it }
-
-private const val AVATAR_PX = 256
 private val CHANNEL_CARD = 132.dp
 private val CHANNEL_AVATAR = 112.dp
 private val CHANNEL_BACKDROP = 200.dp

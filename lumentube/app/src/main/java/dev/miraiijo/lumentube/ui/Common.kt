@@ -124,6 +124,14 @@ fun Thumbnail(videoId: String?, fallback: String?, modifier: Modifier = Modifier
     )
 }
 
+/**
+ * Channel and account avatars come small (88 px). Their Google image server resizes on demand:
+ * "=s88-…" asked as "=s256-…" gives a sharp picture at the same address.
+ */
+fun avatarUrl(url: String?): String? = url?.replace(Regex("=s\\d+"), "=s$AVATAR_PX")?.let { if (it.startsWith("//")) "https:$it" else it }
+
+private const val AVATAR_PX = 256
+
 /** "12:34" / "1:02:03". */
 fun formatDuration(ms: Long): String {
     if (ms <= 0) return ""
