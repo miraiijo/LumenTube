@@ -36,6 +36,7 @@ enum class Section(val label: String, val icon: LumenIcon, val account: Boolean 
 }
 
 /** A card: video, channel or playlist (the engine's MediaItem, kept to open it). */
+@androidx.compose.runtime.Immutable
 data class Video(
     val key: String,
     val videoId: String?,
@@ -73,12 +74,16 @@ data class Segment(val startMs: Long, val endMs: Long, val category: String) {
 data class Chapter(val title: String, val startMs: Long)
 
 /** What the player shows next to a video: description, actions' state, chapters, next video. */
+@androidx.compose.runtime.Immutable
 data class Details(
     val description: String,
     val views: String?,
     val published: String?,
     val likes: String?,
     val liked: Boolean,
+    val disliked: Boolean,
+    /** Key of the video's comments (CommentsService), null when they're off. */
+    val commentsKey: String?,
     val subscribed: Boolean,
     val channelId: String?,
     val channel: String?,
@@ -90,10 +95,27 @@ data class Details(
 /** A YouTube account linked on this box. */
 data class Account(val name: String, val avatar: String?, val selected: Boolean, val raw: com.liskovsoft.mediaserviceinterfaces.oauth.Account)
 
+/** A comment: author, relative date ("il y a 2 jours"), text, likes, replies label; [repliesKey] loads its replies. */
+@androidx.compose.runtime.Immutable
+data class Comment(
+    val id: String,
+    val author: String,
+    val avatar: String?,
+    val published: String?,
+    val text: String,
+    val likes: String?,
+    val replies: String?,
+    val repliesKey: String?,
+)
+
+data class CommentPage(val comments: List<Comment>, val next: String?)
+
 /** DeArrow's community title / thumbnail for a video (each may be missing). */
+@androidx.compose.runtime.Immutable
 data class DeArrow(val title: String?, val thumbnail: String?)
 
 /** A row of cards; [raw] loads the next page (continueGroup). */
+@androidx.compose.runtime.Immutable
 data class VideoRow(val key: String, val title: String, val items: List<Video>, val raw: MediaGroup, val canLoadMore: Boolean = true)
 
 /**
@@ -389,6 +411,8 @@ object YouTube {
             published = meta.publishedDate?.takeIf { it.isNotBlank() },
             likes = meta.likeCount?.takeIf { it.isNotBlank() },
             liked = meta.likeStatus == MediaItemMetadata.LIKE_STATUS_LIKE,
+            disliked = meta.likeStatus == MediaItemMetadata.LIKE_STATUS_DISLIKE,
+            commentsKey = meta.commentsKey?.takeIf { it.isNotBlank() },
             subscribed = meta.isSubscribed,
             channelId = meta.channelId,
             channel = meta.author,
@@ -403,6 +427,45 @@ object YouTube {
             val target = item ?: itemFor(videoId)
             if (liked) service.mediaItemService.setLike(target) else service.mediaItemService.removeLike(target)
         }.isSuccess
+    }
+
+    /** "Je n'aime pas" (or remove it). Needs an account. */
+    suspend fun setDisliked(videoId: String, item: MediaItem?, disliked: Boolean) = withContext(Dispatchers.IO) {
+        runCatching {
+            val target = item ?: itemFor(videoId)
+            if (disliked) service.mediaItemService.setDislike(target) else service.mediaItemService.removeDislike(target)
+        }.isSuccess
+    }
+
+    /** Estimated dislikes (Return YouTube Dislike, asked by the engine), e.g. "1,2 k"; null if unknown. */
+    suspend fun dislikes(videoId: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            service.mediaItemService.getDislikeDataObserve(videoId).timeout(10, TimeUnit.SECONDS).blockingFirst(null)?.dislikeCount
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+    }
+
+    /** A page of comments (or of a comment's replies) and the key of the next one. */
+    suspend fun comments(key: String): CommentPage? = withContext(Dispatchers.IO) {
+        val group = runCatching {
+            service.commentsService.getCommentsObserve(key).timeout(OBSERVE_TIMEOUT_S, TimeUnit.SECONDS).blockingFirst(null)
+        }.getOrNull() ?: return@withContext null
+        CommentPage(
+            // The engine's isEmpty() means "no replies", not an empty comment.
+            comments = group.comments.orEmpty().filterNotNull().filter { !it.message.isNullOrBlank() }.map { c ->
+                Comment(
+                    id = c.id ?: "${c.authorName}:${c.message?.hashCode()}",
+                    author = c.authorName.orEmpty(),
+                    avatar = c.authorPhoto,
+                    published = c.publishedDate,
+                    text = c.message.orEmpty(),
+                    likes = c.likeCount?.takeIf { it.isNotBlank() && it != "0" },
+                    // YouTube's label ("12 réponses"), shown as is.
+                    replies = c.replyCount?.takeIf { !c.isEmpty && it.isNotBlank() },
+                    repliesKey = c.nestedCommentsKey?.takeIf { !c.isEmpty && it.isNotBlank() },
+                )
+            },
+            next = group.nextCommentsKey?.takeIf { it.isNotBlank() },
+        )
     }
 
     /** Adds the video to "À regarder plus tard" (YouTube's WL playlist). */

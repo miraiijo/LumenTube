@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.LocalContentColor
@@ -27,6 +28,8 @@ enum class LumenIcon {
     CHEVRON_UP, CHEVRON_DOWN, INFO, HOME, LIBRARY, APPS, GAMEPAD, MORE,
     // LumenTube
     PAUSE, PIP, SUBTITLES, MUSIC, NEWS, LIVE, HISTORY, PLAYLIST, SUBSCRIPTIONS, REWIND, FORWARD, USER, THUMB_UP, TROPHY,
+    // Thumbs: filled = active (liked / disliked), outline otherwise; comments bubble.
+    THUMB_UP_OUTLINE, THUMB_DOWN, THUMB_DOWN_OUTLINE, COMMENT,
     // Avatar glyphs
     MOON, BOLT, SMILE, CAT, FLAME, LEAF, GHOST, CROWN,
 }
@@ -78,6 +81,11 @@ private fun DrawScope.drawIcon(icon: LumenIcon, color: Color) {
             close()
         }
         if (filled) drawPath(path, color) else drawPath(path, color, style = stroke)
+    }
+    fun thumb(filled: Boolean) {
+        if (filled) drawRoundRect(color, p(3f, 10f), Size(4f * u, 10f * u), CornerRadius(1f * u))
+        else drawRoundRect(color, p(3.5f, 10.5f), Size(3f * u, 9f * u), CornerRadius(1f * u), style = stroke)
+        polygon(listOf(p(9f, 10f), p(12.5f, 3.5f), p(14.5f, 4.5f), p(13.5f, 9.5f), p(20f, 9.5f), p(18.5f, 20f), p(9f, 20f)), filled = filled)
     }
 
     when (icon) {
@@ -279,9 +287,16 @@ private fun DrawScope.drawIcon(icon: LumenIcon, color: Color) {
             ring(12f, 8.5f, 4f)
             drawArc(color, 200f, 140f, false, p(4.5f, 13.5f), Size(15f * u, 12f * u), style = stroke)
         }
-        LumenIcon.THUMB_UP -> {
-            drawRoundRect(color, p(3f, 10f), Size(4f * u, 10f * u), CornerRadius(1f * u))
-            polygon(listOf(p(9f, 10f), p(12.5f, 3.5f), p(14.5f, 4.5f), p(13.5f, 9.5f), p(20f, 9.5f), p(18.5f, 20f), p(9f, 20f)), filled = true)
+        LumenIcon.THUMB_UP -> thumb(filled = true)
+        LumenIcon.THUMB_UP_OUTLINE -> thumb(filled = false)
+        // The same thumb upside down.
+        LumenIcon.THUMB_DOWN -> scale(1f, -1f) { thumb(filled = true) }
+        LumenIcon.THUMB_DOWN_OUTLINE -> scale(1f, -1f) { thumb(filled = false) }
+        LumenIcon.COMMENT -> {
+            drawRoundRect(color, p(3.5f, 4f), Size(17f * u, 12f * u), CornerRadius(3f * u), style = stroke)
+            polygon(listOf(p(7.5f, 15.5f), p(7.5f, 20.5f), p(12.5f, 15.5f)), filled = true)
+            line(7.5f, 8.5f, 16.5f, 8.5f)
+            line(7.5f, 11.5f, 13.5f, 11.5f)
         }
         LumenIcon.TROPHY -> {
             drawRoundRect(color, p(7f, 3.5f), Size(10f * u, 8f * u), CornerRadius(4f * u))

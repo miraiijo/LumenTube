@@ -228,7 +228,8 @@ class LumenPlayer(context: Context) {
      * it, without dropping lower when the bandwidth varies. Both sides capped so vertical videos work too.
      */
     fun setQuality(quality: Int) {
-        val side = if (quality == 0) Int.MAX_VALUE else LONG_SIDE[quality] ?: Int.MAX_VALUE
+        // Auto stops at 1080p: 4K (often 60 i/s) drops frames on a 2 GB box; it stays selectable.
+        val side = LONG_SIDE[if (quality == 0) AUTO_MAX else quality] ?: Int.MAX_VALUE
         selector.setParameters(
             selector.buildUponParameters()
                 .setMaxVideoSize(side, side)
@@ -362,5 +363,6 @@ class LumenPlayer(context: Context) {
         const val START_BUFFER_MS = 1_000
         const val REBUFFER_MS = 2_500
         const val STUCK_MS = 1_500L
+        const val AUTO_MAX = 1080
     }
 }

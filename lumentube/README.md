@@ -36,6 +36,16 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.8.0
+- **Commandes du lecteur** : les boutons « reculer » et « avancer » disparaissent (Gauche/Droite commandes masquées, ou la barre de progression, font la même chose). À droite de lecture/pause : J'aime, Je n'aime pas, Commentaires, ronds façon Nuvio (blancs au focus), puis Sous-titres, Petite fenêtre et Réglages. Haut mène à la barre, Bas masque les commandes.
+- **J'aime / Je n'aime pas** : nombre de « j'aime » (métadonnées YouTube) et nombre estimé de « je n'aime pas » (Return YouTube Dislike, via MediaServiceCore). OK met ou retire le vote ; le pouce se remplit quand il est actif, et les deux s'excluent. Sans compte connecté, seuls les compteurs sont affichés.
+- **Commentaires** : panneau à droite (fond sombre, 40 % de la largeur) : avatar, auteur, date relative, texte, nombre de j'aime et de réponses. OK sur un commentaire déplie ou replie ses réponses (« Plus de réponses » pour la suite), la page suivante se charge en approchant du bas. Retour ferme le panneau et remet le focus sur le bouton Commentaires ; la vidéo continue derrière, commandes masquées.
+
+### 0.7.3
+- **Fluidité des pages** : les rangées ne se redessinent plus à chaque changement d'état (message, lecteur, dialogue) : la page n'est recalculée que si son contenu change, et les modèles (vidéos, rangées, pages) sont déclarés immuables pour Compose. L'image de fond se fond dans la page avec un dégradé simple au lieu d'un masque sur un calque hors écran (moins de travail pour le GPU de la box), et son fondu dure 300 ms au lieu de 500.
+- **Fluidité de la lecture** : la barre de temps n'est rafraîchie que lorsqu'elle est affichée (commandes ou ligne de recherche), au lieu de redessiner l'écran du lecteur deux fois par seconde. La qualité « Auto » s'arrête à 1080p (la 4K, souvent à 60 i/s, perd des images sur la box) ; 1440p et 4K restent disponibles dans Qualité.
+- **Petite fenêtre** : Retour depuis la page place le focus directement sur « Lecture en cours » dans le menu ; OK remet la vidéo en plein écran (Retour puis OK, quel que soit le nombre de rangées).
+
 ### 0.7.2
 - **Flux Lumen, recherche** : `query content://dev.miraiijo.lumentube.feed/search?q=<texte>` (même contrôle de l'appelant, mêmes colonnes que `/continue`). Renvoie les 20 premiers résultats vidéo de YouTube, sans chaînes, playlists ni Shorts. `q` est coupé à 200 caractères ; une requête vide, une erreur ou plus de 8 s sans réponse renvoient un curseur vide. Les recherches tournent sur leurs propres threads (deux au plus en même temps), jamais derrière un rafraîchissement du flux.
 

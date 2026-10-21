@@ -21,15 +21,18 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** A page's content: loading, rows, or an error message. */
+@androidx.compose.runtime.Immutable
 data class Page(val rows: List<VideoRow> = emptyList(), val loading: Boolean = true, val error: String? = null)
 
 /** A channel or playlist opened from a card, shown over the section. [channel]: a channel page's header. */
+@androidx.compose.runtime.Immutable
 data class Opened(val title: String, val page: Page, val channel: ChannelHeader? = null)
 
 /**
  * A channel page's header: avatar, name, "S'abonner" ([subscribed] null: unknown or signed out) and
  * its orders ([sorts]: "Plus récentes", "Populaires"…; [sort] -1 = the channel's own page).
  */
+@androidx.compose.runtime.Immutable
 data class ChannelHeader(
     val id: String,
     val name: String,

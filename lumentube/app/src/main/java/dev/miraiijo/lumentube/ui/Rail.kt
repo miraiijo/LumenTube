@@ -100,6 +100,7 @@ fun SideRail(
     val scrim by animateFloatAsState(if (open) 0.6f else 0f, tween(220), label = "rail-scrim")
     val sections = Section.entries.filter { !it.account || state.signedIn }
     val requesters = remember { Section.entries.associateWith { FocusRequester() } }
+    val playerItem = remember { FocusRequester() }
     Box(Modifier.fillMaxSize()) {
         if (scrim > 0f) Box(Modifier.fillMaxSize().graphicsLayer { alpha = scrim }.background(Color.Black))
         Row(Modifier.fillMaxHeight()) {
@@ -113,8 +114,9 @@ fun SideRail(
                         open = it.hasFocus
                         onFocusChange(it.hasFocus)
                     }
-                    // Entering the menu always lands on the current section.
-                    .focusProperties { enter = { requesters[state.section] ?: FocusRequester.Default } }
+                    // Entering the menu lands on "Lecture en cours" when a video is in the small
+                    // window (Back then OK: full screen again), else on the current section.
+                    .focusProperties { enter = { if (state.minimized) playerItem else requesters[state.section] ?: FocusRequester.Default } }
                     .focusGroup()
                     .padding(horizontal = 12.dp, vertical = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -132,7 +134,7 @@ fun SideRail(
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     if (state.minimized) {
-                        RailItem("Lecture en cours", open, icon = LumenIcon.PIP, current = true, onClick = onRestorePlayer)
+                        RailItem("Lecture en cours", open, icon = LumenIcon.PIP, current = true, requester = playerItem, onClick = onRestorePlayer)
                     }
                     sections.forEach { section ->
                         RailItem(section.label, open, icon = section.icon, current = section == state.section && state.opened == null, requester = requesters.getValue(section)) {

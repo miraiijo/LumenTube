@@ -1,0 +1,297 @@
+@file:OptIn(ExperimentalTvMaterial3Api::class, ExperimentalGlideComposeApi::class)
+
+package dev.miraiijo.lumentube.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.LocalContentColor
+import androidx.tv.material3.Surface
+import androidx.tv.material3.Text
+import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.bumptech.glide.integration.compose.GlideImage
+import dev.miraiijo.lumentube.data.Comment
+import dev.miraiijo.lumentube.data.YouTube
+import kotlinx.coroutines.launch
+
+/** A comment's replies: loaded so far, key of the next page, loading. */
+private data class Replies(val items: List<Comment> = emptyList(), val next: String? = null, val loading: Boolean = true)
+
+/** One line of the panel's list. */
+private sealed interface Line {
+    val key: String
+
+    data class Top(val comment: Comment, val expanded: Boolean) : Line {
+        override val key get() = "c:${comment.id}"
+    }
+
+    data class Reply(val comment: Comment) : Line {
+        override val key get() = "r:${comment.id}"
+    }
+
+    data class MoreReplies(val parentId: String) : Line {
+        override val key get() = "more:$parentId"
+    }
+
+    data class Loading(override val key: String) : Line
+
+    data class Message(val text: String) : Line {
+        override val key get() = "msg"
+    }
+}
+
+/**
+ * Nuvio-like side panel (dark, 40 % of the width) with the video's comments: avatar, author,
+ * relative date, text, likes, replies. OK on a comment shows / hides its replies; the next page
+ * loads when the end of the list comes near. Back (handled by the player) closes it.
+ */
+@Composable
+fun CommentsPanel(commentsKey: String, modifier: Modifier = Modifier) {
+    val scope = rememberCoroutineScope()
+    var comments by remember(commentsKey) { mutableStateOf(emptyList<Comment>()) }
+    var next by remember(commentsKey) { mutableStateOf<String?>(commentsKey) }
+    var loading by remember(commentsKey) { mutableStateOf(false) }
+    var failed by remember(commentsKey) { mutableStateOf(false) }
+    var replies by remember(commentsKey) { mutableStateOf(emptyMap<String, Replies>()) }
+    var expanded by remember(commentsKey) { mutableStateOf(emptySet<String>()) }
+    val first = remember { FocusRequester() }
+
+    fun loadMore() {
+        val key = next ?: return
+        if (loading) return
+        loading = true
+        scope.launch {
+            val page = YouTube.comments(key)
+            if (page == null) {
+                failed = comments.isEmpty()
+                next = null
+            } else {
+                comments = (comments + page.comments).distinctBy { it.id }
+                next = page.next
+            }
+            loading = false
+        }
+    }
+
+    fun loadReplies(parent: Comment, key: String) {
+        val current = replies[parent.id] ?: Replies()
+        replies = replies + (parent.id to current.copy(loading = true))
+        scope.launch {
+            val page = YouTube.comments(key)
+            val now = replies[parent.id] ?: Replies()
+            replies = replies + (parent.id to Replies(
+                items = (now.items + page?.comments.orEmpty()).distinctBy { it.id },
+                next = page?.next,
+                loading = false,
+            ))
+        }
+    }
+
+    fun toggle(comment: Comment) {
+        val key = comment.repliesKey ?: return
+        if (comment.id in expanded) {
+            expanded = expanded - comment.id
+        } else {
+            expanded = expanded + comment.id
+            if (comment.id !in replies) loadReplies(comment, key)
+        }
+    }
+
+    LaunchedEffect(commentsKey) { loadMore() }
+
+    val lines = buildList {
+        comments.forEach { comment ->
+            val open = comment.id in expanded
+            add(Line.Top(comment, open))
+            if (open) {
+                val r = replies[comment.id]
+                r?.items?.forEach { add(Line.Reply(it)) }
+                when {
+                    r == null || r.loading -> add(Line.Loading("loading:${comment.id}"))
+                    r.next != null -> add(Line.MoreReplies(comment.id))
+                }
+            }
+        }
+        when {
+            loading -> add(Line.Loading("loading"))
+            failed -> add(Line.Message("Impossible de charger les commentaires."))
+            comments.isEmpty() -> add(Line.Message("Aucun commentaire."))
+        }
+    }
+
+    Column(
+        modifier
+            .fillMaxWidth(PANEL_WIDTH)
+            .fillMaxHeight()
+            .background(Palette.Panel.copy(alpha = 0.97f))
+            // The focus stays in the panel until Back closes it.
+            .focusProperties { exit = { FocusRequester.Cancel } }
+            .focusGroup()
+            .padding(start = 20.dp, end = 20.dp, top = 32.dp),
+    ) {
+        Text("Commentaires", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 12.dp, bottom = 16.dp))
+        LazyColumn(
+            Modifier.weight(1f).fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            contentPadding = PaddingValues(bottom = 32.dp),
+        ) {
+            itemsIndexed(lines, key = { _, line -> line.key }) { index, line ->
+                // The end of the list is near: the next page.
+                val nearEnd = { if (index >= lines.size - 4) loadMore() }
+                when (line) {
+                    is Line.Top -> CommentRow(
+                        line.comment,
+                        reply = false,
+                        expanded = line.expanded,
+                        modifier = (if (index == 0) Modifier.focusRequester(first) else Modifier).onFocusChanged { if (it.isFocused) nearEnd() },
+                        onClick = { toggle(line.comment) },
+                    )
+                    is Line.Reply -> CommentRow(
+                        line.comment,
+                        reply = true,
+                        expanded = false,
+                        modifier = Modifier.onFocusChanged { if (it.isFocused) nearEnd() },
+                        onClick = {},
+                    )
+                    is Line.MoreReplies -> PanelButton(
+                        "Plus de réponses",
+                        Modifier.padding(start = REPLY_INDENT).onFocusChanged { if (it.isFocused) nearEnd() },
+                    ) {
+                        val parent = comments.firstOrNull { it.id == line.parentId }
+                        val key = replies[line.parentId]?.next
+                        if (parent != null && key != null) loadReplies(parent, key)
+                    }
+                    is Line.Loading -> Text("Chargement…", fontSize = 14.sp, color = Palette.TextSecondary, modifier = Modifier.padding(12.dp))
+                    // Focusable, so the panel holds the focus (and Back) even without comments.
+                    is Line.Message -> Text(
+                        line.text,
+                        fontSize = 15.sp,
+                        color = Palette.TextSecondary,
+                        modifier = (if (index == 0) Modifier.focusRequester(first) else Modifier).focusable().padding(12.dp),
+                    )
+                }
+            }
+        }
+    }
+
+    // The first line takes the focus as soon as there is one (first comment, or the message).
+    val firstKey = lines.firstOrNull()?.takeIf { it is Line.Top || it is Line.Message }?.key
+    LaunchedEffect(firstKey) {
+        if (firstKey == null) return@LaunchedEffect
+        withFrameNanos { }
+        first.tryRequestFocus()
+    }
+}
+
+@Composable
+private fun CommentRow(comment: Comment, reply: Boolean, expanded: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth().padding(start = if (reply) REPLY_INDENT else 0.dp),
+        shape = ClickableSurfaceDefaults.shape(shape = ControlShape),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            contentColor = Palette.TextPrimary,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Color.Black,
+            pressedContainerColor = Color.White,
+            pressedContentColor = Color.Black,
+        ),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val avatarSize = if (reply) 28.dp else 36.dp
+            Box(Modifier.size(avatarSize).clip(CircleShape).background(Palette.ControlIdle), contentAlignment = Alignment.Center) {
+                if (comment.avatar != null) {
+                    GlideImage(model = avatarUrl(comment.avatar), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                } else {
+                    Text(comment.author.removePrefix("@").take(1).uppercase(), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val secondary = LocalContentColor.current.copy(alpha = 0.65f)
+                Text(
+                    listOfNotNull(comment.author.takeIf { it.isNotBlank() }, comment.published?.takeIf { it.isNotBlank() }).joinToString("  ·  "),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = secondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(comment.text, fontSize = 15.sp, lineHeight = 21.sp)
+                if (comment.likes != null || comment.replies != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                        if (comment.likes != null) {
+                            Icon(LumenIcon.THUMB_UP_OUTLINE, size = 14.dp, color = secondary)
+                            Spacer(Modifier.width(6.dp))
+                            Text(comment.likes, fontSize = 13.sp, color = secondary)
+                            Spacer(Modifier.width(16.dp))
+                        }
+                        if (comment.replies != null) {
+                            Text(comment.replies + if (expanded) "  ▴" else "  ▾", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = secondary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PanelButton(label: String, modifier: Modifier, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth(),
+        shape = ClickableSurfaceDefaults.shape(shape = ControlShape),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.Transparent,
+            contentColor = Palette.TextSecondary,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Color.Black,
+        ),
+    ) {
+        Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp))
+    }
+}
+
+private const val PANEL_WIDTH = 0.4f
+private val REPLY_INDENT = 40.dp

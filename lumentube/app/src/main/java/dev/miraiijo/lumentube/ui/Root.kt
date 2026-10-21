@@ -35,6 +35,9 @@ import dev.miraiijo.lumentube.MainViewModel
 @Composable
 fun Root(vm: MainViewModel) {
     val state by vm.state.collectAsState()
+    // The page's rows, rebuilt only when what they show changes (state.page builds a new one each
+    // time it's read): a notice, the player or a dialog doesn't recompose every card.
+    val page = remember(state.section, state.pages, state.opened, state.search, state.resume, state.deArrow) { state.page }
     val content = remember { FocusRequester() }
     val rail = remember { FocusRequester() }
     // Incremented when a page should take the focus (section opened from the menu, channel opened).
@@ -91,7 +94,7 @@ fun Root(vm: MainViewModel) {
                 if (section == dev.miraiijo.lumentube.data.Section.SEARCH && opened == null) {
                     SearchPage(
                         query = state.query,
-                        page = state.page,
+                        page = page,
                         focusTick = pageFocusTick,
                         onSearch = vm::search,
                         onSelect = vm::select,
@@ -104,7 +107,7 @@ fun Root(vm: MainViewModel) {
                     )
                 } else {
                     BrowsePage(
-                        page = state.page,
+                        page = page,
                         title = state.opened?.title,
                         focusTick = pageFocusTick,
                         onSelect = vm::select,

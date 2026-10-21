@@ -277,7 +277,7 @@ private fun Backdrop(video: Video?) {
     // Picture = (video id for the HD version, feed thumbnail as fallback).
     val picture = video?.takeIf { it.videoId != null || it.thumbnail != null }?.let { it.videoId to it.thumbnail }
     val channel = video?.takeIf { it.isChannel }
-    Crossfade(targetState = picture to channel, animationSpec = tween(500), label = "backdrop") { (image, shownChannel) ->
+    Crossfade(targetState = picture to channel, animationSpec = tween(300), label = "backdrop") { (image, shownChannel) ->
         Box(Modifier.fillMaxSize()) {
             if (shownChannel != null) {
                 // A channel: its round avatar (a channel picture stretched to 16:9 is a blur).
@@ -302,14 +302,16 @@ private fun Backdrop(video: Video?) {
     }
 }
 
-/** The picture fades out itself (alpha mask): left edge towards the details, bottom towards the rows. */
-private val MeltIntoPage = Modifier
-    .graphicsLayer { compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen }
-    .drawWithContent {
-        drawContent()
-        drawRect(Brush.horizontalGradient(0f to Color.Transparent, 0.2f to Color.Black.copy(alpha = 0.35f), 0.45f to Color.Black), blendMode = androidx.compose.ui.graphics.BlendMode.DstIn)
-        drawRect(Brush.verticalGradient(0.5f to Color.Black, 0.82f to Color.Black.copy(alpha = 0.4f), 1f to Color.Transparent), blendMode = androidx.compose.ui.graphics.BlendMode.DstIn)
-    }
+/**
+ * The picture melts into the page: left edge towards the details, bottom towards the rows. The
+ * page's own color drawn over it (the page is a solid color), not an alpha mask: a mask needs an
+ * offscreen layer of half the screen, redrawn on every frame of the fade — heavy for the box's GPU.
+ */
+private val MeltIntoPage = Modifier.drawWithContent {
+    drawContent()
+    drawRect(Brush.horizontalGradient(0f to Palette.Background, 0.2f to Palette.Background.copy(alpha = 0.65f), 0.45f to Color.Transparent))
+    drawRect(Brush.verticalGradient(0.5f to Color.Transparent, 0.82f to Palette.Background.copy(alpha = 0.6f), 1f to Palette.Background))
+}
 
 /** Title (or the opened channel / playlist), then channel · duration. */
 @Composable

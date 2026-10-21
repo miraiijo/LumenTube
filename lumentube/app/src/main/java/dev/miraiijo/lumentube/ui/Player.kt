@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -200,6 +201,14 @@ fun PlayerScreen(
     var details by remember(videoId) { mutableStateOf<Details?>(null) }
     val chapters = details?.chapters.orEmpty()
     var liked by remember(videoId) { mutableStateOf(false) }
+    var disliked by remember(videoId) { mutableStateOf(false) }
+    /** Estimated dislikes (Return YouTube Dislike), null while unknown. */
+    var dislikes by remember(videoId) { mutableStateOf<String?>(null) }
+    /** Comments panel open: the video goes on behind it, the controls stay hidden. */
+    var commentsOpen by remember(videoId) { mutableStateOf(false) }
+    /** Panel just closed: the focus goes back to the comments button, not play / pause. */
+    var refocusComments by remember { mutableStateOf(false) }
+    val commentsButton = remember { FocusRequester() }
     var subscribed by remember(videoId) { mutableStateOf(false) }
     var watchLaterDone by remember(videoId) { mutableStateOf(false) }
     var storyboard by remember(videoId) { mutableStateOf<MediaItemStoryboard?>(null) }
@@ -224,21 +233,15 @@ fun PlayerScreen(
     }
 
     fun show() {
+        // The time line is only refreshed while it's shown: up to date as soon as it appears.
+        position = player.exo.currentPosition
+        buffered = player.exo.bufferedPosition
         controls = true
         activity++
     }
 
     fun togglePlay() {
         player.exo.playWhenReady = !player.exo.playWhenReady
-        show()
-    }
-
-    /** ±10 s from the buttons: immediate, controls stay shown. */
-    fun seekBy(delta: Long) {
-        if (live && duration <= 0) return
-        val target = (player.exo.currentPosition + delta).coerceIn(0L, (duration - 1_000L).coerceAtLeast(0L))
-        player.exo.seekTo(target)
-        position = target
         show()
     }
 
@@ -254,7 +257,7 @@ fun PlayerScreen(
             repeatCount >= 8 -> 3
             else -> 1
         }
-        val from = pendingSeek ?: player.exo.currentPosition
+        val from = pendingSeek ?: player.exo.currentPosition.also { position = it }
         pendingSeek = (from + direction * step).coerceIn(0L, (duration - 1_000L).coerceAtLeast(0L))
         seekFlash++
     }
@@ -392,6 +395,12 @@ fun PlayerScreen(
         }
     }
 
+    // Dislikes from Return YouTube Dislike (a third-party service the engine asks with the video id).
+    LaunchedEffect(videoId, infoReady) {
+        if (!infoReady || live) return@LaunchedEffect
+        dislikes = YouTube.dislikes(videoId)
+    }
+
     // SponsorBlock segments and chapters, fetched next to the video (they never delay it).
     LaunchedEffect(videoId, sponsorBlock, infoReady) {
         if (!infoReady) return@LaunchedEffect
@@ -401,6 +410,7 @@ fun PlayerScreen(
         if (!infoReady) return@LaunchedEffect
         details = YouTube.details(videoId, item)
         liked = details?.liked == true
+        disliked = details?.disliked == true
         subscribed = details?.subscribed == true
     }
     LaunchedEffect(skipNotice) {
@@ -410,16 +420,20 @@ fun PlayerScreen(
         }
     }
 
-    // Time line, refreshed while the screen is up; YouTube history saved every 30 s.
+    // Time line, refreshed only while something shows it (controls, seek line, stats): the player
+    // screen isn't recomposed twice a second for nothing. YouTube history saved every 30 s.
     LaunchedEffect(player) {
         var lastSave = 0L
         while (true) {
-            position = player.exo.currentPosition
-            duration = player.exo.duration.coerceAtLeast(0L)
-            buffered = player.exo.bufferedPosition
+            val at = player.exo.currentPosition
+            val total = player.exo.duration.coerceAtLeast(0L)
+            if (total != duration) duration = total
+            if ((controls || seekLineShown) && !isMini) {
+                position = at
+                buffered = player.exo.bufferedPosition
+            }
             // SponsorBlock: each segment skipped once (seeking back into it plays it).
             if (sponsorBlock && player.exo.playWhenReady) {
-                val at = position
                 segments.firstOrNull { at >= it.startMs && at < it.endMs - 500 && it !in skipped }?.let { segment ->
                     skipped = skipped + segment
                     player.exo.seekTo(segment.endMs)
@@ -429,7 +443,7 @@ fun PlayerScreen(
             }
             if (isPlaying && System.currentTimeMillis() - lastSave > SAVE_EVERY_MS) {
                 lastSave = System.currentTimeMillis()
-                launch { YouTube.savePosition(videoId, position / 1000f) }
+                launch { YouTube.savePosition(videoId, at / 1000f) }
             }
             delay(500)
         }
@@ -444,7 +458,12 @@ fun PlayerScreen(
     }
     LaunchedEffect(controls, minimized) {
         withFrameNanos { }
-        if (upNext != null || minimized) return@LaunchedEffect
+        // The comments panel keeps its own focus.
+        if (upNext != null || minimized || commentsOpen) return@LaunchedEffect
+        if (controls && refocusComments) {
+            refocusComments = false
+            if (commentsButton.tryRequestFocus()) return@LaunchedEffect
+        }
         if (controls) playPause.tryRequestFocus() else root.tryRequestFocus()
     }
     // "À suivre" counting down when the window shrinks: the next video starts now.
@@ -456,16 +475,52 @@ fun PlayerScreen(
     LaunchedEffect(minimized) {
         if (minimized) {
             menu = null
+            commentsOpen = false
             controls = false
         } else {
             show()
         }
     }
 
+    // "J'aime" and "Je n'aime pas" exclude each other (YouTube does the same on its side).
     fun toggleLike() {
         val target = !liked
+        val wasDisliked = disliked
         liked = target
-        scope.launch { if (!YouTube.setLiked(videoId, item, target)) liked = !target }
+        if (target) disliked = false
+        scope.launch {
+            if (!YouTube.setLiked(videoId, item, target)) {
+                liked = !target
+                disliked = wasDisliked
+            }
+        }
+        show()
+    }
+
+    fun toggleDislike() {
+        val target = !disliked
+        val wasLiked = liked
+        disliked = target
+        if (target) liked = false
+        scope.launch {
+            if (!YouTube.setDisliked(videoId, item, target)) {
+                disliked = !target
+                liked = wasLiked
+            }
+        }
+        show()
+    }
+
+    fun openComments() {
+        if (details?.commentsKey == null) return
+        menu = null
+        commentsOpen = true
+        controls = false
+    }
+
+    fun closeComments() {
+        commentsOpen = false
+        refocusComments = true
         show()
     }
 
@@ -496,6 +551,8 @@ fun PlayerScreen(
         // Up one level, or closed when it's the level the panel was opened on.
         if (menu == menuRoot) closeMenu() else menu = PlayerMenu.MAIN
     }
+    // Declared last: with the comments open, Back only closes them (the video goes on).
+    BackHandler(enabled = commentsOpen && !minimized) { closeComments() }
     LaunchedEffect(menuClosed) {
         if (menuClosed == 0) return@LaunchedEffect
         withFrameNanos { }
@@ -529,8 +586,8 @@ fun PlayerScreen(
                     return@onPreviewKeyEvent true
                 }
                 if (native.action != AndroidKeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
-                // The "À suivre" card has its own buttons.
-                if (upNext != null) return@onPreviewKeyEvent false
+                // The "À suivre" card and the comments panel have their own focus.
+                if (upNext != null || commentsOpen) return@onPreviewKeyEvent false
                 if (controls) {
                     activity++
                     return@onPreviewKeyEvent false
@@ -610,7 +667,6 @@ fun PlayerScreen(
                 playPause = playPause,
                 progress = progress,
                 onPlayPause = ::togglePlay,
-                onSeekBy = { seekBy(it) },
                 onPreview = { delta ->
                     preview = ((preview ?: position) + delta).coerceIn(0L, duration.coerceAtLeast(0L))
                     activity++
@@ -634,9 +690,16 @@ fun PlayerScreen(
                     menu = PlayerMenu.MAIN
                 },
                 onMinimize = onMinimize,
-                showLike = signedIn && !live,
+                canRate = signedIn,
+                likes = details?.likes,
+                dislikes = dislikes,
                 liked = liked,
+                disliked = disliked,
                 onLike = ::toggleLike,
+                onDislike = ::toggleDislike,
+                hasComments = details?.commentsKey != null,
+                commentsButton = commentsButton,
+                onComments = ::openComments,
                 storyboard = storyboard,
                 previewing = preview != null,
             )
@@ -708,6 +771,11 @@ fun PlayerScreen(
                 onMenu = { next -> if (next == null || (next == PlayerMenu.MAIN && menuRoot != PlayerMenu.MAIN)) closeMenu() else menu = next },
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
+        }
+
+        val commentsKey = details?.commentsKey
+        if (commentsOpen && commentsKey != null && !minimized) {
+            CommentsPanel(commentsKey, Modifier.align(Alignment.CenterEnd))
         }
 
         if (stats && !minimized) {
@@ -806,7 +874,6 @@ private fun Controls(
     playPause: FocusRequester,
     progress: FocusRequester,
     onPlayPause: () -> Unit,
-    onSeekBy: (Long) -> Unit,
     onPreview: (Long) -> Unit,
     onCommit: () -> Unit,
     onHide: () -> Unit,
@@ -817,9 +884,17 @@ private fun Controls(
     subtitlesButton: FocusRequester,
     onSubtitles: () -> Unit,
     onSettings: () -> Unit,
-    showLike: Boolean,
+    /** Signed in: the thumbs can be pressed; otherwise only their counts are shown. */
+    canRate: Boolean,
+    likes: String?,
+    dislikes: String?,
     liked: Boolean,
+    disliked: Boolean,
     onLike: () -> Unit,
+    onDislike: () -> Unit,
+    hasComments: Boolean,
+    commentsButton: FocusRequester,
+    onComments: () -> Unit,
     storyboard: MediaItemStoryboard?,
     previewing: Boolean,
     onMinimize: () -> Unit,
@@ -857,11 +932,14 @@ private fun Controls(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     ControlButton(if (isPlaying) LumenIcon.PAUSE else LumenIcon.PLAY, Modifier.focusRequester(playPause), up = progress, onDown = onHide, onClick = onPlayPause)
-                    if (!live) {
-                        ControlButton(LumenIcon.REWIND, up = progress, onDown = onHide) { onSeekBy(-SEEK_STEP_MS) }
-                        ControlButton(LumenIcon.FORWARD, up = progress, onDown = onHide) { onSeekBy(SEEK_STEP_MS) }
+                    // ±10 s: Left / Right with the controls hidden, or on the progress bar.
+                    if (canRate || likes != null) {
+                        RateButton(if (liked) LumenIcon.THUMB_UP else LumenIcon.THUMB_UP_OUTLINE, likes, canRate, liked, up = progress, onDown = onHide, onClick = onLike)
                     }
-                    if (showLike) ControlButton(LumenIcon.THUMB_UP, up = progress, onDown = onHide, active = liked, onClick = onLike)
+                    if (canRate || dislikes != null) {
+                        RateButton(if (disliked) LumenIcon.THUMB_DOWN else LumenIcon.THUMB_DOWN_OUTLINE, dislikes, canRate, disliked, up = progress, onDown = onHide, onClick = onDislike)
+                    }
+                    if (hasComments) ControlButton(LumenIcon.COMMENT, Modifier.focusRequester(commentsButton), up = progress, onDown = onHide, onClick = onComments)
                     if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, Modifier.focusRequester(subtitlesButton), up = progress, onDown = onHide, onClick = onSubtitles)
                     // Small window in a corner: keep watching while browsing ("Lecture en cours" in the menu brings it back).
                     ControlButton(LumenIcon.PIP, up = progress, onDown = onHide, onClick = onMinimize)
@@ -875,6 +953,58 @@ private fun Controls(
                 )
             }
         }
+    }
+}
+
+/**
+ * Thumb with its count, Nuvio's round style stretched into a pill (white when focused, filled
+ * icon when active). Not signed in: the count alone, not focusable.
+ */
+@Composable
+private fun RateButton(
+    icon: LumenIcon,
+    count: String?,
+    enabled: Boolean,
+    active: Boolean,
+    up: FocusRequester,
+    onDown: () -> Unit,
+    onClick: () -> Unit,
+) {
+    if (!enabled) {
+        Row(Modifier.height(52.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, size = 22.dp, color = Color.White)
+            if (count != null) Text(count, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White, modifier = Modifier.padding(start = 8.dp))
+        }
+        return
+    }
+    androidx.tv.material3.Button(
+        onClick = onClick,
+        modifier = Modifier
+            .height(52.dp)
+            .focusProperties { this.up = up }
+            .onPreviewKeyEvent { event ->
+                val native = event.nativeKeyEvent
+                if (native.action == AndroidKeyEvent.ACTION_DOWN && native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN) {
+                    onDown()
+                    true
+                } else {
+                    false
+                }
+            },
+        contentPadding = PaddingValues(horizontal = if (count != null) 16.dp else 14.dp),
+        shape = androidx.tv.material3.ButtonDefaults.shape(shape = CircleShape),
+        scale = androidx.tv.material3.ButtonDefaults.scale(focusedScale = 1.05f),
+        colors = androidx.tv.material3.ButtonDefaults.colors(
+            containerColor = if (active) Palette.ControlOnArt else Color.Transparent,
+            contentColor = Color.White,
+            focusedContainerColor = Color.White,
+            focusedContentColor = Color.Black,
+            pressedContainerColor = Color.White,
+            pressedContentColor = Color.Black,
+        ),
+    ) {
+        Icon(icon, size = 24.dp)
+        if (count != null) Text(count, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 8.dp))
     }
 }
 

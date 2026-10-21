@@ -212,7 +212,7 @@ private fun buildEntries(
             changed()
             onMenu(PlayerMenu.MAIN)
         }
-        add(Entry("Auto", "selon la connexion", selected = prefs.quality == 0) { pick(0) })
+        add(Entry("Auto", "jusqu'à 1080p", selected = prefs.quality == 0) { pick(0) })
         player.qualities().forEach { quality -> add(Entry(qualityName(quality), selected = prefs.quality == quality) { pick(quality) }) }
     }
     PlayerMenu.SUBTITLES -> buildList {
