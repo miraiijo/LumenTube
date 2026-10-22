@@ -47,17 +47,19 @@ fun LumenButton(
     modifier: Modifier = Modifier,
     icon: LumenIcon? = null,
     containerColor: Color = Palette.ControlIdle,
+    /** Text and icon when not focused (white on the red S'abonner, by day too). */
+    contentColor: Color = Palette.TextPrimary,
     onClick: () -> Unit,
 ) {
     Button(
         onClick = onClick,
         modifier = modifier.height(Dimens.ControlHeight + 6.dp),
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
         shape = ButtonDefaults.shape(shape = CircleShape),
         scale = ButtonDefaults.scale(focusedScale = FocusScale.Control, pressedScale = FocusScale.Control),
         colors = ButtonDefaults.colors(
             containerColor = containerColor,
-            contentColor = Palette.TextPrimary,
+            contentColor = contentColor,
             focusedContainerColor = Palette.Focus,
             focusedContentColor = Palette.OnFocus,
             pressedContainerColor = Palette.Focus,

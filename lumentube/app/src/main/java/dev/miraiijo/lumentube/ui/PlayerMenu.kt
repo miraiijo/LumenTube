@@ -5,6 +5,7 @@ package dev.miraiijo.lumentube.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -54,7 +56,7 @@ enum class PlayerMenu { MAIN, QUALITY, SUBTITLES, SPEED, AUDIO, FORMAT, INFO, CH
 private val SPEEDS = listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
 
 /** Picture formats (PlayerPrefs.pictureFormat): whole picture, fill the screen, stretched. */
-val PICTURE_FORMATS = listOf("Image entière", "Remplir l'écran", "Étirer")
+val PICTURE_FORMATS = listOf("Image entière", "Remplir l’écran", "Étirer")
 
 /** The video's account actions and info, shown in the main list. */
 class VideoActions(
@@ -120,7 +122,7 @@ fun PlayerMenuPanel(
         PlayerMenu.SUBTITLES -> "Sous-titres"
         PlayerMenu.SPEED -> "Vitesse"
         PlayerMenu.AUDIO -> "Piste audio"
-        PlayerMenu.FORMAT -> "Format de l'image"
+        PlayerMenu.FORMAT -> "Format de l’image"
         PlayerMenu.INFO -> "À propos"
         PlayerMenu.CHAPTERS -> "Chapitres"
     }
@@ -203,7 +205,7 @@ private fun buildEntries(
                 val channel = details.channel?.takeIf { it.isNotBlank() }
                 add(Entry("Voir la chaîne", channel, onClick = actions.onChannel))
                 if (actions.signedIn) {
-                    add(Entry(if (details.subscribed) "Abonné" else "S'abonner", if (details.subscribed) "Se désabonner" else channel, onClick = actions.onSubscribe))
+                    add(Entry(if (details.subscribed) "Abonné" else "S’abonner", if (details.subscribed) "Se désabonner" else channel, onClick = actions.onSubscribe))
                 }
             }
         }
@@ -299,7 +301,7 @@ private fun InfoText(details: Details?, modifier: Modifier) {
             .padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        val figures = listOfNotNull(details?.views, details?.published, details?.likes?.let { "$it J'aime" }).joinToString("  ·  ")
+        val figures = listOfNotNull(details?.views, details?.published, details?.likes?.let { "$it J’aime" }).joinToString(" · ")
         if (figures.isNotEmpty()) Text(figures, fontSize = 13.sp, color = Palette.TextSecondary)
         Text(details?.description?.takeIf { it.isNotBlank() } ?: "Pas de description.", fontSize = 13.sp, lineHeight = 19.sp, color = Palette.TextPrimary.copy(alpha = 0.9f))
         Spacer(Modifier.height(24.dp))
@@ -333,12 +335,16 @@ private fun MenuRow(entry: Entry, modifier: Modifier) {
                     color = LocalContentColor.current.copy(alpha = 0.65f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 12.dp),
+                    // Capped: a long value (an auto-generated subtitle track…) never squeezes the label.
+                    modifier = Modifier.padding(start = 12.dp).widthIn(max = 180.dp),
                 )
             }
-            when {
-                entry.selected -> Icon(LumenIcon.CHECK, size = 18.dp, modifier = Modifier.padding(start = 10.dp))
-                entry.submenu -> Text("›", fontSize = 20.sp, color = LocalContentColor.current.copy(alpha = 0.65f), modifier = Modifier.padding(start = 10.dp))
+            // The mark's place is always kept: the values line up in one column.
+            Box(Modifier.padding(start = 10.dp).width(18.dp), contentAlignment = Alignment.Center) {
+                when {
+                    entry.selected -> Icon(LumenIcon.CHECK, size = 18.dp)
+                    entry.submenu -> Text("›", fontSize = 20.sp, color = LocalContentColor.current.copy(alpha = 0.65f))
+                }
             }
         }
     }

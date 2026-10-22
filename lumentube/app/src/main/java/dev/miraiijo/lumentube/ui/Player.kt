@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -58,6 +59,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -104,6 +106,12 @@ private fun seekSpeed(repeatCount: Int) = when {
 }
 /** Same gap between every button of the controls row (a thumb's count sits inside its own slot). */
 private val BUTTON_GAP = 10.dp
+/** Room kept on the right of the title: the clock, or the open panel (settings: 400 dp). */
+private val CLOCK_CLEARANCE = 120.dp
+private val PANEL_CLEARANCE = 440.dp
+/** The progress bar's handle when focused, and its halo. */
+private val HANDLE = 14.dp
+private val HANDLE_HALO = 3.dp
 private const val CONTROLS_HIDE_MS = 4_000L
 private const val SAVE_EVERY_MS = 30_000L
 private const val SKIP_NOTICE_MS = 3_000L
@@ -123,6 +131,9 @@ private fun formatsKind(info: com.liskovsoft.mediaserviceinterfaces.data.MediaIt
 private val PREVIEW_WIDTH = 256.dp
 /** Subtitle height, as a share of the video's height (ExoPlayer's default is 0.0533). */
 private const val SUBTITLE_SIZE = 0.042f
+/** Subtitles' bottom margin (screen fraction): ExoPlayer's default, and above the seek line. */
+private const val SUBTITLE_BOTTOM = 0.08f
+private const val SUBTITLE_RAISED = 0.34f
 
 /**
  * Full-screen player, laid out like Nuvio's: title and channel bottom left, a thin progress bar,
@@ -359,7 +370,12 @@ fun PlayerScreen(
                         !prefs.autoplay || next == null -> onExit()
                         // Small window: no card to show, the next one starts right away.
                         isMini -> playNext(next)
-                        else -> upNext = next
+                        // Alone on screen: no controls under the card, nothing for the focus to escape to.
+                        else -> {
+                            controls = false
+                            menu = null
+                            upNext = next
+                        }
                     }
                 }
             }
@@ -490,7 +506,8 @@ fun PlayerScreen(
             }
         }
     }
-    LaunchedEffect(controls, minimized) {
+    // error == null as a key: after "Réessayer" the controls come back with play / pause focused.
+    LaunchedEffect(controls, minimized, error == null) {
         withFrameNanos { }
         // The comments panel keeps its own focus.
         if (upNext != null || minimized || commentsOpen) return@LaunchedEffect
@@ -700,6 +717,9 @@ fun PlayerScreen(
             update = {
                 it.player = player.exo
                 it.resizeMode = resizeModeOf(pictureFormat)
+                // Never under the buttons: hidden with the controls, raised above the time line.
+                it.subtitleView?.visibility = if (controls && !minimized && error == null) android.view.View.INVISIBLE else android.view.View.VISIBLE
+                it.subtitleView?.setBottomPaddingFraction(if (seekLineShown && !controls) SUBTITLE_RAISED else SUBTITLE_BOTTOM)
             },
             modifier = Modifier.fillMaxSize(),
         )
@@ -716,10 +736,13 @@ fun PlayerScreen(
         if (started && buffering && error == null) LoadingDots(Modifier.align(Alignment.Center))
 
         AnimatedVisibility(visible = controls && error == null && !minimized, enter = fadeIn(tween(150)), exit = fadeOut(tween(250))) {
-            val chapter = chapters.lastOrNull { it.startMs <= (preview ?: position) }?.title
+            val chapterIndex = chapters.indexOfLast { it.startMs <= (preview ?: position) }
+            val chapter = chapters.getOrNull(chapterIndex)?.title?.takeIf { it.isNotBlank() }?.let { "Chapitre ${chapterIndex + 1} : $it" }
             Controls(
                 title = shownTitle,
-                channel = listOfNotNull(shownChannel.takeIf { it.isNotBlank() }, chapter?.takeIf { it.isNotBlank() }).joinToString(" · "),
+                channel = listOfNotNull(shownChannel.takeIf { it.isNotBlank() }, chapter).joinToString(" · "),
+                panelOpen = menu != null,
+                openedFrom = if (menu != null) menuRoot else null,
                 isPlaying = isPlaying || (player.exo.playWhenReady && buffering),
                 live = live,
                 position = preview ?: position,
@@ -793,7 +816,8 @@ fun PlayerScreen(
             visible = skipNotice != null && !minimized,
             enter = fadeIn(),
             exit = fadeOut(tween(400)),
-            modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = Dimens.Gutter),
+            // Bottom left, above the buttons or the time line: clear of the title and the stats (top).
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = Dimens.Gutter, bottom = if (controls) 136.dp else if (seekLineShown) 200.dp else 28.dp),
         ) {
             Text(
                 skipNotice.orEmpty(),
@@ -864,7 +888,8 @@ fun PlayerScreen(
                 streamInfo = streamInfo,
                 formatsMs = formatsMs,
                 firstFrameMs = firstFrameMs,
-                modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = Dimens.Gutter),
+                // Below the title when the controls show it.
+                modifier = Modifier.align(Alignment.TopStart).padding(top = if (controls) 136.dp else 28.dp, start = Dimens.Gutter),
             )
         }
 
@@ -896,7 +921,9 @@ fun PlayerScreen(
                 ),
             ) {
                 Box(Modifier.fillMaxSize()) {
-                    if (error == null && miniFocused) {
+                    // Always shown in the small window (the focus is usually on "Lecture en cours",
+                    // where OK does the same).
+                    if (error == null) {
                         Text(
                             "OK : plein écran",
                             fontSize = 12.sp,
@@ -916,16 +943,18 @@ fun PlayerScreen(
         if (error != null && minimized) {
             Text("Lecture impossible", fontSize = 14.sp, color = Color.White, modifier = Modifier.align(Alignment.Center))
         } else if (error != null) {
+            // A veil over the video, the box on it (its width capped: a long message wraps).
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)))
             Column(
-                Modifier.align(Alignment.Center).background(Palette.Panel.copy(alpha = 0.95f), DialogShape).padding(28.dp),
+                Modifier.align(Alignment.Center).widthIn(max = 560.dp).background(Palette.Panel.copy(alpha = 0.95f), DialogShape).padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Text("Lecture impossible", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                Text(error.orEmpty(), fontSize = 15.sp, color = Palette.TextSecondary)
+                Text(error.orEmpty(), fontSize = 15.sp, color = Palette.TextSecondary, textAlign = TextAlign.Center)
                 val retry = remember { FocusRequester() }
                 Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap)) {
-                    LumenButton("Réessayer", icon = LumenIcon.REFRESH, modifier = Modifier.focusRequester(retry)) {
+                    LumenButton("Réessayer", modifier = Modifier.focusRequester(retry)) {
                         retried = false
                         YouTubeServiceManager.instance().switchNextClientNow()
                         loadTick++
@@ -945,6 +974,10 @@ fun PlayerScreen(
 private fun Controls(
     title: String,
     channel: String,
+    /** A panel (settings, chapters, about) is open on the right: the title stops before it. */
+    panelOpen: Boolean,
+    /** The level the open panel was opened on: its button stays white (null: no panel). */
+    openedFrom: PlayerMenu?,
     isPlaying: Boolean,
     live: Boolean,
     position: Long,
@@ -963,7 +996,7 @@ private fun Controls(
     subtitlesButton: FocusRequester,
     onSubtitles: () -> Unit,
     onSettings: () -> Unit,
-    /** Signed in: the thumbs can be pressed; otherwise only their counts are shown. */
+    /** Signed in: the thumbs can be pressed; otherwise only their counts are shown (top). */
     canRate: Boolean,
     likes: String?,
     dislikes: String?,
@@ -984,20 +1017,64 @@ private fun Controls(
     previewing: Boolean,
     onMinimize: () -> Unit,
 ) {
+    val likeButton = remember { FocusRequester() }
+    val dislikeButton = remember { FocusRequester() }
+    val pipButton = remember { FocusRequester() }
+    /** The last button focused: Down from the progress bar goes back to it (play / pause first). */
+    var lastButton by remember { mutableStateOf(playPause) }
+    // A button can go away (another video arrives, without chapters or comments…): Down from the
+    // bar must not aim at a requester no longer attached.
+    LaunchedEffect(hasSubtitles, hasChapters, canRate, hasComments, hasInfo) { lastButton = playPause }
+    fun Modifier.button(requester: FocusRequester) = focusRequester(requester).onFocusChanged { if (it.isFocused) lastButton = requester }
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().height(150.dp).align(Alignment.TopCenter).background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent))))
         Box(Modifier.fillMaxWidth().height(220.dp).align(Alignment.BottomCenter).background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)))))
         Clock(Modifier.align(Alignment.TopEnd).padding(top = 28.dp, end = Dimens.Gutter))
 
+        // Top left (the redesign): the whole title (2 lines at most), then the channel and the
+        // chapter, then the thumbs' counts. It stops before the clock, or before the open panel.
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopStart)
+                .padding(start = Dimens.Gutter, top = 26.dp, end = if (panelOpen) PANEL_CLEARANCE else CLOCK_CLEARANCE),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(title, fontSize = 18.sp, lineHeight = 23.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (channel.isNotBlank()) {
+                    Text(channel, fontSize = 13.sp, color = Color.White.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                }
+                if (live) {
+                    Text(
+                        "EN DIRECT",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(start = 12.dp).background(Palette.Live, RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 2.dp),
+                    )
+                }
+                if (likes != null || dislikes != null) {
+                    val countColor = Color.White.copy(alpha = 0.72f)
+                    Row(Modifier.padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (likes != null) {
+                            Icon(if (liked) LumenIcon.THUMB_UP else LumenIcon.THUMB_UP_OUTLINE, size = 13.dp, color = countColor)
+                            Text(likes, fontSize = 13.sp, color = countColor, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 5.dp))
+                        }
+                        if (likes != null && dislikes != null) Spacer(Modifier.width(12.dp))
+                        if (dislikes != null) {
+                            Icon(if (disliked) LumenIcon.THUMB_DOWN else LumenIcon.THUMB_DOWN_OUTLINE, size = 13.dp, color = countColor)
+                            Text(dislikes, fontSize = 13.sp, color = countColor, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 5.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        // Bottom: the progress bar, the buttons and the time, nothing else.
         Column(
             Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(horizontal = Dimens.Gutter, vertical = 28.dp),
         ) {
-            Text(title, fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, letterSpacing = DisplayTracking)
-            if (channel.isNotBlank()) Text(channel, fontSize = 15.sp, color = Color.White.copy(alpha = 0.9f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
-            if (live) {
-                Text("EN DIRECT", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(top = 8.dp).background(Palette.Danger, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 2.dp))
-            }
-            Spacer(Modifier.height(18.dp))
             if (!live || duration > 0) {
                 // Seek preview: the picture at the aimed position, above the bar.
                 if (previewing && storyboard != null && duration > 0) {
@@ -1009,30 +1086,28 @@ private fun Controls(
                             Text(formatTime(position), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Color.White, modifier = Modifier.padding(top = 6.dp))
                         }
                     }
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(6.dp))
                 }
-                ProgressBar(position, duration, buffered, progress, down = playPause, onPreview = onPreview, onCommit = onCommit, onClick = onPlayPause, onUp = onHide, segments = segments, chapters = chapters)
-                Spacer(Modifier.height(14.dp))
+                ProgressBar(position, duration, buffered, progress, down = lastButton, onPreview = onPreview, onCommit = onCommit, onClick = onPlayPause, onUp = onHide, segments = segments, chapters = chapters)
+                Spacer(Modifier.height(8.dp))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(horizontalArrangement = Arrangement.spacedBy(BUTTON_GAP), verticalAlignment = Alignment.CenterVertically) {
-                    // Ordered by use, most used first, one even gap between buttons:
+                    // Ordered by use, most used first, one even gap between identical round buttons:
                     // playback (play, subtitles, chapters) · the video (thumbs, comments, about) ·
                     // window and settings (always last). ±10 s: Left / Right, or the progress bar.
-                    ControlButton(if (isPlaying) LumenIcon.PAUSE else LumenIcon.PLAY, Modifier.focusRequester(playPause), up = progress, onDown = onHide, onClick = onPlayPause)
-                    if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, Modifier.focusRequester(subtitlesButton), up = progress, onDown = onHide, onClick = onSubtitles)
-                    if (hasChapters) ControlButton(LumenIcon.PLAYLIST, Modifier.focusRequester(chaptersButton), up = progress, onDown = onHide, onClick = onChapters)
-                    if (canRate || likes != null) {
-                        RateButton(if (liked) LumenIcon.THUMB_UP else LumenIcon.THUMB_UP_OUTLINE, likes, canRate, liked, up = progress, onDown = onHide, onClick = onLike)
+                    ControlButton(if (isPlaying) LumenIcon.PAUSE else LumenIcon.PLAY, Modifier.button(playPause), up = progress, onDown = onHide, onClick = onPlayPause)
+                    if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, Modifier.button(subtitlesButton), up = progress, onDown = onHide, highlighted = openedFrom == PlayerMenu.SUBTITLES, onClick = onSubtitles)
+                    if (hasChapters) ControlButton(LumenIcon.CHAPTERS, Modifier.button(chaptersButton), up = progress, onDown = onHide, highlighted = openedFrom == PlayerMenu.CHAPTERS, onClick = onChapters)
+                    if (canRate) {
+                        ControlButton(if (liked) LumenIcon.THUMB_UP else LumenIcon.THUMB_UP_OUTLINE, Modifier.button(likeButton), up = progress, onDown = onHide, active = liked, onClick = onLike)
+                        ControlButton(if (disliked) LumenIcon.THUMB_DOWN else LumenIcon.THUMB_DOWN_OUTLINE, Modifier.button(dislikeButton), up = progress, onDown = onHide, active = disliked, onClick = onDislike)
                     }
-                    if (canRate || dislikes != null) {
-                        RateButton(if (disliked) LumenIcon.THUMB_DOWN else LumenIcon.THUMB_DOWN_OUTLINE, dislikes, canRate, disliked, up = progress, onDown = onHide, onClick = onDislike)
-                    }
-                    if (hasComments) ControlButton(LumenIcon.COMMENT, Modifier.focusRequester(commentsButton), up = progress, onDown = onHide, onClick = onComments)
-                    if (hasInfo) ControlButton(LumenIcon.INFO, Modifier.focusRequester(infoButton), up = progress, onDown = onHide, onClick = onInfo)
-                    // Small window in a corner: keep watching while browsing ("Lecture en cours" in the menu brings it back).
-                    ControlButton(LumenIcon.PIP, up = progress, onDown = onHide, onClick = onMinimize)
-                    ControlButton(LumenIcon.SETTINGS, Modifier.focusRequester(settingsButton), up = progress, onDown = onHide, onClick = onSettings)
+                    if (hasComments) ControlButton(LumenIcon.COMMENT, Modifier.button(commentsButton), up = progress, onDown = onHide, onClick = onComments)
+                    if (hasInfo) ControlButton(LumenIcon.INFO, Modifier.button(infoButton), up = progress, onDown = onHide, highlighted = openedFrom == PlayerMenu.INFO, onClick = onInfo)
+                    // Small window in a corner: keep watching while browsing ("Lecture en cours" brings it back).
+                    ControlButton(LumenIcon.PIP, Modifier.button(pipButton), up = progress, onDown = onHide, onClick = onMinimize)
+                    ControlButton(LumenIcon.SETTINGS, Modifier.button(settingsButton), up = progress, onDown = onHide, highlighted = openedFrom == PlayerMenu.MAIN, onClick = onSettings)
                 }
                 Text(
                     if (live && duration <= 0) "En direct" else "${formatTime(position)} / ${formatTime(duration)}",
@@ -1044,33 +1119,7 @@ private fun Controls(
     }
 }
 
-/**
- * Thumb: the same round button as the others (white circle when focused, light fill when active),
- * its count beside it, outside the circle. Not signed in: the icon and count alone, not focusable.
- */
-@Composable
-private fun RateButton(
-    icon: LumenIcon,
-    count: String?,
-    enabled: Boolean,
-    active: Boolean,
-    up: FocusRequester,
-    onDown: () -> Unit,
-    onClick: () -> Unit,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        if (enabled) {
-            ControlButton(icon, up = up, onDown = onDown, active = active, onClick = onClick)
-        } else {
-            Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) { Icon(icon, size = 24.dp, color = Color.White) }
-        }
-        if (count != null) {
-            Text(count, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = BUTTON_GAP))
-        }
-    }
-}
-
-/** Nuvio's round icon button: transparent, white with a black icon when focused. */
+/** Nuvio's round icon button: translucent, white with a black icon when focused. */
 @Composable
 private fun ControlButton(
     icon: LumenIcon,
@@ -1079,6 +1128,8 @@ private fun ControlButton(
     onDown: (() -> Unit)? = null,
     /** On (liked…): a light fill when not focused. */
     active: Boolean = false,
+    /** Its panel is open (the focus is in the panel): drawn as if focused. */
+    highlighted: Boolean = false,
     onClick: () -> Unit,
 ) {
     IconButton(
@@ -1096,9 +1147,9 @@ private fun ControlButton(
                 }
             },
         colors = IconButtonDefaults.colors(
-            containerColor = if (active) Color.White.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.12f),
+            containerColor = if (highlighted) Color.White else if (active) Color.White.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.12f),
             focusedContainerColor = Color.White,
-            contentColor = Color.White,
+            contentColor = if (highlighted) Color.Black else Color.White,
             focusedContentColor = Color.Black,
         ),
         shape = IconButtonDefaults.shape(shape = CircleShape),
@@ -1107,7 +1158,7 @@ private fun ControlButton(
     }
 }
 
-/** Thin bar (buffered + played), thicker when focused: Left/Right preview a seek, released = seek. */
+/** Thin bar (buffered + played), thicker with a round handle when focused: Left/Right preview a seek, released = seek. */
 @Composable
 private fun ProgressBar(
     position: Long,
@@ -1126,11 +1177,12 @@ private fun ProgressBar(
     val played = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
     val loaded = if (duration > 0) (buffered.toFloat() / duration).coerceIn(0f, 1f) else 0f
     val shownPlayed by animateFloatAsState(played, tween(100), label = "played")
-    val height by animateFloatAsState(if (focused) 8f else 4f, tween(150), label = "bar-height")
+    val height by animateFloatAsState(if (focused) 7f else 4f, tween(150), label = "bar-height")
     Box(
         Modifier
             .fillMaxWidth()
-            .height(16.dp)
+            // Tall enough for the handle and its halo (20 dp), drawn outside the clipped bar.
+            .height(20.dp)
             .focusRequester(requester)
             .focusProperties { this.down = down }
             .onFocusChanged { focused = it.isFocused }
@@ -1161,11 +1213,11 @@ private fun ProgressBar(
             Box(Modifier.fillMaxWidth(shownPlayed).fillMaxHeight().background(Color.White))
             if (duration > 0 && (segments.isNotEmpty() || chapters.size > 1)) {
                 Canvas(Modifier.matchParentSize()) {
-                    // SponsorBlock segments in amber, chapter starts as small gaps.
+                    // SponsorBlock segments in yellow, chapter starts as small gaps.
                     segments.forEach { segment ->
                         val start = size.width * (segment.startMs.toFloat() / duration).coerceIn(0f, 1f)
                         val end = size.width * (segment.endMs.toFloat() / duration).coerceIn(0f, 1f)
-                        drawRect(Palette.Warning, topLeft = Offset(start, 0f), size = Size(end - start, size.height))
+                        drawRect(Palette.Sponsor, topLeft = Offset(start, 0f), size = Size(end - start, size.height))
                     }
                     val gap = 3.dp.toPx()
                     chapters.drop(1).forEach { chapter ->
@@ -1173,6 +1225,14 @@ private fun ProgressBar(
                         drawRect(Color.Black, topLeft = Offset(x - gap / 2, 0f), size = Size(gap, size.height))
                     }
                 }
+            }
+        }
+        if (focused) {
+            // The handle at the played position: a white dot and a soft halo, outside the clip.
+            Canvas(Modifier.matchParentSize()) {
+                val center = Offset(size.width * shownPlayed, size.height / 2)
+                drawCircle(Color.White.copy(alpha = 0.3f), radius = (HANDLE / 2 + HANDLE_HALO).toPx(), center = center)
+                drawCircle(Color.White, radius = (HANDLE / 2).toPx(), center = center)
             }
         }
     }
@@ -1187,7 +1247,7 @@ private fun Clock(modifier: Modifier) {
             delay(10_000)
         }
     }
-    Text(now.format(DateTimeFormatter.ofPattern("HH:mm")), fontSize = 18.sp, fontWeight = FontWeight.Medium, color = Color.White, modifier = modifier)
+    Text(now.format(DateTimeFormatter.ofPattern("HH:mm")), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White.copy(alpha = 0.92f), modifier = modifier)
 }
 
 /** Three pulsing dots (loading). */
@@ -1200,7 +1260,7 @@ private fun LoadingDots(modifier: Modifier = Modifier) {
             phase = (phase + 1) % 3
         }
     }
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         repeat(3) { i ->
             Box(Modifier.size(10.dp).clip(CircleShape).background(Color.White.copy(alpha = if (i == phase) 1f else 0.35f)))
         }
@@ -1225,18 +1285,23 @@ private fun UpNextCard(next: Video, onPlay: () -> Unit, onCancel: () -> Unit, mo
     }
     // Compact, bottom right: the end of the video stays visible around it.
     Row(
-        modifier.background(Palette.Panel.copy(alpha = 0.92f), DialogShape).padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier
+            // The focus stays on the card ("Lire" / "Annuler") until it goes.
+            .focusProperties { exit = { FocusRequester.Cancel } }
+            .focusGroup()
+            .background(Palette.Panel.copy(alpha = 0.95f), DialogShape)
+            .padding(14.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(144.dp).aspectRatio(16f / 9f).clip(ControlShape).background(Palette.Tile)) {
             Thumbnail(next.videoId, next.thumbnail, Modifier.fillMaxSize(), small = true)
         }
-        Column(Modifier.width(210.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.width(210.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("À suivre · $seconds s", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary)
-            Text(next.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp, color = Color.White)
+            Text(next.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp, color = Palette.TextPrimary)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                LumenButton("Lire", icon = LumenIcon.PLAY, modifier = Modifier.focusRequester(playNow), onClick = onPlay)
+                LumenButton("Lire", modifier = Modifier.focusRequester(playNow), onClick = onPlay)
                 LumenButton("Annuler", onClick = onCancel)
             }
         }
@@ -1262,8 +1327,9 @@ private fun StoryboardFrame(storyboard: MediaItemStoryboard, positionMs: Long, m
     LaunchedEffect(storyboard, group) {
         sheet = sheets.get(group, storyboard.getGroupUrl(group)) ?: sheet
     }
-    val image = sheet ?: return
+    // Always laid out (black until the sheet arrives): the time and title don't jump when it does.
     Canvas(modifier) {
+        val image = sheet ?: return@Canvas
         val tileW = image.width / size.colCount
         val tileH = image.height / size.rowCount
         if (tileW <= 0 || tileH <= 0) return@Canvas
@@ -1306,7 +1372,6 @@ private fun resizeModeOf(pictureFormat: Int) = when (pictureFormat) {
 @Composable
 private fun SeekLine(position: Long, duration: Long, buffered: Long, storyboard: MediaItemStoryboard?) {
     val played = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
-    val loaded = if (duration > 0) (buffered.toFloat() / duration).coerceIn(0f, 1f) else 0f
     Box(
         Modifier
             .fillMaxWidth()
@@ -1320,14 +1385,14 @@ private fun SeekLine(position: Long, duration: Long, buffered: Long, storyboard:
                     val x = (maxWidth * played - PREVIEW_WIDTH / 2).coerceIn(0.dp, maxWidth - PREVIEW_WIDTH)
                     StoryboardFrame(storyboard, position, Modifier.offset(x = x).width(PREVIEW_WIDTH).aspectRatio(16f / 9f).clip(ControlShape).background(Color.Black))
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
             }
-            Text("${formatTime(position)} / ${formatTime(duration)}", fontSize = 15.sp, color = Color.White.copy(alpha = 0.9f), modifier = Modifier.align(Alignment.End))
-            Spacer(Modifier.height(10.dp))
-            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.22f))) {
-                Box(Modifier.fillMaxWidth(loaded).fillMaxHeight().background(Color.White.copy(alpha = 0.35f)))
+            // The bar, then the time under it on the right (the redesign).
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.3f))) {
                 Box(Modifier.fillMaxWidth(played).fillMaxHeight().background(Color.White))
             }
+            Spacer(Modifier.height(7.dp))
+            Text("${formatTime(position)} / ${formatTime(duration)}", fontSize = 15.sp, color = Color.White.copy(alpha = 0.9f), modifier = Modifier.align(Alignment.End))
         }
     }
 }

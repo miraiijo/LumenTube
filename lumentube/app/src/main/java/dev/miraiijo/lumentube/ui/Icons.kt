@@ -30,6 +30,8 @@ enum class LumenIcon {
     PAUSE, PIP, SUBTITLES, MUSIC, NEWS, LIVE, HISTORY, PLAYLIST, SUBSCRIPTIONS, REWIND, FORWARD, USER, THUMB_UP, TROPHY,
     // Thumbs: filled = active (liked / disliked), outline otherwise; comments bubble.
     THUMB_UP_OUTLINE, THUMB_DOWN, THUMB_DOWN_OUTLINE, COMMENT,
+    // Chapters: three lines (the last shorter), no play triangle.
+    CHAPTERS,
     // Avatar glyphs
     MOON, BOLT, SMILE, CAT, FLAME, LEAF, GHOST, CROWN,
 }
@@ -292,6 +294,9 @@ private fun DrawScope.drawIcon(icon: LumenIcon, color: Color) {
         // The same thumb upside down.
         LumenIcon.THUMB_DOWN -> scale(1f, -1f) { thumb(filled = true) }
         LumenIcon.THUMB_DOWN_OUTLINE -> scale(1f, -1f) { thumb(filled = false) }
+        LumenIcon.CHAPTERS -> {
+            line(4f, 6f, 20f, 6f); line(4f, 12f, 20f, 12f); line(4f, 18f, 14f, 18f)
+        }
         LumenIcon.COMMENT -> {
             drawRoundRect(color, p(3.5f, 4f), Size(17f * u, 12f * u), CornerRadius(3f * u), style = stroke)
             polygon(listOf(p(7.5f, 15.5f), p(7.5f, 20.5f), p(12.5f, 15.5f)), filled = true)

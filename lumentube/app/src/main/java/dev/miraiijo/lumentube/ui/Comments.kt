@@ -159,7 +159,7 @@ fun CommentsPanel(commentsKey: String, modifier: Modifier = Modifier) {
 
     Column(
         modifier
-            .fillMaxWidth(PANEL_WIDTH)
+            .width(PANEL_WIDTH)
             .fillMaxHeight()
             .background(Palette.Panel.copy(alpha = 0.97f))
             // The focus stays in the panel until Back closes it.
@@ -239,11 +239,15 @@ private fun CommentRow(comment: Comment, reply: Boolean, expanded: Boolean, modi
     ) {
         Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             val avatarSize = if (reply) 28.dp else 36.dp
-            Box(Modifier.size(avatarSize).clip(CircleShape).background(Palette.ControlIdle), contentAlignment = Alignment.Center) {
+            val (from, to) = AVATAR_GRADIENTS[Math.floorMod(comment.author.hashCode(), AVATAR_GRADIENTS.size)]
+            Box(
+                Modifier.size(avatarSize).clip(CircleShape).background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(from, to))),
+                contentAlignment = Alignment.Center,
+            ) {
                 if (comment.avatar != null) {
                     GlideImage(model = avatarUrl(comment.avatar), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 } else {
-                    Text(comment.author.removePrefix("@").take(1).uppercase(), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(comment.author.removePrefix("@").take(1).uppercase(), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -293,5 +297,14 @@ private fun PanelButton(label: String, modifier: Modifier, onClick: () -> Unit) 
     }
 }
 
-private const val PANEL_WIDTH = 0.4f
+/** A bit narrower than the settings panel (the redesign): more of the video stays visible. */
+private val PANEL_WIDTH = 384.dp
+/** No photo: the initial in white on one of these gradients (picked from the author). */
+private val AVATAR_GRADIENTS = listOf(
+    Color(0xFFF58A6B) to Color(0xFFE0466F),
+    Color(0xFFF2B45A) to Color(0xFFD9772E),
+    Color(0xFF7C7CF5) to Color(0xFF3F64F0),
+    Color(0xFF6CCB8E) to Color(0xFF2F9E73),
+    Color(0xFFB08CF0) to Color(0xFF7A4FD6),
+)
 private val REPLY_INDENT = 40.dp

@@ -177,6 +177,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun reload() = load(_state.value.section)
 
+    /** The playlist (or other card) opened last: "Réessayer" on its page opens it again. */
+    private var openedFrom: Video? = null
+
+    /** "Réessayer" on a page: the opened channel / playlist again, else the section. */
+    fun retry() {
+        val opened = _state.value.opened ?: return reload()
+        val channel = opened.channel
+        when {
+            channel != null -> openChannel(channel.id, channel.name, channel.avatar)
+            openedFrom != null -> select(openedFrom!!)
+            else -> reload()
+        }
+    }
+
     private fun load(section: Section) {
         loads[section]?.cancel()
         _state.update { it.copy(pages = it.pages + (section to Page(rows = it.pages[section]?.rows.orEmpty(), loading = true))) }
@@ -197,7 +211,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 when {
                     rows.isNotEmpty() -> Page(rows, loading = false)
                     failure != null -> Page(loading = false, error = failure.userMessage())
-                    else -> Page(loading = false, error = "Rien à afficher ici pour l'instant.")
+                    else -> Page(loading = false, error = "Rien à afficher ici pour l’instant.")
                 },
             )
         }
@@ -306,6 +320,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             openChannel(channelId, video.title, video.thumbnail)
             return
         }
+        openedFrom = video
         _state.update { it.copy(opened = Opened(video.title, Page())) }
         viewModelScope.launch {
             val page = runCatching { YouTube.open(video) }.fold(
@@ -383,7 +398,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             if (!YouTube.setSubscribed(channel.id, target)) {
                 updateChannel(channel.id) { it.copy(subscribed = !target) }
-                showNotice("Impossible de modifier l'abonnement.")
+                showNotice("Impossible de modifier l’abonnement.")
             }
         }
     }
@@ -397,7 +412,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun cardWatchLater(video: Video) {
         closeCardMenu()
         val id = video.videoId ?: return
-        viewModelScope.launch { showNotice(if (YouTube.watchLater(id)) "Ajoutée à « À regarder plus tard »." else "Impossible d'ajouter la vidéo.") }
+        viewModelScope.launch { showNotice(if (YouTube.watchLater(id)) "Ajoutée à « À regarder plus tard »." else "Impossible d’ajouter la vidéo.") }
     }
 
     fun cardOpenChannel(video: Video) {
@@ -410,7 +425,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         closeCardMenu()
         viewModelScope.launch {
             if (!YouTube.notInterested(video, channel)) {
-                showNotice("YouTube n'a pas pris en compte la demande.")
+                showNotice("YouTube n’a pas pris en compte la demande.")
                 return@launch
             }
             val channelId = video.raw.channelId
@@ -452,7 +467,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** "Lier un téléphone": the TV code; listening starts so the phone finds the TV right away. */
     fun openPairing() {
-        _state.update { it.copy(pairing = Pairing(), settingsOpen = false) }
+        // Over Réglages (they stay behind it, on Téléphone).
+        _state.update { it.copy(pairing = Pairing()) }
         if (!_state.value.settings.remote) updateSettings(_state.value.settings.copy(remote = true))
         viewModelScope.launch {
             val code = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {

@@ -65,12 +65,12 @@ fun CardMenuDialog(
                     Thumbnail(video.videoId, video.thumbnail, Modifier.matchParentSize(), custom = video.customThumbnail, small = true)
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(video.title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 20.sp)
+                    Text(video.title, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 20.sp)
                     if (video.channel.isNotBlank()) Text(video.channel, fontSize = 13.sp, color = Palette.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             DialogRow("Lire", icon = LumenIcon.PLAY, modifier = Modifier.focusRequester(first), onClick = onPlay)
-            if (signedIn && video.videoId != null) DialogRow("À regarder plus tard", icon = LumenIcon.PLAYLIST, onClick = onWatchLater)
+            if (signedIn && video.videoId != null) DialogRow("À regarder plus tard", icon = LumenIcon.HISTORY, onClick = onWatchLater)
             if (video.raw.channelId != null) DialogRow("Ouvrir la chaîne", icon = LumenIcon.USER, onClick = onChannel)
             if (signedIn && canGiveFeedback) {
                 DialogRow("Pas intéressé", icon = LumenIcon.EYE_OFF) { onNotInterested(false) }
@@ -103,7 +103,7 @@ fun PairingDialog(pairing: Pairing, onRetry: () -> Unit, onDismiss: () -> Unit) 
         ) {
             Text("Lier un téléphone", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
             Text(
-                "Dans l'app YouTube du téléphone : photo de profil › Paramètres › Regarder sur la TV › Saisir le code TV, puis tape ce code :",
+                "Dans l’app YouTube du téléphone : photo de profil › Paramètres › Regarder sur la TV › Saisir le code TV, puis tape ce code :",
                 color = Palette.TextSecondary,
                 fontSize = 15.sp,
                 lineHeight = 21.sp,
@@ -119,7 +119,6 @@ fun PairingDialog(pairing: Pairing, onRetry: () -> Unit, onDismiss: () -> Unit) 
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
             )
-            Spacer(Modifier.height(4.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap)) {
                 if (pairing.error != null) LumenButton("Réessayer", icon = LumenIcon.REFRESH, onClick = onRetry)
                 LumenButton("Fermer", modifier = Modifier.focusRequester(button), onClick = onDismiss)

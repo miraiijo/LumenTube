@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -105,7 +106,14 @@ fun TopHeader(
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (minimized) {
-                    LumenButton("Lecture en cours", modifier = Modifier.focusRequester(playerButton), icon = LumenIcon.PIP, onClick = onRestorePlayer)
+                    // White by day with a light shadow, like the round buttons (translucent at night).
+                    LumenButton(
+                        "Lecture en cours",
+                        modifier = Modifier.dayShadow().focusRequester(playerButton),
+                        icon = LumenIcon.PIP,
+                        containerColor = if (Palette.colors.isLight) Color.White else Palette.ControlIdle,
+                        onClick = onRestorePlayer,
+                    )
                 }
                 HeaderClock()
             }
@@ -142,7 +150,7 @@ private fun Tab(label: String, current: Boolean, modifier: Modifier, onClick: ()
 private fun RoundButton(onClick: () -> Unit, filled: Boolean = true, content: @Composable () -> Unit) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.size(HEADER_BUTTON),
+        modifier = Modifier.then(if (filled) Modifier.dayShadow() else Modifier).size(HEADER_BUTTON),
         shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = FocusScale.Avatar),
         colors = ClickableSurfaceDefaults.colors(
@@ -181,8 +189,15 @@ private fun HeaderClock() {
 fun Modifier.lumenBackground(): Modifier = drawBehind {
     val colors = Palette.colors
     drawRect(colors.background)
-    drawRect(Brush.radialGradient(listOf(colors.glowWarm, Color.Transparent), center = Offset(size.width * 0.78f, 0f), radius = size.width * 0.45f))
-    drawRect(Brush.radialGradient(listOf(colors.glowCool, Color.Transparent), center = Offset(0f, size.height), radius = size.width * 0.45f))
+    // Lights fading out at a quarter of the width (the redesign's 860 px glow, transparent at 70 %).
+    drawRect(Brush.radialGradient(listOf(colors.glowWarm, Color.Transparent), center = Offset(size.width * 0.78f, 0f), radius = size.width * GLOW_RADIUS))
+    drawRect(Brush.radialGradient(listOf(colors.glowCool, Color.Transparent), center = Offset(0f, size.height), radius = size.width * GLOW_RADIUS))
 }
 
 private val HEADER_BUTTON = 38.dp
+private const val GLOW_RADIUS = 0.25f
+
+/** By day, the header's white buttons get a soft shadow (none at night, on the dark page). */
+@Composable
+private fun Modifier.dayShadow(): Modifier =
+    if (Palette.colors.isLight) shadow(10.dp, CircleShape, clip = false, ambientColor = Color(0x14121317), spotColor = Color(0x14121317)) else this

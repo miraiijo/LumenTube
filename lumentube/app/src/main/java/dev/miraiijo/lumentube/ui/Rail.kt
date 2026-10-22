@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -79,15 +80,31 @@ private fun Avatar(url: String?, name: String?) = AvatarPicture(url, name, 32.dp
 /** Round account picture (sharp: asked in 256 px), else the name's initial. */
 @Composable
 internal fun AvatarPicture(url: String?, name: String?, size: androidx.compose.ui.unit.Dp, initialSize: androidx.compose.ui.unit.TextUnit) {
-    Box(Modifier.size(size).clip(CircleShape).background(Palette.ControlIdle), contentAlignment = Alignment.Center) {
+    // No picture: the name's initial, white and bold on a colored gradient (the redesign's).
+    val back = if (url == null && name != null) Modifier.background(initialGradient(name)) else Modifier.background(Palette.ControlIdle)
+    Box(Modifier.size(size).clip(CircleShape).then(back), contentAlignment = Alignment.Center) {
         if (url != null) {
             GlideImage(model = avatarUrl(url), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         } else if (name != null) {
-            Text(name.take(1).uppercase(), fontSize = initialSize, fontWeight = FontWeight.SemiBold)
+            Text(name.take(1).uppercase(), fontSize = initialSize, fontWeight = FontWeight.Bold, color = Color.White)
         } else {
             Icon(LumenIcon.PLAY, size = size / 2, color = Palette.Danger)
         }
     }
+}
+
+/** The gradients of initials (the redesign's), one per name, always the same for a name. */
+private val INITIAL_GRADIENTS = listOf(
+    Color(0xFFF58A6B) to Color(0xFFE0466F),
+    Color(0xFFF2B45A) to Color(0xFFD9772E),
+    Color(0xFF7C7CF5) to Color(0xFF3F64F0),
+    Color(0xFF6CCB8E) to Color(0xFF2F9E73),
+    Color(0xFFB08CF0) to Color(0xFF7A4FD6),
+)
+
+internal fun initialGradient(name: String): androidx.compose.ui.graphics.Brush {
+    val (from, to) = INITIAL_GRADIENTS[Math.floorMod(name.hashCode(), INITIAL_GRADIENTS.size)]
+    return androidx.compose.ui.graphics.Brush.linearGradient(listOf(from, to))
 }
 
 /**
@@ -118,7 +135,7 @@ fun SignInDialog(code: String?, error: String?, onRetry: () -> Unit, onDismiss: 
                     code == null -> Text("Code en cours…", color = Palette.TextSecondary, fontSize = 28.sp)
                     else -> Text(code, fontSize = 40.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
                 }
-                Text("LumenTube reste connecté ensuite. Tu peux lier plusieurs comptes et choisir lequel à l'ouverture.", color = Palette.TextSecondary, fontSize = 13.sp)
+                Text("LumenTube reste connecté ensuite. Tu peux lier plusieurs comptes et choisir lequel à l’ouverture.", color = Palette.TextSecondary, fontSize = 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap), modifier = Modifier.padding(top = 6.dp)) {
                     if (error != null) LumenButton("Réessayer", icon = LumenIcon.REFRESH, onClick = onRetry)
                     LumenButton("Annuler", modifier = Modifier.focusRequester(button), onClick = onDismiss)
@@ -126,7 +143,7 @@ fun SignInDialog(code: String?, error: String?, onRetry: () -> Unit, onDismiss: 
             }
             Box(Modifier.size(220.dp).clip(ControlShape).background(Color.White), contentAlignment = Alignment.Center) {
                 // YouTube's activation link with the code in it: the phone lands on the confirmation.
-                if (code != null && error == null) QrCode(QR_SIGN_IN_URL + code.trim().replace(' ', '-'), Modifier.fillMaxSize().padding(10.dp))
+                if (code != null && error == null) QrCode(QR_SIGN_IN_URL + code.trim().replace(' ', '-'), Modifier.fillMaxSize().padding(14.dp))
             }
         }
         LaunchedEffect(Unit) {
@@ -163,9 +180,27 @@ private fun QrCode(content: String, modifier: Modifier) {
  * are linked. OK switches account.
  */
 @Composable
-fun ProfileDialog(accounts: List<Account>, onChoose: (Account) -> Unit, onAdd: () -> Unit, onDismiss: () -> Unit) {
+fun ProfileDialog(
+    accounts: List<Account>,
+    onChoose: (Account) -> Unit,
+    onAdd: () -> Unit,
+    onDismiss: () -> Unit,
+    /** The sign-in dialog is open over this one: when it closes, the focus goes back to "Ajouter". */
+    signingIn: Boolean = false,
+) {
     LumenDialog(onDismissRequest = onDismiss) {
         val first = remember { FocusRequester() }
+        val add = remember { FocusRequester() }
+        var wasSigningIn by remember { mutableStateOf(false) }
+        LaunchedEffect(signingIn) {
+            if (signingIn) {
+                wasSigningIn = true
+            } else if (wasSigningIn) {
+                wasSigningIn = false
+                withFrameNanos { }
+                add.tryRequestFocus()
+            }
+        }
         Column(
             Modifier.fillMaxSize().lumenBackground(),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -190,7 +225,7 @@ fun ProfileDialog(accounts: List<Account>, onChoose: (Account) -> Unit, onAdd: (
                 ProfileTile(
                     name = "Ajouter",
                     caption = null,
-                    modifier = if (accounts.isEmpty()) Modifier.focusRequester(first) else Modifier,
+                    modifier = (if (accounts.isEmpty()) Modifier.focusRequester(first) else Modifier).focusRequester(add),
                     onClick = onAdd,
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(LumenIcon.PLUS, size = 34.dp) }
@@ -231,7 +266,8 @@ private fun ProfileTile(name: String, caption: String?, modifier: Modifier, onCl
                 colors = ClickableSurfaceDefaults.colors(
                     containerColor = if (Palette.colors.isLight) Color.White else Palette.ControlIdle,
                     contentColor = Palette.TextPrimary,
-                    focusedContainerColor = if (Palette.colors.isLight) Color.White else Palette.Selected,
+                    // The ring shows the focus: the tile itself doesn't change ("Ajouter" included).
+                    focusedContainerColor = if (Palette.colors.isLight) Color.White else Palette.ControlIdle,
                     focusedContentColor = Palette.TextPrimary,
                 ),
             ) { picture() }
@@ -246,7 +282,7 @@ private fun ProfileTile(name: String, caption: String?, modifier: Modifier, onCl
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 7.dp),
         )
-        Text(caption.orEmpty(), fontSize = 12.sp, color = Palette.TextSecondary, maxLines = 1, textAlign = TextAlign.Center)
+        Text(caption.orEmpty(), fontSize = 12.sp, color = Palette.TextSecondary, maxLines = 1, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 2.dp).height(16.dp))
     }
 }
 
@@ -259,9 +295,29 @@ private enum class SettingsPage(val label: String) { PLAYBACK("Lecture"), DISPLA
  * current one checked). OK on a pill applies it.
  */
 @Composable
-fun SettingsDialog(settings: Settings, accountName: String?, onSettings: (Settings) -> Unit, onPair: () -> Unit, onSignOut: () -> Unit, onDismiss: () -> Unit) {
+fun SettingsDialog(
+    settings: Settings,
+    accountName: String?,
+    onSettings: (Settings) -> Unit,
+    onPair: () -> Unit,
+    onSignOut: () -> Unit,
+    onDismiss: () -> Unit,
+    /** The pairing dialog is open over Réglages: when it closes, the focus goes back to "Lier un téléphone". */
+    pairingOpen: Boolean = false,
+) {
     LumenDialog(onDismissRequest = onDismiss) {
         val first = remember { FocusRequester() }
+        val pair = remember { FocusRequester() }
+        var wasPairing by remember { mutableStateOf(false) }
+        LaunchedEffect(pairingOpen) {
+            if (pairingOpen) {
+                wasPairing = true
+            } else if (wasPairing) {
+                wasPairing = false
+                withFrameNanos { }
+                pair.tryRequestFocus()
+            }
+        }
         var page by remember { mutableStateOf(SettingsPage.PLAYBACK) }
         val pages = SettingsPage.entries.filter { it != SettingsPage.ACCOUNT || accountName != null }
         Column(Modifier.fillMaxSize().lumenBackground().padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 32.dp, bottom = 32.dp)) {
@@ -272,7 +328,11 @@ fun SettingsDialog(settings: Settings, accountName: String?, onSettings: (Settin
                         .width(230.dp)
                         .fillMaxHeight()
                         .background(settingsPanel(), RoundedCornerShape(18.dp))
-                        .padding(11.dp),
+                        .padding(11.dp)
+                        // Left from a pill: back to the current category (the 2D search picked the
+                        // one level with the pill, which then showed its page).
+                        .focusRestorer()
+                        .focusGroup(),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     pages.forEachIndexed { index, item ->
@@ -290,15 +350,15 @@ fun SettingsDialog(settings: Settings, accountName: String?, onSettings: (Settin
                 ) {
                     when (page) {
                         SettingsPage.PLAYBACK -> {
-                            SettingCard("Lecture automatique", "À la fin d'une vidéo, la suivante démarre après un court compte à rebours.") {
+                            SettingCard("Lecture automatique", "À la fin d’une vidéo, la suivante démarre après un court compte à rebours.") {
                                 Choice("Activée", settings.autoplay) { onSettings(settings.copy(autoplay = true)) }
                                 Choice("Désactivée", !settings.autoplay) { onSettings(settings.copy(autoplay = false)) }
                             }
-                            SettingCard("Passer les sponsors (SponsorBlock)", "Sponsors, autopromo et rappels d'abonnement sautés automatiquement.") {
+                            SettingCard("Passer les sponsors (SponsorBlock)", "Sponsors, autopromo et rappels d’abonnement sautés automatiquement.") {
                                 Choice("Activé", settings.sponsorBlock) { onSettings(settings.copy(sponsorBlock = true)) }
                                 Choice("Désactivé", !settings.sponsorBlock) { onSettings(settings.copy(sponsorBlock = false)) }
                             }
-                            SettingCard("Volume stable", "Même niveau sonore d'une vidéo à l'autre.") {
+                            SettingCard("Volume stable", "Même niveau sonore d’une vidéo à l’autre.") {
                                 Choice("Activé", settings.stableVolume) { onSettings(settings.copy(stableVolume = true)) }
                                 Choice("Désactivé", !settings.stableVolume) { onSettings(settings.copy(stableVolume = false)) }
                             }
@@ -309,7 +369,7 @@ fun SettingsDialog(settings: Settings, accountName: String?, onSettings: (Settin
                                 Choice("Nuit", settings.appearance == 2) { onSettings(settings.copy(appearance = 2)) }
                                 Choice("Auto", settings.appearance == 0) { onSettings(settings.copy(appearance = 0)) }
                             }
-                            SettingCard("Taille de l'interface", "Tout l'affichage (textes, cartes, lecteur), appliqué tout de suite. Par défaut : $UI_SCALE_DEFAULT %, pensé pour les TV 4K.") {
+                            SettingCard("Taille de l’interface", "Tout l’affichage (textes, cartes, lecteur), appliqué tout de suite. Par défaut : $UI_SCALE_DEFAULT %, pensé pour les TV 4K.") {
                                 val size = settings.uiScale
                                 LumenButton("Plus petit") { onSettings(settings.copy(uiScale = (size - UI_SCALE_STEP).coerceAtLeast(UI_SCALE_MIN))) }
                                 Text("$size %", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Palette.TextPrimary, modifier = Modifier.padding(horizontal = 10.dp))
@@ -322,10 +382,10 @@ fun SettingsDialog(settings: Settings, accountName: String?, onSettings: (Settin
                             }
                         }
                         SettingsPage.PHONE -> {
-                            SettingCard("Regarder sur la TV", "L'app YouTube du téléphone, liée avec un code TV, envoie ses vidéos ici et sert de télécommande, quand LumenTube est ouvert.") {
+                            SettingCard("Regarder sur la TV", "L’app YouTube du téléphone, liée avec un code TV, envoie ses vidéos ici et sert de télécommande, quand LumenTube est ouvert.") {
                                 Choice("Activé", settings.remote) { onSettings(settings.copy(remote = true)) }
                                 Choice("Désactivé", !settings.remote) { onSettings(settings.copy(remote = false)) }
-                                LumenButton("Lier un téléphone", icon = LumenIcon.PLUS, onClick = onPair)
+                                LumenButton("Lier un téléphone", modifier = Modifier.focusRequester(pair), icon = LumenIcon.PLUS, onClick = onPair)
                             }
                         }
                         SettingsPage.ACCOUNT -> {
@@ -386,7 +446,7 @@ private fun SettingCard(title: String, help: String, choices: @Composable () -> 
 /** A choice of a setting: a pill, checked when it's the current one. */
 @Composable
 private fun Choice(label: String, selected: Boolean, onClick: () -> Unit) =
-    LumenButton(label, icon = if (selected) LumenIcon.CHECK else null, containerColor = if (selected) Palette.Selected else Palette.ControlIdle, onClick = onClick)
+    LumenButton(label, icon = if (selected) LumenIcon.CHECK else null, containerColor = if (selected) Palette.Selected else Palette.ControlIdle, contentColor = Palette.ChipText, onClick = onClick)
 
 @Composable
 internal fun SectionLabel(text: String) {
@@ -422,7 +482,8 @@ internal fun DialogRow(
         ),
     ) {
         Row(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+            // An icon in its own 20 dp (the text lines up with the menu's thumbnail); a leading picture keeps 36.
+            Box(Modifier.size(if (leading != null) 36.dp else 20.dp), contentAlignment = Alignment.Center) {
                 if (leading != null) leading() else if (icon != null) Icon(icon, size = 20.dp)
             }
             Spacer(Modifier.width(12.dp))

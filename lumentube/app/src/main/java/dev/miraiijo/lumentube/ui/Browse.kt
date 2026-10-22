@@ -116,7 +116,7 @@ fun BrowsePage(
     Column(Modifier.fillMaxSize()) {
         Spacer(Modifier.height(top))
         when {
-            channel != null -> ChannelSheet(channel, signedIn, onSubscribe, onSort)
+            channel != null -> ChannelSheet(channel, signedIn, onSubscribe, onSort, onSignIn)
             title != null -> Text(
                 title,
                 fontSize = 34.sp,
@@ -181,6 +181,8 @@ private fun VideoRowView(
         Text(
             row.title,
             fontSize = 16.sp,
+            // A fixed line (20 dp): with the paddings, 8 + 20 + 4 + 12 = 44 dp fit in ROW_TITLE.
+            lineHeight = 20.sp,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -259,7 +261,7 @@ fun VideoCard(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = if (video.watchedPercent in 1..99) 14.dp else 8.dp)
-                            .background(if (video.live) Palette.Danger else Color.Black.copy(alpha = 0.75f), RoundedCornerShape(6.dp))
+                            .background(if (video.live) Palette.Live else Color.Black.copy(alpha = 0.72f), RoundedCornerShape(6.dp))
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                     )
                 }
@@ -283,7 +285,7 @@ fun VideoCard(
             video.title,
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
-            color = if (isFocused) Palette.TextPrimary else Palette.TextPrimary.copy(alpha = 0.88f),
+            color = Palette.TextPrimary,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             lineHeight = TITLE_LINE,
@@ -314,38 +316,42 @@ private fun Modifier.menuKey(action: (() -> Unit)?): Modifier = if (action == nu
 
 /**
  * A channel page's header, like Lumen's detail page: "CHAÎNE" above its round avatar and name in
- * large, then "S'abonner" / "Abonné" and its orders (Accueil, Plus récentes, Populaires…).
+ * large, then "S’abonner" / "Abonné" and its orders (Accueil, Plus récentes, Populaires…).
  */
 @Composable
-private fun ChannelSheet(channel: ChannelHeader, signedIn: Boolean, onSubscribe: () -> Unit, onSort: (Int) -> Unit) {
+private fun ChannelSheet(channel: ChannelHeader, signedIn: Boolean, onSubscribe: () -> Unit, onSort: (Int) -> Unit, onSignIn: () -> Unit) {
     Column(
-        Modifier.fillMaxWidth().padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 36.dp, bottom = 8.dp),
+        // 54 dp under the sorts before the first row (the redesign's room between header and rows).
+        Modifier.fillMaxWidth().padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 36.dp, bottom = 54.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Box(Modifier.size(66.dp).clip(CircleShape).background(Palette.Tile), contentAlignment = Alignment.Center) {
-                if (channel.avatar != null) {
-                    GlideImage(model = avatarUrl(channel.avatar), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                } else {
-                    Text(channel.name.take(1).uppercase(), fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                }
-            }
+            // No picture: the initial, white on a colored gradient (as for accounts).
+            AvatarPicture(channel.avatar, channel.name, 66.dp, 28.sp)
             Column {
                 Text("CHAÎNE", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.08.em, color = Palette.TextSecondary)
                 Text(channel.name, fontSize = 48.sp, lineHeight = 52.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, letterSpacing = (-0.035).em)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap), verticalAlignment = Alignment.CenterVertically) {
-            if (signedIn && channel.subscribed != null) {
-                LumenButton(
-                    if (channel.subscribed) "Abonné" else "S'abonner",
-                    icon = if (channel.subscribed) LumenIcon.CHECK else LumenIcon.PLUS,
-                    containerColor = if (channel.subscribed) Palette.ControlIdle else Palette.Danger,
-                    onClick = onSubscribe,
-                )
-            }
+            // Always there (its place kept while the state loads, so the sorts never shift under the
+            // focus): red "S’abonner" (white text, by day too), "Abonné" once subscribed; signed out,
+            // OK opens the sign-in.
+            val subscribed = signedIn && channel.subscribed == true
+            LumenButton(
+                if (subscribed) "Abonné" else "S’abonner",
+                icon = if (subscribed) LumenIcon.CHECK else LumenIcon.PLUS,
+                containerColor = if (subscribed) Palette.ControlIdle else Palette.Live,
+                contentColor = if (subscribed) Palette.TextPrimary else Color.White,
+                onClick = {
+                    when {
+                        !signedIn -> onSignIn()
+                        channel.subscribed != null -> onSubscribe()
+                    }
+                },
+            )
             if (channel.sorts.isNotEmpty()) {
-                if (signedIn && channel.subscribed != null) Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(12.dp))
                 SortChip("Accueil", channel.sort == -1) { onSort(-1) }
                 channel.sorts.forEachIndexed { index, name -> SortChip(name, channel.sort == index) { onSort(index) } }
             }
@@ -355,7 +361,7 @@ private fun ChannelSheet(channel: ChannelHeader, signedIn: Boolean, onSubscribe:
 
 @Composable
 private fun SortChip(label: String, selected: Boolean, onClick: () -> Unit) =
-    LumenButton(label, icon = if (selected) LumenIcon.CHECK else null, containerColor = if (selected) Palette.Selected else Palette.ControlIdle, onClick = onClick)
+    LumenButton(label, icon = if (selected) LumenIcon.CHECK else null, containerColor = if (selected) Palette.Selected else Palette.ControlIdle, contentColor = Palette.ChipText, onClick = onClick)
 
 @Composable
 private fun Message(text: String, button: String? = null, buttonModifier: Modifier = Modifier, onClick: () -> Unit = {}) {

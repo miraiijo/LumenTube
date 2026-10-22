@@ -64,7 +64,7 @@ data class Segment(val startMs: Long, val endMs: Long, val category: String) {
         get() = when (category) {
             SponsorSegment.CATEGORY_SPONSOR -> "Sponsor"
             SponsorSegment.CATEGORY_SELF_PROMO -> "Autopromo"
-            SponsorSegment.CATEGORY_INTERACTION -> "Rappel d'abonnement"
+            SponsorSegment.CATEGORY_INTERACTION -> "Rappel d’abonnement"
             SponsorSegment.CATEGORY_INTRO -> "Intro"
             SponsorSegment.CATEGORY_OUTRO -> "Générique de fin"
             else -> "Segment"
@@ -316,7 +316,8 @@ object YouTube {
     /** Next page of a row (null when there's no more). */
     suspend fun more(row: VideoRow): VideoRow? = withContext(Dispatchers.IO) {
         val next = runCatching { service.contentService.continueGroup(row.raw) }.getOrNull()
-        val added = next?.toRow(row.key)?.items.orEmpty().filter { new -> row.items.none { it.key == new.key } }
+        val page = next?.toRow(row.key)?.let { if (row.key.startsWith(CHANNEL_ROW)) it.withoutAuthor() else it }
+        val added = page?.items.orEmpty().filter { new -> row.items.none { it.key == new.key } }
         if (next == null || added.isEmpty()) row.copy(canLoadMore = false) else row.copy(items = row.items + added, raw = next)
     }
 
@@ -350,14 +351,32 @@ object YouTube {
     /** A channel page: its rows (uploads, lives, playlists…), as YouTube orders them. */
     suspend fun channelRows(channelId: String): List<VideoRow> = withContext(Dispatchers.IO) {
         service.contentService.getChannelObserve(channelId).collectAll().filterNotNull()
-            .mapIndexedNotNull { index, group -> group.toRow("channel-$channelId-$index") }
+            .mapIndexedNotNull { index, group -> group.toRow("$CHANNEL_ROW$channelId-$index")?.withoutAuthor() }
     }
 
     /** The channel's videos in each available order ("Plus récentes", "Populaires"…), may be empty. */
     suspend fun channelSorts(channelId: String): List<VideoRow> = withContext(Dispatchers.IO) {
         runCatching { service.contentService.getChannelSortingOptionsObserve(channelId)?.collectAll() }.getOrNull().orEmpty()
-            .filterNotNull().mapIndexedNotNull { index, group -> group.toRow("channel-sort-$channelId-$index") }
+            .filterNotNull().mapIndexedNotNull { index, group -> group.toRow("${CHANNEL_ROW}sort-$channelId-$index")?.withoutAuthor() }
     }
+
+    /** Keys of a channel page's rows (their cards show the date, not the channel's name again). */
+    private const val CHANNEL_ROW = "channel-"
+
+    /**
+     * On a channel page, a card's second line without the channel (its name, its @handle): what's
+     * left of YouTube's line ("12 k vues • il y a 3 jours"), empty when nothing is.
+     */
+    private fun VideoRow.withoutAuthor(): VideoRow = copy(
+        items = items.map { video ->
+            if (!video.isVideo) return@map video
+            val author = video.raw.author?.trim()
+            val parts = video.raw.secondTitle?.toString().orEmpty().split('•', '·')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && it != author && !it.startsWith("@") }
+            video.copy(channel = parts.joinToString(" • "))
+        },
+    )
 
     /** Ids of the subscribed channels, fetched once per account (and kept up to date by [setSubscribed]). */
     @Volatile

@@ -7,6 +7,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.Box
@@ -53,6 +54,9 @@ fun Root(vm: MainViewModel) {
     var dictate by remember { androidx.compose.runtime.mutableStateOf(false) }
     // Incremented when the player closes: the focus goes back to the card that was played.
     var returnFocusTick by remember { mutableIntStateOf(0) }
+    // Incremented when the video goes to the small window: the focus goes to « Lecture en cours »
+    // in the header (Back then OK brings it back full screen), the page when there's no header.
+    var miniFocusTick by remember { mutableIntStateOf(0) }
 
     // A page about to be replaced (channel / playlist opened, or closed): its focused card goes
     // away while the next one loads. This invisible holder keeps the focus meanwhile (otherwise it
@@ -194,7 +198,8 @@ fun Root(vm: MainViewModel) {
                         focusTick = pageFocusTick,
                         onSelect = select,
                         onLoadMore = vm::loadMore,
-                        onRetry = vm::reload,
+                        // The opened channel / playlist reloads itself, not the section under it.
+                        onRetry = vm::retry,
                         needsAccount = state.section.account && !state.signedIn && state.opened == null,
                         onSignIn = vm::startSignIn,
                         onLongPress = vm::openCardMenu,
@@ -207,14 +212,15 @@ fun Root(vm: MainViewModel) {
             }
         }
         }
-        if (state.signingIn) {
-            SignInDialog(code = state.signInCode, error = state.signInError, onRetry = vm::startSignIn, onDismiss = vm::cancelSignIn)
-        } else if (state.choosingAccount || state.accountsOpen) {
+        // Sign-in and pairing open over the dialog they come from ("Qui regarde ?", Réglages): a
+        // dialog is its own window, the one composed last is on top.
+        if (state.choosingAccount || state.accountsOpen) {
             ProfileDialog(
                 accounts = state.accounts,
                 onChoose = vm::chooseAccount,
                 onAdd = vm::startSignIn,
                 onDismiss = { if (state.choosingAccount) vm.skipAccountChoice() else vm.closeAccounts() },
+                signingIn = state.signingIn,
             )
         } else if (state.settingsOpen) {
             SettingsDialog(
@@ -224,9 +230,8 @@ fun Root(vm: MainViewModel) {
                 onPair = vm::openPairing,
                 onSignOut = vm::signOut,
                 onDismiss = vm::closeSettings,
+                pairingOpen = state.pairing != null,
             )
-        } else if (state.pairing != null) {
-            PairingDialog(state.pairing!!, onRetry = vm::openPairing, onDismiss = vm::closePairing)
         } else if (state.cardMenu != null) {
             val video = state.cardMenu!!
             CardMenuDialog(
@@ -246,6 +251,12 @@ fun Root(vm: MainViewModel) {
                 onNotInterested = { channel -> vm.cardNotInterested(video, channel) },
                 onDismiss = vm::closeCardMenu,
             )
+        }
+        if (state.signingIn) {
+            SignInDialog(code = state.signInCode, error = state.signInError, onRetry = vm::startSignIn, onDismiss = vm::cancelSignIn)
+        }
+        state.pairing?.let { pairing ->
+            PairingDialog(pairing, onRetry = vm::openPairing, onDismiss = vm::closePairing)
         }
         // The video plays over the pages (they stay composed: Back returns to the same card).
         val playing = state.playing
@@ -269,7 +280,7 @@ fun Root(vm: MainViewModel) {
                 minimized = state.minimized,
                 onMinimize = {
                     vm.minimize()
-                    returnFocusTick++
+                    miniFocusTick++
                 },
                 onRestore = vm::restore,
                 onOpenChannel = { id, name ->
@@ -277,7 +288,7 @@ fun Root(vm: MainViewModel) {
                     returnFocusTick++
                 },
                 modifier = if (state.minimized) {
-                    Modifier.align(Alignment.BottomEnd).padding(end = 32.dp, bottom = 32.dp).size(MINI_WIDTH, MINI_WIDTH * 9 / 16)
+                    Modifier.align(Alignment.BottomEnd).padding(end = 32.dp, bottom = 32.dp).shadow(30.dp).size(MINI_WIDTH, MINI_WIDTH * 9 / 16)
                 } else {
                     Modifier.fillMaxSize()
                 },
@@ -289,6 +300,11 @@ fun Root(vm: MainViewModel) {
         if (returnFocusTick == 0) return@LaunchedEffect
         withFrameNanos { }
         if (!content.tryRequestFocus()) header.tryRequestFocus()
+    }
+    LaunchedEffect(miniFocusTick) {
+        if (miniFocusTick == 0) return@LaunchedEffect
+        withFrameNanos { }
+        if (!showHeader || !header.tryRequestFocus()) content.tryRequestFocus()
     }
 }
 

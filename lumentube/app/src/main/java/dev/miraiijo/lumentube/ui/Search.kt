@@ -111,7 +111,7 @@ fun SearchPage(
         SearchBar(query, bar, belowBar, ::search, onTyping, Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 32.dp), chipFocused = { chipsHaveFocus }, dictate = dictate, onDictated = onDictated)
         // One line under the bar: the suggestions while typing, else the filters.
         Row(
-            Modifier.fillMaxWidth().onFocusChanged { chipsHaveFocus = it.hasFocus }.horizontalScroll(rememberScrollState()).padding(horizontal = Dimens.Gutter, vertical = 12.dp),
+            Modifier.fillMaxWidth().onFocusChanged { chipsHaveFocus = it.hasFocus }.horizontalScroll(rememberScrollState()).padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 12.dp, bottom = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -119,7 +119,7 @@ fun SearchPage(
             fun chip(index: Int) = (chips.getOrNull(index)?.let { Modifier.focusRequester(it) } ?: Modifier).focusProperties { up = bar }
             if (suggestions.isNotEmpty()) {
                 suggestions.forEachIndexed { index, suggestion ->
-                    LumenButton(suggestion, modifier = chip(index), icon = LumenIcon.SEARCH) {
+                    LumenButton(suggestion, modifier = chip(index), icon = LumenIcon.SEARCH, contentColor = Palette.ChipText) {
                         // The suggestions line is about to give way to the filters: the focus moves to
                         // the bar first (it fell into the side menu), then to the results when they come.
                         bar.tryRequestFocus()
@@ -134,6 +134,7 @@ fun SearchPage(
                         if (current == 0) filter.label else "${filter.label} : $name",
                         modifier = chip(index),
                         containerColor = if (current == 0) Palette.ControlIdle else Palette.Selected,
+                        contentColor = Palette.ChipText,
                     ) {
                         // OK = the next choice of this filter (then back to "all").
                         val next = filter.choices[(current + 1) % filter.choices.size].first
@@ -158,7 +159,8 @@ fun SearchPage(
                 onSignIn = {},
                 showRetry = query.isNotBlank(),
                 onLongPress = onLongPress,
-                top = 4.dp,
+                // Right under the filters: "Vidéos" 12 dp below them (its own 8 dp + the line's 4).
+                top = 0.dp,
             )
         }
     }
@@ -227,7 +229,8 @@ private fun SearchBar(
             colors = ClickableSurfaceDefaults.colors(
                 containerColor = if (Palette.colors.isLight) Palette.Panel else Palette.ControlIdle,
                 contentColor = Palette.TextPrimary,
-                focusedContainerColor = if (Palette.colors.isLight) Palette.Panel else Palette.Selected,
+                // Focused: only the ring changes, the bar keeps its color.
+                focusedContainerColor = if (Palette.colors.isLight) Palette.Panel else Palette.ControlIdle,
                 focusedContentColor = Palette.TextPrimary,
             ),
             border = ClickableSurfaceDefaults.border(
@@ -311,7 +314,7 @@ private val SEARCH_FILTERS = listOf(
         listOf(
             0 to "Toutes",
             SearchOptions.UPLOAD_DATE_LAST_HOUR to "Dernière heure",
-            SearchOptions.UPLOAD_DATE_TODAY to "Aujourd'hui",
+            SearchOptions.UPLOAD_DATE_TODAY to "Aujourd’hui",
             SearchOptions.UPLOAD_DATE_THIS_WEEK to "Cette semaine",
             SearchOptions.UPLOAD_DATE_THIS_MONTH to "Ce mois-ci",
             SearchOptions.UPLOAD_DATE_THIS_YEAR to "Cette année",

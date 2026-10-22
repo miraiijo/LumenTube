@@ -93,6 +93,11 @@ object Palette {
     val FocusRing get() = colors.focusRing
     val Danger = Color(0xFFFF453A)
     val Warning = Color(0xFFFF9F0A)
+    /** The redesign's red (S'abonner, "EN DIRECT") and SponsorBlock's yellow on the bar. */
+    val Live = Color(0xFFE5383B)
+    val Sponsor = Color(0xFFF2C230)
+    /** Text of a choice pill (filters, sorts, settings): a touch softer than TextPrimary. */
+    val ChipText get() = if (colors.isLight) Color(0xFF2A2C33) else Color(0xFFE4E5E9)
 }
 
 /** Three focus lifts only: controls, cards, avatars. */
@@ -123,8 +128,11 @@ val DisplayTracking = (-0.022).em
 private val LumenTypography: Typography = Typography().let { t ->
     // Closer to SF Pro: Material's wide default tracking (up to +0.5 sp) replaced by Apple-like
     // tight tracking, relative to the size (em) so it holds for every explicit fontSize.
-    fun TextStyle.text() = copy(fontFamily = InterFamily, letterSpacing = (-0.011).em)
-    fun TextStyle.display() = copy(fontFamily = InterFamily, letterSpacing = (-0.022).em)
+    // lineHeight unspecified: Material's fixed ones (24 sp for bodyLarge, the default Text style)
+    // made every Text without its own lineHeight 24 dp tall whatever its size, so big titles and
+    // codes overflowed their line and small labels (badges, captions) took far too much room.
+    fun TextStyle.text() = copy(fontFamily = InterFamily, letterSpacing = (-0.011).em, lineHeight = androidx.compose.ui.unit.TextUnit.Unspecified)
+    fun TextStyle.display() = copy(fontFamily = InterFamily, letterSpacing = (-0.022).em, lineHeight = androidx.compose.ui.unit.TextUnit.Unspecified)
     Typography(
         displayLarge = t.displayLarge.display(), displayMedium = t.displayMedium.display(), displaySmall = t.displaySmall.display(),
         headlineLarge = t.headlineLarge.display(), headlineMedium = t.headlineMedium.display(), headlineSmall = t.headlineSmall.display(),

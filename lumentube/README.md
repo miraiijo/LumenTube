@@ -36,6 +36,14 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.13.0
+- **Lecteur, nouvelle disposition** : titre en haut à gauche, plus petit et en entier (2 lignes), avec dessous la chaîne, le chapitre et les compteurs J'aime / Je n'aime pas. En bas, seulement la barre, les boutons et le temps. Les 9 boutons sont des ronds identiques (les compteurs ne sont plus collés aux pouces).
+- **Lecteur, corrections** : focus rendu à Lecture après « Réessayer » ; « À suivre » lisible en Jour, ferme les commandes et garde le focus ; sous-titres masqués avec les commandes et remontés pendant l'avance ; libellés du menu plus coupés, valeurs alignées ; curseur rond sur la barre ; le bouton du panneau ouvert reste en surbrillance ; panneau Commentaires plus étroit ; écran d'erreur avec voile ; notice SponsorBlock plus cachée par les stats ; nouvelle icône Chapitres.
+- **Textes** : la hauteur de ligne suit enfin la taille du texte (avant : 24 partout). Badges, titres de rangée, « Qui regarde ? », codes de connexion et d'appairage ne débordent plus et ne prennent plus trop de place.
+- **Navigation** : « Réessayer » sur une chaîne ou une playlist recharge cette page (pas l'Accueil) ; Gauche dans les Réglages revient sur la catégorie en cours ; l'appairage s'ouvre au-dessus des Réglages et la connexion au-dessus de « Qui regarde ? » (on y revient en les fermant) ; après la petite fenêtre, focus sur « Lecture en cours ».
+- **Chaîne** : « S'abonner » blanc sur rouge, toujours à sa place (même pendant le chargement ; déconnecté, il ouvre la connexion) ; les cartes montrent la date au lieu du nom de la chaîne ; plus d'espace avant les vidéos.
+- **Finitions** : fond aux halos plus discrets ; rouge et jaune des maquettes ; avatars sans photo en dégradé avec l'initiale ; apostrophes typographiques.
+
 ### 0.12.7
 - **Rangées vraiment stables** : le titre (2 lignes) et la chaîne (1 ligne) des cartes ont maintenant une hauteur fixe. Un titre avec emoji ou dans une autre écriture rendait encore la carte quelques dp plus haute, et les rangées autour bougeaient quand on défilait de côté.
 
