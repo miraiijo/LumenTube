@@ -492,6 +492,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (current == event.videoId) {
                     if (s.minimized) restore()
                 } else {
+                    closeDialogs()
                     _state.update { it.copy(playing = null, playingId = event.videoId, playingStart = (event.startMs / 1000).toInt(), minimized = false, cardMenu = null) }
                 }
             }
@@ -511,8 +512,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeOpened() = _state.update { it.copy(opened = null) }
 
-    fun playLink(videoId: String, startSeconds: Int = 0) =
+    fun playLink(videoId: String, startSeconds: Int = 0) {
+        closeDialogs()
         _state.update { it.copy(playing = null, playingId = videoId, playingStart = startSeconds, minimized = false) }
+    }
+
+    /**
+     * A video arriving from the phone or a link: the dialogs close (each is its own window, they
+     * stayed over the player and the remote drove them instead of the video).
+     */
+    private fun closeDialogs() {
+        val s = _state.value
+        if (s.signingIn) cancelSignIn()
+        if (s.choosingAccount) skipAccountChoice()
+        _state.update { it.copy(settingsOpen = false, accountsOpen = false, pairing = null, cardMenu = null) }
+    }
 
     /** Small window in a corner; browsing goes on. */
     fun minimize() = _state.update { it.copy(minimized = true) }

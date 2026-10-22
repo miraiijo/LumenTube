@@ -35,6 +35,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -87,14 +89,18 @@ fun TopHeader(
                 letterSpacing = (-0.03).em,
                 color = Palette.TextPrimary,
             )
-            Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                sections.forEach { item ->
-                    Tab(
-                        label = if (item == Section.HOME) "Pour toi" else item.label,
-                        current = item == section,
-                        modifier = Modifier.focusRequester(requesters.getValue(item)),
-                        onClick = { onSection(item) },
-                    )
+            // The tabs scroll when they don't fit (signed in, 9 tabs, from ~95 %): before, the last
+            // ones were squeezed to nothing and the focus went invisible on them.
+            EdgeScroll(TAB_MARGIN) {
+                Row(Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    sections.forEach { item ->
+                        Tab(
+                            label = if (item == Section.HOME) "Pour toi" else item.label,
+                            current = item == section,
+                            modifier = Modifier.focusRequester(requesters.getValue(item)),
+                            onClick = { onSection(item) },
+                        )
+                    }
                 }
             }
         }
@@ -172,15 +178,17 @@ private fun RoundButton(onClick: () -> Unit, filled: Boolean = true, content: @C
 
 @Composable
 private fun HeaderClock(modifier: Modifier = Modifier) {
-    var time by remember { mutableStateOf("") }
+    val format = remember { java.text.SimpleDateFormat("HH:mm", java.util.Locale.FRANCE) }
+    // The time right away (an empty first frame made the round buttons jump at launch).
+    var time by remember { mutableStateOf(format.format(java.util.Date())) }
     LaunchedEffect(Unit) {
-        val format = java.text.SimpleDateFormat("HH:mm", java.util.Locale.FRANCE)
         while (true) {
             time = format.format(java.util.Date())
             delay(10_000)
         }
     }
-    Text(time, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Palette.TextSecondary, modifier = modifier)
+    // Tabular figures: every digit as wide, so the round buttons don't shift each minute.
+    Text(time, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Palette.TextSecondary, style = androidx.tv.material3.LocalTextStyle.current.copy(fontFeatureSettings = "tnum"), modifier = modifier)
 }
 
 /**
@@ -196,6 +204,8 @@ fun Modifier.lumenBackground(): Modifier = drawBehind {
 }
 
 private val HEADER_BUTTON = 38.dp
+/** Room kept on each side of the focused tab when the tabs scroll. */
+private val TAB_MARGIN = 24.dp
 private const val GLOW_RADIUS = 0.25f
 
 /** By day, the header's white buttons get a soft shadow (none at night, on the dark page). */

@@ -167,7 +167,7 @@ fun CommentsPanel(commentsKey: String, modifier: Modifier = Modifier) {
             .focusGroup()
             .padding(start = 20.dp, end = 20.dp, top = 32.dp),
     ) {
-        Text("Commentaires", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 12.dp, bottom = 16.dp))
+        Text("Commentaires", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 12.dp, bottom = 12.dp))
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -199,7 +199,14 @@ fun CommentsPanel(commentsKey: String, modifier: Modifier = Modifier) {
                         val key = replies[line.parentId]?.next
                         if (parent != null && key != null) loadReplies(parent, key)
                     }
-                    is Line.Loading -> Text("Chargement…", fontSize = 14.sp, color = Palette.TextSecondary, modifier = Modifier.padding(12.dp))
+                    // Focusable as the first line: the panel holds the focus while the first page loads
+                    // (the button that opened it is gone).
+                    is Line.Loading -> Text(
+                        "Chargement…",
+                        fontSize = 14.sp,
+                        color = Palette.TextSecondary,
+                        modifier = (if (index == 0) Modifier.focusRequester(first) else Modifier).focusable(index == 0).padding(12.dp),
+                    )
                     // Focusable, so the panel holds the focus (and Back) even without comments.
                     is Line.Message -> Text(
                         line.text,
@@ -213,7 +220,7 @@ fun CommentsPanel(commentsKey: String, modifier: Modifier = Modifier) {
     }
 
     // The first line takes the focus as soon as there is one (first comment, or the message).
-    val firstKey = lines.firstOrNull()?.takeIf { it is Line.Top || it is Line.Message }?.key
+    val firstKey = lines.firstOrNull()?.takeIf { it is Line.Top || it is Line.Message || it is Line.Loading }?.key
     LaunchedEffect(firstKey) {
         if (firstKey == null) return@LaunchedEffect
         withFrameNanos { }
@@ -223,8 +230,11 @@ fun CommentsPanel(commentsKey: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun CommentRow(comment: Comment, reply: Boolean, expanded: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    // A long comment shows its first lines; OK shows it whole (then OK does the usual: replies).
+    var whole by remember(comment.id) { mutableStateOf(false) }
+    var cut by remember(comment.id) { mutableStateOf(false) }
     Surface(
-        onClick = onClick,
+        onClick = { if (cut && !whole) whole = true else onClick() },
         modifier = modifier.fillMaxWidth().padding(start = if (reply) REPLY_INDENT else 0.dp),
         shape = ClickableSurfaceDefaults.shape(shape = ControlShape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
@@ -260,7 +270,15 @@ private fun CommentRow(comment: Comment, reply: Boolean, expanded: Boolean, modi
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(comment.text, fontSize = 15.sp, lineHeight = 21.sp)
+                Text(
+                    comment.text,
+                    fontSize = 15.sp,
+                    lineHeight = 21.sp,
+                    // Whole: still capped, so the focused line always fits on screen (even at 120 %).
+                    maxLines = if (whole) COMMENT_WHOLE_LINES else COMMENT_LINES,
+                    overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { if (!whole) cut = it.hasVisualOverflow },
+                )
                 if (comment.likes != null || comment.replies != null) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                         if (comment.likes != null) {
@@ -308,3 +326,5 @@ private val AVATAR_GRADIENTS = listOf(
     Color(0xFFB08CF0) to Color(0xFF7A4FD6),
 )
 private val REPLY_INDENT = 40.dp
+private const val COMMENT_LINES = 6
+private const val COMMENT_WHOLE_LINES = 14

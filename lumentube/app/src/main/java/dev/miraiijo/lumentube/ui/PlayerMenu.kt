@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -32,6 +33,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -126,8 +128,19 @@ fun PlayerMenuPanel(
         PlayerMenu.INFO -> "À propos"
         PlayerMenu.CHAPTERS -> "Chapitres"
     }
+    // The level shown just before (read before it's updated below): back from a sub-list, the main
+    // list opens on the line that led to it (Vitesse, Format…), not on its first line.
+    val lastMenu = remember { arrayOfNulls<PlayerMenu>(1) }
+    val cameFrom = remember(menu) { lastMenu[0] }
+    SideEffect { lastMenu[0] = menu }
     // A list of choices opens on the current one; the main list on its first line (not a header).
-    val focusIndex = if (menu == PlayerMenu.MAIN) entries.indexOfFirst { !it.header }.coerceAtLeast(0) else entries.indexOfFirst { it.selected }.coerceAtLeast(0)
+    val focusIndex = if (menu == PlayerMenu.MAIN) {
+        val origin = SUBMENU_LABELS[cameFrom]
+        entries.indexOfFirst { !it.header && origin != null && it.label == origin }.takeIf { it >= 0 }
+            ?: entries.indexOfFirst { !it.header }.coerceAtLeast(0)
+    } else {
+        entries.indexOfFirst { it.selected }.coerceAtLeast(0)
+    }
     val first = remember(menu) { FocusRequester() }
 
     Column(
@@ -140,7 +153,7 @@ fun PlayerMenuPanel(
             .focusGroup()
             .padding(horizontal = 20.dp, vertical = 32.dp),
     ) {
-        Text(title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 12.dp, bottom = 16.dp))
+        Text(title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 12.dp, bottom = 12.dp))
         if (menu == PlayerMenu.INFO) {
             InfoText(actions.details, Modifier.weight(1f).focusRequester(first))
         } else Column(
@@ -193,7 +206,7 @@ private fun buildEntries(
         val audio = player.audioTracks()
         if (audio.size > 1) add(Entry("Piste audio", audio.getOrNull(player.playingAudio) ?: "Auto", submenu = true) { onMenu(PlayerMenu.AUDIO) })
         if (!live) add(Entry("Vitesse", speedName(player.speed), submenu = true) { onMenu(PlayerMenu.SPEED) })
-        add(Entry("Format de l'image", PICTURE_FORMATS[pictureFormat.coerceIn(0, PICTURE_FORMATS.lastIndex)], submenu = true) { onMenu(PlayerMenu.FORMAT) })
+        add(Entry("Format de l’image", PICTURE_FORMATS[pictureFormat.coerceIn(0, PICTURE_FORMATS.lastIndex)], submenu = true) { onMenu(PlayerMenu.FORMAT) })
 
         val channelId = details?.channelId
         if (channelId != null || actions.signedIn) {
@@ -327,16 +340,20 @@ private fun MenuRow(entry: Entry, modifier: Modifier) {
         ),
     ) {
         Row(Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(entry.label, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            if (entry.value != null) {
+            if (entry.value == null) {
+                Text(entry.label, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            } else {
+                // The label first, whole (up to a cap); the value takes the rest, right-aligned, and
+                // is the one cut when both are long (an auto-generated subtitle track…).
+                Text(entry.label, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
                 Text(
                     entry.value,
                     fontSize = 14.sp,
                     color = LocalContentColor.current.copy(alpha = 0.65f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    // Capped: a long value (an auto-generated subtitle track…) never squeezes the label.
-                    modifier = Modifier.padding(start = 12.dp).widthIn(max = 180.dp),
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f).padding(start = 12.dp),
                 )
             }
             // The mark's place is always kept: the values line up in one column.
@@ -349,3 +366,12 @@ private fun MenuRow(entry: Entry, modifier: Modifier) {
         }
     }
 }
+
+/** The main list's line that opens each sub-list (focused again when coming back from it). */
+private val SUBMENU_LABELS = mapOf(
+    PlayerMenu.QUALITY to "Qualité",
+    PlayerMenu.SUBTITLES to "Sous-titres",
+    PlayerMenu.AUDIO to "Piste audio",
+    PlayerMenu.SPEED to "Vitesse",
+    PlayerMenu.FORMAT to "Format de l’image",
+)

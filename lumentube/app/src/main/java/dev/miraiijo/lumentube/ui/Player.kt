@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -108,7 +109,7 @@ private fun seekSpeed(repeatCount: Int) = when {
 private val BUTTON_GAP = 10.dp
 /** Room kept on the right of the title: the clock, or the open panel (settings: 400 dp). */
 private val PANEL_CLEARANCE = 440.dp
-private val CLOCK_CLEARANCE = 120.dp
+private val CLOCK_CLEARANCE = 130.dp
 /** The progress bar's handle when focused, and its halo. */
 private val HANDLE = 14.dp
 private val HANDLE_HALO = 3.dp
@@ -130,15 +131,15 @@ private fun formatsKind(info: com.liskovsoft.mediaserviceinterfaces.data.MediaIt
 }
 private val PREVIEW_WIDTH = 256.dp
 /** Subtitle height, as a share of the video's height (ExoPlayer's default is 0.0533). */
-private const val SUBTITLE_SIZE = 0.042f
-/** Subtitles' bottom margin (screen fraction): ExoPlayer's default, and above the seek line. */
-private const val SUBTITLE_BOTTOM = 0.08f
+private const val SUBTITLE_SIZE = 0.033f
+/** Subtitles' bottom margin (screen fraction), and the fallback above the seek line (it's measured). */
+private const val SUBTITLE_BOTTOM = 0.06f
 private const val SUBTITLE_RAISED = 0.34f
 
 /**
- * Full-screen player, laid out like Nuvio's: title and channel bottom left, a thin progress bar,
- * round icon buttons (white when focused) and the time on the right, the clock top right,
- * gradients top and bottom. Hidden controls: OK or Up/Down shows them, Left/Right = ±10 s.
+ * Full-screen player (the redesign): title, channel and counts top left, the clock top right; at
+ * the bottom a thin progress bar, identical round buttons and the time; gradients top and bottom.
+ * Hidden controls: OK or Up/Down shows them, Left/Right = ±10 s.
  */
 @Composable
 fun PlayerScreen(
@@ -191,6 +192,9 @@ fun PlayerScreen(
     /** Incremented on each Left/Right with the controls hidden: the time line shows a moment. */
     var seekFlash by remember { mutableIntStateOf(0) }
     var seekLineShown by remember { mutableStateOf(false) }
+    /** Measured: the screen and the time line (subtitles and the SponsorBlock notice go above it). */
+    var screenPx by remember { mutableIntStateOf(0) }
+    var seekLinePx by remember { mutableIntStateOf(0) }
     /** Target of the Left/Right presses not applied yet. */
     var pendingSeek by remember(videoId) { mutableStateOf<Long?>(null) }
     LaunchedEffect(seekFlash) {
@@ -374,6 +378,8 @@ fun PlayerScreen(
                         else -> {
                             controls = false
                             menu = null
+                            commentsOpen = false
+                            refocusComments = false
                             upNext = next
                         }
                     }
@@ -411,7 +417,8 @@ fun PlayerScreen(
                     val seconds = player.exo.currentPosition / 1000f
                     AppScope.launch { YouTube.savePosition(videoId, seconds) }
                 }
-                androidx.lifecycle.Lifecycle.Event.ON_START -> show()
+                // Not under the comments nor "À suivre" (they keep the screen and the focus).
+                androidx.lifecycle.Lifecycle.Event.ON_START -> if (!commentsOpen && upNext == null) show()
                 else -> Unit
             }
         }
@@ -506,16 +513,26 @@ fun PlayerScreen(
             }
         }
     }
-    // error == null as a key: after "Réessayer" the controls come back with play / pause focused.
-    LaunchedEffect(controls, minimized, error == null) {
+    // An error closes the panels: nothing stays under its veil, and after "Réessayer" the focus
+    // goes back to play / pause.
+    LaunchedEffect(error) {
+        if (error != null) {
+            menu = null
+            commentsOpen = false
+        }
+    }
+    // error == null as a key: after "Réessayer" the controls come back with play / pause focused;
+    // started: the controls appear with the first frame; commentsOpen: back from the comments.
+    LaunchedEffect(controls, minimized, error == null, started, commentsOpen) {
         withFrameNanos { }
-        // The comments panel keeps its own focus.
-        if (upNext != null || minimized || commentsOpen) return@LaunchedEffect
+        // The comments panel and an open menu keep their own focus (Menu pressed while loading).
+        if (upNext != null || minimized || commentsOpen || menu != null) return@LaunchedEffect
         if (controls && refocusComments) {
             refocusComments = false
             if (commentsButton.tryRequestFocus()) return@LaunchedEffect
         }
-        if (controls) playPause.tryRequestFocus() else root.tryRequestFocus()
+        // Loading: the controls wait for the first frame, the screen itself holds the remote.
+        if (controls && started) playPause.tryRequestFocus() else root.tryRequestFocus()
     }
     // "À suivre" counting down when the window shrinks: the next video starts now.
     LaunchedEffect(minimized, upNext) {
@@ -620,6 +637,7 @@ fun PlayerScreen(
 
     Box(
         modifier
+            .onSizeChanged { screenPx = it.height }
             .background(Color.Black)
             .then(
                 // Small window: not focusable, the page keeps the remote.
@@ -646,8 +664,9 @@ fun PlayerScreen(
                     return@onPreviewKeyEvent true
                 }
                 if (native.action != AndroidKeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
-                // The "À suivre" card and the comments panel have their own focus.
-                if (upNext != null || commentsOpen) return@onPreviewKeyEvent false
+                // The "À suivre" card, the comments panel and the error box have their own focus
+                // (no seek, no settings under the error's veil).
+                if (upNext != null || commentsOpen || error != null) return@onPreviewKeyEvent false
                 // Media keys (remote, or the gamepad: X, L1 / R1, L2 / R2) and Menu (gamepad Y / Start)
                 // act the same with the controls shown or hidden.
                 when (native.keyCode) {
@@ -718,8 +737,10 @@ fun PlayerScreen(
                 it.player = player.exo
                 it.resizeMode = resizeModeOf(pictureFormat)
                 // Never under the buttons: hidden with the controls, raised above the time line.
-                it.subtitleView?.visibility = if (controls && !minimized && error == null) android.view.View.INVISIBLE else android.view.View.VISIBLE
-                it.subtitleView?.setBottomPaddingFraction(if (seekLineShown && !controls) SUBTITLE_RAISED else SUBTITLE_BOTTOM)
+                it.subtitleView?.visibility = if (controls && started && !commentsOpen && !minimized && error == null) android.view.View.INVISIBLE else android.view.View.VISIBLE
+                // Above the time line as it is measured (it grows with the interface size and the preview).
+                val raised = if (screenPx > 0 && seekLinePx > 0) (seekLinePx.toFloat() / screenPx).coerceIn(SUBTITLE_BOTTOM, 0.7f) else SUBTITLE_RAISED
+                it.subtitleView?.setBottomPaddingFraction(if (seekLineShown && !controls) raised else SUBTITLE_BOTTOM)
             },
             modifier = Modifier.fillMaxSize(),
         )
@@ -729,13 +750,13 @@ fun PlayerScreen(
             Box(Modifier.fillMaxSize()) {
                 Thumbnail(videoId, thumbnail, Modifier.fillMaxSize())
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)))
-                // Just the dots: the title is already in the controls shown at the bottom.
+                // Loading: the dimmed picture and the dots only (the controls come with the first frame).
                 LoadingDots(Modifier.align(Alignment.Center))
             }
         }
         if (started && buffering && error == null) LoadingDots(Modifier.align(Alignment.Center))
 
-        AnimatedVisibility(visible = controls && error == null && !minimized, enter = fadeIn(tween(150)), exit = fadeOut(tween(250))) {
+        AnimatedVisibility(visible = controls && started && error == null && !minimized && !commentsOpen, enter = fadeIn(tween(150)), exit = fadeOut(tween(250))) {
             val chapterIndex = chapters.indexOfLast { it.startMs <= (preview ?: position) }
             val chapter = chapters.getOrNull(chapterIndex)?.title?.takeIf { it.isNotBlank() }?.let { "Chapitre ${chapterIndex + 1} : $it" }
             Controls(
@@ -806,18 +827,19 @@ fun PlayerScreen(
             visible = seekLineShown && !controls && !minimized && error == null,
             enter = fadeIn(tween(100)),
             exit = fadeOut(tween(300)),
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier.align(Alignment.BottomCenter).onSizeChanged { seekLinePx = it.height },
         ) {
             SeekLine(pendingSeek ?: position, duration, buffered, storyboard = storyboard.takeIf { pendingSeek != null })
         }
 
-        // SponsorBlock: what was just skipped, top left.
+        // SponsorBlock: what was just skipped, bottom left, above the buttons or the time line (as
+        // measured), clear of the title and the stats (top); hidden while the bar shows a preview.
+        val seekLineTop = with(androidx.compose.ui.platform.LocalDensity.current) { seekLinePx.toDp() } + 12.dp
         AnimatedVisibility(
-            visible = skipNotice != null && !minimized,
+            visible = skipNotice != null && !minimized && preview == null,
             enter = fadeIn(),
             exit = fadeOut(tween(400)),
-            // Bottom left, above the buttons or the time line: clear of the title and the stats (top).
-            modifier = Modifier.align(Alignment.BottomStart).padding(start = Dimens.Gutter, bottom = if (controls) 136.dp else if (seekLineShown) 200.dp else 28.dp),
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = Dimens.Gutter, bottom = if (controls) 136.dp else if (seekLineShown) seekLineTop else 28.dp),
         ) {
             Text(
                 skipNotice.orEmpty(),
@@ -881,15 +903,16 @@ fun PlayerScreen(
             CommentsPanel(commentsKey, Modifier.align(Alignment.CenterEnd))
         }
 
-        if (stats && !minimized) {
+        // With the controls hidden only (the redesign's "stats" state): never over the title, the
+        // bar or a settings panel; width capped so it stays clear of the comments panel too.
+        if (stats && !minimized && !(controls && started)) {
             StatsOverlay(
                 player = player,
                 videoId = videoId,
                 streamInfo = streamInfo,
                 formatsMs = formatsMs,
                 firstFrameMs = firstFrameMs,
-                // Below the title when the controls show it.
-                modifier = Modifier.align(Alignment.TopStart).padding(top = if (controls) 136.dp else 28.dp, start = Dimens.Gutter),
+                modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = Dimens.Gutter).widthIn(max = 340.dp),
             )
         }
 
@@ -1011,6 +1034,10 @@ private fun Controls(
     // bar must not aim at a requester no longer attached.
     LaunchedEffect(hasSubtitles, hasChapters, canRate, hasComments, hasInfo) { lastButton = playPause }
     fun Modifier.button(requester: FocusRequester) = focusRequester(requester).onFocusChanged { if (it.isFocused) lastButton = requester }
+    // Live without a seekable window: no bar above the buttons, so Up hides the controls (like Down).
+    val barShown = !live || duration > 0
+    val barUp = if (barShown) progress else null
+    val upHide = if (barShown) null else onHide
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxWidth().height(150.dp).align(Alignment.TopCenter).background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent))))
         Box(Modifier.fillMaxWidth().height(220.dp).align(Alignment.BottomCenter).background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)))))
@@ -1036,7 +1063,7 @@ private fun Controls(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(title, fontSize = 18.sp, lineHeight = 23.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 if (channel.isNotBlank()) {
                     Text(channel, fontSize = 13.sp, color = Color.White.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 }
@@ -1046,17 +1073,17 @@ private fun Controls(
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
-                        modifier = Modifier.padding(start = 12.dp).background(Palette.Live, RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 2.dp),
+                        modifier = Modifier.background(Palette.Live, RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 2.dp),
                     )
                 }
                 if (likes != null || dislikes != null) {
                     val countColor = Color.White.copy(alpha = 0.72f)
-                    Row(Modifier.padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         if (likes != null) {
                             Icon(if (liked) LumenIcon.THUMB_UP else LumenIcon.THUMB_UP_OUTLINE, size = 13.dp, color = countColor)
                             Text(likes, fontSize = 13.sp, color = countColor, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 5.dp))
                         }
-                        if (likes != null && dislikes != null) Spacer(Modifier.width(12.dp))
+                        if (likes != null && dislikes != null) Spacer(Modifier.width(15.dp))
                         if (dislikes != null) {
                             Icon(if (disliked) LumenIcon.THUMB_DOWN else LumenIcon.THUMB_DOWN_OUTLINE, size = 13.dp, color = countColor)
                             Text(dislikes, fontSize = 13.sp, color = countColor, maxLines = 1, softWrap = false, modifier = Modifier.padding(start = 5.dp))
@@ -1070,7 +1097,7 @@ private fun Controls(
         Column(
             Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(horizontal = Dimens.Gutter, vertical = 28.dp),
         ) {
-            if (!live || duration > 0) {
+            if (barShown) {
                 // Seek preview: the picture at the aimed position, above the bar.
                 if (previewing && storyboard != null && duration > 0) {
                     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -1091,18 +1118,18 @@ private fun Controls(
                     // Ordered by use, most used first, one even gap between identical round buttons:
                     // playback (play, subtitles, chapters) · the video (thumbs, comments, about) ·
                     // window and settings (always last). ±10 s: Left / Right, or the progress bar.
-                    ControlButton(if (isPlaying) LumenIcon.PAUSE else LumenIcon.PLAY, Modifier.button(playPause), up = progress, onDown = onHide, onClick = onPlayPause)
-                    if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, Modifier.button(subtitlesButton), up = progress, onDown = onHide, highlighted = openedFrom == PlayerMenu.SUBTITLES, onClick = onSubtitles)
-                    if (hasChapters) ControlButton(LumenIcon.CHAPTERS, Modifier.button(chaptersButton), up = progress, onDown = onHide, highlighted = openedFrom == PlayerMenu.CHAPTERS, onClick = onChapters)
+                    ControlButton(if (isPlaying) LumenIcon.PAUSE else LumenIcon.PLAY, Modifier.button(playPause), up = barUp, onUp = upHide, onDown = onHide, onClick = onPlayPause)
+                    if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, Modifier.button(subtitlesButton), up = barUp, onUp = upHide, onDown = onHide, highlighted = openedFrom == PlayerMenu.SUBTITLES, onClick = onSubtitles)
+                    if (hasChapters) ControlButton(LumenIcon.CHAPTERS, Modifier.button(chaptersButton), up = barUp, onUp = upHide, onDown = onHide, highlighted = openedFrom == PlayerMenu.CHAPTERS, onClick = onChapters)
                     if (canRate) {
-                        ControlButton(if (liked) LumenIcon.THUMB_UP else LumenIcon.THUMB_UP_OUTLINE, Modifier.button(likeButton), up = progress, onDown = onHide, active = liked, onClick = onLike)
-                        ControlButton(if (disliked) LumenIcon.THUMB_DOWN else LumenIcon.THUMB_DOWN_OUTLINE, Modifier.button(dislikeButton), up = progress, onDown = onHide, active = disliked, onClick = onDislike)
+                        ControlButton(if (liked) LumenIcon.THUMB_UP else LumenIcon.THUMB_UP_OUTLINE, Modifier.button(likeButton), up = barUp, onUp = upHide, onDown = onHide, active = liked, onClick = onLike)
+                        ControlButton(if (disliked) LumenIcon.THUMB_DOWN else LumenIcon.THUMB_DOWN_OUTLINE, Modifier.button(dislikeButton), up = barUp, onUp = upHide, onDown = onHide, active = disliked, onClick = onDislike)
                     }
-                    if (hasComments) ControlButton(LumenIcon.COMMENT, Modifier.button(commentsButton), up = progress, onDown = onHide, onClick = onComments)
-                    if (hasInfo) ControlButton(LumenIcon.INFO, Modifier.button(infoButton), up = progress, onDown = onHide, highlighted = openedFrom == PlayerMenu.INFO, onClick = onInfo)
+                    if (hasComments) ControlButton(LumenIcon.COMMENT, Modifier.button(commentsButton), up = barUp, onUp = upHide, onDown = onHide, onClick = onComments)
+                    if (hasInfo) ControlButton(LumenIcon.INFO, Modifier.button(infoButton), up = barUp, onUp = upHide, onDown = onHide, highlighted = openedFrom == PlayerMenu.INFO, onClick = onInfo)
                     // Small window in a corner: keep watching while browsing ("Lecture en cours" brings it back).
-                    ControlButton(LumenIcon.PIP, Modifier.button(pipButton), up = progress, onDown = onHide, onClick = onMinimize)
-                    ControlButton(LumenIcon.SETTINGS, Modifier.button(settingsButton), up = progress, onDown = onHide, highlighted = openedFrom == PlayerMenu.MAIN, onClick = onSettings)
+                    ControlButton(LumenIcon.PIP, Modifier.button(pipButton), up = barUp, onUp = upHide, onDown = onHide, onClick = onMinimize)
+                    ControlButton(LumenIcon.SETTINGS, Modifier.button(settingsButton), up = barUp, onUp = upHide, onDown = onHide, highlighted = openedFrom == PlayerMenu.MAIN, onClick = onSettings)
                 }
                 Text(
                     if (live && duration <= 0) "En direct" else "${formatTime(position)} / ${formatTime(duration)}",
@@ -1120,6 +1147,8 @@ private fun ControlButton(
     icon: LumenIcon,
     modifier: Modifier = Modifier,
     up: FocusRequester? = null,
+    /** Up with nothing above (live without a bar): this instead (hide the controls). */
+    onUp: (() -> Unit)? = null,
     onDown: (() -> Unit)? = null,
     /** On (liked…): a light fill when not focused. */
     active: Boolean = false,
@@ -1136,6 +1165,9 @@ private fun ControlButton(
                 val native = event.nativeKeyEvent
                 if (onDown != null && native.action == AndroidKeyEvent.ACTION_DOWN && native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN) {
                     onDown()
+                    true
+                } else if (onUp != null && native.action == AndroidKeyEvent.ACTION_DOWN && native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP) {
+                    onUp()
                     true
                 } else {
                     false
@@ -1214,10 +1246,10 @@ private fun ProgressBar(
                         val end = size.width * (segment.endMs.toFloat() / duration).coerceIn(0f, 1f)
                         drawRect(Palette.Sponsor, topLeft = Offset(start, 0f), size = Size(end - start, size.height))
                     }
-                    val gap = 3.dp.toPx()
+                    val gap = 2.dp.toPx()
                     chapters.drop(1).forEach { chapter ->
                         val x = size.width * (chapter.startMs.toFloat() / duration).coerceIn(0f, 1f)
-                        drawRect(Color.Black, topLeft = Offset(x - gap / 2, 0f), size = Size(gap, size.height))
+                        drawRect(Color.Black.copy(alpha = 0.6f), topLeft = Offset(x - gap / 2, 0f), size = Size(gap, size.height))
                     }
                 }
             }
@@ -1285,14 +1317,15 @@ private fun UpNextCard(next: Video, onPlay: () -> Unit, onCancel: () -> Unit, mo
             .focusProperties { exit = { FocusRequester.Cancel } }
             .focusGroup()
             .background(Palette.Panel.copy(alpha = 0.95f), DialogShape)
-            .padding(14.dp),
+            .padding(12.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(144.dp).aspectRatio(16f / 9f).clip(ControlShape).background(Palette.Tile)) {
             Thumbnail(next.videoId, next.thumbnail, Modifier.fillMaxSize(), small = true)
         }
-        Column(Modifier.width(210.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        // 12 + 144 + 14 + 198 + 12 = 380 dp (the redesign).
+        Column(Modifier.width(198.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text("À suivre · $seconds s", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary)
             Text(next.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp, color = Palette.TextPrimary)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
@@ -1451,7 +1484,7 @@ private fun StatsOverlay(player: LumenPlayer, videoId: String, streamInfo: Strin
         lines.forEach { (label, value) ->
             Row {
                 Text(label, fontSize = 12.sp, color = Color.White.copy(alpha = 0.65f), modifier = Modifier.width(120.dp))
-                Text(value, fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Medium)
+                Text(value, fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }

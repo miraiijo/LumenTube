@@ -27,6 +27,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -57,6 +58,10 @@ fun Root(vm: MainViewModel) {
     // Incremented when the video goes to the small window: the focus goes to « Lecture en cours »
     // in the header (Back then OK brings it back full screen), the page when there's no header.
     var miniFocusTick by remember { mutableIntStateOf(0) }
+    // Incremented on "Pas intéressé": the focus moves to the next card (else the previous one)
+    // before the card goes away; without it, the focus was lost.
+    var neighbourTick by remember { mutableIntStateOf(0) }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
 
     // A page about to be replaced (channel / playlist opened, or closed): its focused card goes
     // away while the next one loads. This invisible holder keeps the focus meanwhile (otherwise it
@@ -174,18 +179,29 @@ fun Root(vm: MainViewModel) {
                     .onFocusChanged { if (!it.isFocused && holding) holding = false }
                     .focusable(),
             )
-            Crossfade(targetState = state.section to state.opened?.title, animationSpec = tween(220), label = "pages") { (section, opened) ->
-                if (section == dev.miraiijo.lumentube.data.Section.SEARCH && opened == null) {
+            // Each layer of the fade draws its own snapshot: the page leaving keeps its data (it
+            // showed the incoming page's rows, or "Rien à afficher", for the 220 ms), and only the
+            // incoming one gets new focus ticks.
+            val view = PageView(state.section, state.opened, page, state.query, state.suggestions, state.searchOptions, pageFocusTick)
+            val pageKey = state.section to state.opened?.title
+            Crossfade(targetState = pageKey, animationSpec = tween(220), label = "pages") { layerKey ->
+                // The current page follows the state; the one fading out keeps the last view it
+                // had while it was current (a plain holder: no recomposition when it's written).
+                val last = remember { arrayOfNulls<PageView>(1) }
+                val current = layerKey == pageKey
+                if (current) last[0] = view
+                val shown = if (current) view else last[0] ?: view
+                if (shown.section == dev.miraiijo.lumentube.data.Section.SEARCH && shown.opened == null) {
                     SearchPage(
-                        query = state.query,
-                        page = page,
-                        focusTick = pageFocusTick,
+                        query = shown.query,
+                        page = shown.page,
+                        focusTick = shown.focusTick,
                         onSearch = vm::search,
                         onSelect = select,
                         onLoadMore = vm::loadMore,
-                        suggestions = state.suggestions,
+                        suggestions = shown.suggestions,
                         onTyping = vm::suggest,
-                        options = state.searchOptions,
+                        options = shown.options,
                         onOptions = vm::setSearchOptions,
                         onLongPress = vm::openCardMenu,
                         dictate = dictate,
@@ -193,20 +209,22 @@ fun Root(vm: MainViewModel) {
                     )
                 } else {
                     BrowsePage(
-                        page = page,
-                        title = state.opened?.title,
-                        focusTick = pageFocusTick,
+                        page = shown.page,
+                        title = shown.opened?.title,
+                        focusTick = shown.focusTick,
                         onSelect = select,
                         onLoadMore = vm::loadMore,
                         // The opened channel / playlist reloads itself, not the section under it.
                         onRetry = vm::retry,
-                        needsAccount = state.section.account && !state.signedIn && state.opened == null,
+                        needsAccount = shown.section.account && !state.signedIn && shown.opened == null,
                         onSignIn = vm::startSignIn,
                         onLongPress = vm::openCardMenu,
-                        channel = state.opened?.channel,
+                        channel = shown.opened?.channel,
                         signedIn = state.signedIn,
                         onSubscribe = vm::toggleChannelSubscription,
                         onSort = vm::chooseChannelSort,
+                        // Up to the tabs before the rows arrived: the rows don't take the focus back.
+                        focusElsewhere = { inHeader },
                     )
                 }
             }
@@ -248,7 +266,12 @@ fun Root(vm: MainViewModel) {
                     vm.cardOpenChannel(video)
                     pageFocusTick++
                 },
-                onNotInterested = { channel -> vm.cardNotInterested(video, channel) },
+                onNotInterested = { channel ->
+                    // The card is about to leave its row: the focus goes to its neighbour first
+                    // (once the menu is closed and the focus is back on the card).
+                    neighbourTick++
+                    vm.cardNotInterested(video, channel)
+                },
                 onDismiss = vm::closeCardMenu,
             )
         }
@@ -288,18 +311,32 @@ fun Root(vm: MainViewModel) {
                     returnFocusTick++
                 },
                 modifier = if (state.minimized) {
-                    Modifier.align(Alignment.BottomEnd).padding(end = 32.dp, bottom = 32.dp).shadow(30.dp).size(MINI_WIDTH, MINI_WIDTH * 9 / 16)
+                    // A third of the screen's width, whatever the interface size (a fixed 400 dp
+                    // took half the screen at 120 %).
+                    Modifier.align(Alignment.BottomEnd).padding(end = 32.dp, bottom = 32.dp).fillMaxWidth(MINI_FRACTION).aspectRatio(16f / 9f).shadow(30.dp)
                 } else {
                     Modifier.fillMaxSize()
                 },
             ) }
         }
-        Notice(state.notice, Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp))
+        // With the small window in the bottom right corner, the notice moves to the bottom left.
+        if (playingId != null && state.minimized) {
+            Notice(state.notice, Modifier.align(Alignment.BottomStart).padding(start = Dimens.Gutter, bottom = 40.dp))
+        } else {
+            Notice(state.notice, Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp))
+        }
     }
     LaunchedEffect(returnFocusTick) {
         if (returnFocusTick == 0) return@LaunchedEffect
         withFrameNanos { }
         if (!content.tryRequestFocus()) header.tryRequestFocus()
+    }
+    LaunchedEffect(neighbourTick) {
+        if (neighbourTick == 0) return@LaunchedEffect
+        // Two frames: the menu's window goes, the focus comes back to the card.
+        withFrameNanos { }
+        withFrameNanos { }
+        if (!focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Right)) focusManager.moveFocus(androidx.compose.ui.focus.FocusDirection.Left)
     }
     LaunchedEffect(miniFocusTick) {
         if (miniFocusTick == 0) return@LaunchedEffect
@@ -308,8 +345,19 @@ fun Root(vm: MainViewModel) {
     }
 }
 
-/** Width of the in-app picture-in-picture window (16:9). */
-private val MINI_WIDTH = 400.dp
+/** Width of the in-app picture-in-picture window (16:9), a share of the screen's. */
+private const val MINI_FRACTION = 0.33f
+
+/** What a page of the fade shows: a snapshot, so the page leaving keeps its own data. */
+private data class PageView(
+    val section: dev.miraiijo.lumentube.data.Section,
+    val opened: dev.miraiijo.lumentube.Opened?,
+    val page: dev.miraiijo.lumentube.Page,
+    val query: String,
+    val suggestions: List<String>,
+    val options: Int,
+    val focusTick: Int,
+)
 
 /** Where a video resumes: YouTube's saved position, else its watched share (not when finished). */
 private fun resumeSeconds(video: dev.miraiijo.lumentube.data.Video): Int {

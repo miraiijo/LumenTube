@@ -5,6 +5,10 @@ package dev.miraiijo.lumentube.ui
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -27,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -66,13 +71,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.runtime.snapshotFlow
 
-/**
- * Room kept above a focused card when the rows scroll: its row title (8 + ~21 + 4 dp) plus the
- * row's top padding (12 dp), so the title stays fully visible above the cards.
- */
-private val ROW_TITLE = 46.dp
-/** Room kept below a focused card: its title and channel (and the zoom). */
-private val CARD_CAPTION = 64.dp
+/** The row title's line (16 sp text). */
+private val ROW_TITLE_LINE = 20.sp
 /** Default card width; on a page it follows the screen (as many cards as fit at ~[CARD_SLOT] fill the width). */
 private val CARD_WIDTH = 204.dp
 /** Width per card used to count the cards of a row: 4 at 100 %, 5 at 80 %, 6 at 60 %, 3 at 120 %. */
@@ -104,19 +104,50 @@ fun BrowsePage(
     onSort: (Int) -> Unit = {},
     /** Room above the page's own title / channel header. */
     top: androidx.compose.ui.unit.Dp = 0.dp,
+    /** The focus is somewhere the user put it on purpose (the header's tabs): the page leaves it there. */
+    focusElsewhere: () -> Boolean = { false },
 ) {
     val first = remember { FocusRequester() }
     val action = remember { FocusRequester() }
+    /** The last focusTick served: each one moves the focus once, not again when data arrives later. */
+    var servedTick by remember { mutableIntStateOf(0) }
+    /** The focus is in the channel's header (S'abonner, a sort): rows arriving don't take it away. */
+    var sheetFocused by remember { mutableStateOf(false) }
     LaunchedEffect(focusTick, page.rows.isNotEmpty(), page.error, needsAccount) {
-        if (focusTick == 0) return@LaunchedEffect
+        if (focusTick == 0 || focusTick == servedTick) return@LaunchedEffect
+        // Moved meanwhile to the tabs or the channel's header (rows still loading): left there.
+        if (focusElsewhere() || sheetFocused) {
+            servedTick = focusTick
+            return@LaunchedEffect
+        }
         withFrameNanos { }
-        if (!first.tryRequestFocus()) action.tryRequestFocus()
+        if (first.tryRequestFocus() || action.tryRequestFocus()) servedTick = focusTick
+    }
+    // "Réessayer" goes away with the error, focus and all: the page's first card takes it once loaded.
+    val retry = {
+        servedTick = -1
+        onRetry()
+    }
+    // Room kept above / below a focused card when the rows scroll, from the text lines (they follow
+    // the system's font scale): the row title (8 + line + 4) with the row's top padding (12), and
+    // the card's title (10 + 2 lines) and channel (2 + line).
+    val rowTitle = 24.dp + lines(ROW_TITLE_LINE, 1)
+    val cardCaption = 12.dp + lines(TITLE_LINE, 2) + lines(CHANNEL_LINE, 1)
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // A row inserted on top (Reprendre arriving after the feed) while the page was at its top: back
+    // to the top, the list kept the old first row in place and hid the new one above the screen.
+    val firstKey = page.rows.firstOrNull()?.key
+    LaunchedEffect(firstKey) {
+        withFrameNanos { }
+        if (firstKey != null && listState.firstVisibleItemIndex == 1 && listState.firstVisibleItemScrollOffset == 0) {
+            listState.requestScrollToItem(0)
+        }
     }
 
     Column(Modifier.fillMaxSize()) {
         Spacer(Modifier.height(top))
         when {
-            channel != null -> ChannelSheet(channel, signedIn, onSubscribe, onSort, onSignIn)
+            channel != null -> ChannelSheet(channel, signedIn, onSubscribe, onSort, onSignIn, Modifier.onFocusChanged { sheetFocused = it.hasFocus })
             title != null -> Text(
                 title,
                 fontSize = 34.sp,
@@ -144,10 +175,11 @@ fun BrowsePage(
                     page.error ?: "Rien à afficher.",
                     button = if (showRetry) "Réessayer" else null,
                     buttonModifier = Modifier.focusRequester(action),
-                    onClick = onRetry,
+                    onClick = retry,
                 )
-                else -> RowsScroll(ROW_TITLE, CARD_CAPTION) {
+                else -> RowsScroll(rowTitle, cardCaption) {
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 64.dp),
                     ) {
@@ -181,17 +213,22 @@ private fun VideoRowView(
         Text(
             row.title,
             fontSize = 16.sp,
-            // A fixed line (20 dp): with the paddings, 8 + 20 + 4 + 12 = 44 dp fit in ROW_TITLE.
-            lineHeight = 20.sp,
+            // A fixed line: with the paddings (8 + line + 4) and the row's 12, the room kept above a card.
+            lineHeight = ROW_TITLE_LINE,
             fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = Dimens.Gutter, top = 8.dp, bottom = 4.dp),
+            modifier = Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 8.dp, bottom = 4.dp),
         )
+        // Only channels: round cards, a bit more room above (the zoomed avatar stays clear of the
+        // title). With videos (a search's mixed results too): the row is a video card's height,
+        // whatever cards are on screen, so it never shrinks or grows while it scrolls sideways.
+        val channelsOnly = row.items.all { it.isChannel }
+        val rowHeight = if (channelsOnly) Modifier else Modifier.height(24.dp + cardWidth * 9f / 16f + 12.dp + lines(TITLE_LINE, 2) + lines(CHANNEL_LINE, 1))
         RowScroll {
             LazyRow(
-                // Channel rows: a bit more room above, so the zoomed round avatar stays clear of the title.
-                contentPadding = PaddingValues(horizontal = Dimens.Gutter, vertical = if (row.items.all { it.isChannel }) 16.dp else 12.dp),
+                modifier = rowHeight,
+                contentPadding = PaddingValues(horizontal = Dimens.Gutter, vertical = if (channelsOnly) 16.dp else 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
             ) {
                 itemsIndexed(row.items, key = { _, video -> video.key }, contentType = { _, video -> if (video.isChannel) 1 else 0 }) { index, video ->
@@ -319,13 +356,13 @@ private fun Modifier.menuKey(action: (() -> Unit)?): Modifier = if (action == nu
  * large, then "S’abonner" / "Abonné" and its orders (Accueil, Plus récentes, Populaires…).
  */
 @Composable
-private fun ChannelSheet(channel: ChannelHeader, signedIn: Boolean, onSubscribe: () -> Unit, onSort: (Int) -> Unit, onSignIn: () -> Unit) {
+private fun ChannelSheet(channel: ChannelHeader, signedIn: Boolean, onSubscribe: () -> Unit, onSort: (Int) -> Unit, onSignIn: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         // 54 dp under the sorts before the first row (the redesign's room between header and rows).
-        Modifier.fillMaxWidth().padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 36.dp, bottom = 54.dp),
+        modifier.fillMaxWidth().padding(top = 36.dp, bottom = 54.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(Modifier.padding(horizontal = Dimens.Gutter), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             // No picture: the initial, white on a colored gradient (as for accounts).
             AvatarPicture(channel.avatar, channel.name, 66.dp, 28.sp)
             Column {
@@ -333,13 +370,21 @@ private fun ChannelSheet(channel: ChannelHeader, signedIn: Boolean, onSubscribe:
                 Text(channel.name, fontSize = 48.sp, lineHeight = 52.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, letterSpacing = (-0.035).em)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap), verticalAlignment = Alignment.CenterVertically) {
+        // S'abonner and the sorts scroll when they don't fit (120 %, long names): full width, the
+        // gutter inside, so the first pill's zoom isn't clipped at the edge.
+        EdgeScroll(Dimens.Gutter) { Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = Dimens.Gutter),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             // Always there (its place kept while the state loads, so the sorts never shift under the
             // focus): red "S’abonner" (white text, by day too), "Abonné" once subscribed; signed out,
             // OK opens the sign-in.
             val subscribed = signedIn && channel.subscribed == true
             LumenButton(
                 if (subscribed) "Abonné" else "S’abonner",
+                // As wide either way: the sorts don't slide when it switches.
+                modifier = Modifier.widthIn(min = SUBSCRIBE_WIDTH),
                 icon = if (subscribed) LumenIcon.CHECK else LumenIcon.PLUS,
                 containerColor = if (subscribed) Palette.ControlIdle else Palette.Live,
                 contentColor = if (subscribed) Palette.TextPrimary else Color.White,
@@ -355,17 +400,20 @@ private fun ChannelSheet(channel: ChannelHeader, signedIn: Boolean, onSubscribe:
                 SortChip("Accueil", channel.sort == -1) { onSort(-1) }
                 channel.sorts.forEachIndexed { index, name -> SortChip(name, channel.sort == index) { onSort(index) } }
             }
-        }
+        } }
     }
 }
 
+/** "S’abonner" with its icon (the wider of the two labels). */
+private val SUBSCRIBE_WIDTH = 116.dp
+
 @Composable
 private fun SortChip(label: String, selected: Boolean, onClick: () -> Unit) =
-    LumenButton(label, icon = if (selected) LumenIcon.CHECK else null, containerColor = if (selected) Palette.Selected else Palette.ControlIdle, contentColor = Palette.ChipText, onClick = onClick)
+    LumenButton(label, icon = if (selected) LumenIcon.CHECK else null, iconSize = 13.dp, containerColor = if (selected) Palette.Selected else Palette.ControlIdle, contentColor = Palette.ChipText, onClick = onClick)
 
 @Composable
 private fun Message(text: String, button: String? = null, buttonModifier: Modifier = Modifier, onClick: () -> Unit = {}) {
-    Column(Modifier.padding(start = Dimens.Gutter, top = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    Column(Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(text, fontSize = 16.sp, color = Palette.TextSecondary)
         if (button != null) LumenButton(button, modifier = buttonModifier, onClick = onClick)
     }
@@ -378,22 +426,33 @@ private fun Message(text: String, button: String? = null, buttonModifier: Modifi
 private fun ChannelCard(video: Video, modifier: Modifier, onFocus: () -> Unit, onClick: () -> Unit) {
     var isFocused by remember { mutableStateOf(false) }
     Column(Modifier.width(CHANNEL_CARD), horizontalAlignment = Alignment.CenterHorizontally) {
-        Surface(
-            onClick = onClick,
-            modifier = modifier
-                .size(CHANNEL_AVATAR)
-                .onFocusChanged {
-                    isFocused = it.isFocused
-                    if (it.isFocused) onFocus()
-                },
-            shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = CHANNEL_FOCUS_SCALE),
-            border = ClickableSurfaceDefaults.border(
-                focusedBorder = Border(androidx.compose.foundation.BorderStroke(2.dp, Palette.FocusRing), shape = CircleShape),
-            ),
-            colors = ClickableSurfaceDefaults.colors(containerColor = Palette.Tile, focusedContainerColor = Palette.TileFocused),
+        // The ring (a gap, then the focus color) drawn by this box, as in "Qui regarde ?":
+        // tv-material's border landed on the round picture. No picture: the initial on a gradient.
+        Box(
+            Modifier
+                .size(CHANNEL_RING)
+                .graphicsLayer {
+                    val s = if (isFocused) CHANNEL_FOCUS_SCALE else 1f
+                    scaleX = s
+                    scaleY = s
+                }
+                .then(if (isFocused) Modifier.border(2.5.dp, Palette.FocusRing, CircleShape) else Modifier),
+            contentAlignment = Alignment.Center,
         ) {
-            GlideImage(model = avatarUrl(video.thumbnail), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            Surface(
+                onClick = onClick,
+                modifier = modifier
+                    .size(CHANNEL_AVATAR)
+                    .onFocusChanged {
+                        isFocused = it.isFocused
+                        if (it.isFocused) onFocus()
+                    },
+                shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
+                colors = ClickableSurfaceDefaults.colors(containerColor = Palette.Tile, focusedContainerColor = Palette.Tile),
+            ) {
+                AvatarPicture(video.thumbnail, video.title, CHANNEL_AVATAR, 36.sp)
+            }
         }
         Text(
             video.title,
@@ -404,7 +463,7 @@ private fun ChannelCard(video: Video, modifier: Modifier, onFocus: () -> Unit, o
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
             lineHeight = 17.sp,
-            modifier = Modifier.padding(top = 10.dp).height(lines(17.sp, 2)),
+            modifier = Modifier.padding(top = 4.dp).height(lines(17.sp, 2)),
         )
     }
 }
@@ -418,4 +477,6 @@ private val CHANNEL_LINE = 16.sp
 private fun lines(lineHeight: androidx.compose.ui.unit.TextUnit, count: Int): androidx.compose.ui.unit.Dp =
     with(androidx.compose.ui.platform.LocalDensity.current) { (lineHeight * count).toDp() }
 private val CHANNEL_AVATAR = 96.dp
+/** The avatar, a 4 dp gap and the 2.5 dp ring. */
+private val CHANNEL_RING = CHANNEL_AVATAR + 13.dp
 private const val CHANNEL_FOCUS_SCALE = 1.06f

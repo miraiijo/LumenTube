@@ -109,8 +109,9 @@ fun SearchPage(
     }
     Column(Modifier.fillMaxSize()) {
         SearchBar(query, bar, belowBar, ::search, onTyping, Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 32.dp), chipFocused = { chipsHaveFocus }, dictate = dictate, onDictated = onDictated)
-        // One line under the bar: the suggestions while typing, else the filters.
-        Row(
+        // One line under the bar: the suggestions while typing, else the filters. It scrolls only
+        // when the focused pill would leave it (TV's default pivot moved it on every step).
+        EdgeScroll(Dimens.Gutter) { Row(
             Modifier.fillMaxWidth().onFocusChanged { chipsHaveFocus = it.hasFocus }.horizontalScroll(rememberScrollState()).padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 12.dp, bottom = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap),
             verticalAlignment = Alignment.CenterVertically,
@@ -119,7 +120,7 @@ fun SearchPage(
             fun chip(index: Int) = (chips.getOrNull(index)?.let { Modifier.focusRequester(it) } ?: Modifier).focusProperties { up = bar }
             if (suggestions.isNotEmpty()) {
                 suggestions.forEachIndexed { index, suggestion ->
-                    LumenButton(suggestion, modifier = chip(index), icon = LumenIcon.SEARCH, contentColor = Palette.ChipText) {
+                    LumenButton(suggestion, modifier = chip(index), icon = LumenIcon.SEARCH, iconSize = 13.dp, contentColor = Palette.ChipText) {
                         // The suggestions line is about to give way to the filters: the focus moves to
                         // the bar first (it fell into the side menu), then to the results when they come.
                         bar.tryRequestFocus()
@@ -145,7 +146,7 @@ fun SearchPage(
                     }
                 }
             }
-        }
+        } }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             BrowsePage(
                 page = if (query.isBlank() && page.rows.isEmpty() && !page.loading) page.copy(error = "Cherche une vidéo, une chaîne ou une playlist.") else page,

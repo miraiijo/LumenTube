@@ -80,15 +80,17 @@ private fun Avatar(url: String?, name: String?) = AvatarPicture(url, name, 32.dp
 /** Round account picture (sharp: asked in 256 px), else the name's initial. */
 @Composable
 internal fun AvatarPicture(url: String?, name: String?, size: androidx.compose.ui.unit.Dp, initialSize: androidx.compose.ui.unit.TextUnit) {
-    // No picture: the name's initial, white and bold on a colored gradient (the redesign's).
-    val back = if (url == null && name != null) Modifier.background(initialGradient(name)) else Modifier.background(Palette.ControlIdle)
+    // No picture: the name's initial, white and bold on a colored gradient (the redesign's). The
+    // initial is also drawn under a picture: if it fails to load (404, offline), the initial shows.
+    val back = if (name != null) Modifier.background(initialGradient(name)) else Modifier.background(Palette.ControlIdle)
     Box(Modifier.size(size).clip(CircleShape).then(back), contentAlignment = Alignment.Center) {
+        if (name != null) {
+            Text(name.take(1).uppercase(), fontSize = initialSize, fontWeight = FontWeight.Bold, color = Color.White)
+        } else if (url == null) {
+            Icon(LumenIcon.PLAY, size = size / 2, color = Palette.Danger)
+        }
         if (url != null) {
             GlideImage(model = avatarUrl(url), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        } else if (name != null) {
-            Text(name.take(1).uppercase(), fontSize = initialSize, fontWeight = FontWeight.Bold, color = Color.White)
-        } else {
-            Icon(LumenIcon.PLAY, size = size / 2, color = Palette.Danger)
         }
     }
 }
@@ -129,14 +131,18 @@ fun SignInDialog(code: String?, error: String?, onRetry: () -> Unit, onDismiss: 
                     "Scanne le QR code avec ton téléphone, ou ouvre youtube.com/activate et saisis ce code :",
                     color = Palette.TextSecondary,
                     fontSize = 15.sp,
+                    lineHeight = 21.sp,
                 )
-                when {
-                    error != null -> Text(error, color = Palette.Danger, fontSize = 15.sp)
-                    code == null -> Text("Code en cours…", color = Palette.TextSecondary, fontSize = 28.sp)
-                    else -> Text(code, fontSize = 40.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
+                // A fixed slot: "Code en cours…", the code or the error, the dialog keeps its height.
+                Box(Modifier.fillMaxWidth().height(CODE_SLOT), contentAlignment = Alignment.CenterStart) {
+                    when {
+                        error != null -> Text(error, color = Palette.Danger, fontSize = 15.sp, lineHeight = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        code == null -> Text("Code en cours…", color = Palette.TextSecondary, fontSize = 28.sp, lineHeight = 34.sp)
+                        else -> Text(code, fontSize = 40.sp, lineHeight = 48.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
+                    }
                 }
                 Text("LumenTube reste connecté ensuite. Tu peux lier plusieurs comptes et choisir lequel à l’ouverture.", color = Palette.TextSecondary, fontSize = 13.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap), modifier = Modifier.padding(top = 6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap)) {
                     if (error != null) LumenButton("Réessayer", icon = LumenIcon.REFRESH, onClick = onRetry)
                     LumenButton("Annuler", modifier = Modifier.focusRequester(button), onClick = onDismiss)
                 }
@@ -146,12 +152,16 @@ fun SignInDialog(code: String?, error: String?, onRetry: () -> Unit, onDismiss: 
                 if (code != null && error == null) QrCode(QR_SIGN_IN_URL + code.trim().replace(' ', '-'), Modifier.fillMaxSize().padding(14.dp))
             }
         }
-        LaunchedEffect(Unit) {
+        // At opening, and after "Réessayer" (it goes away with the error, focus and all): "Annuler".
+        LaunchedEffect(error == null) {
             withFrameNanos { }
             button.tryRequestFocus()
         }
     }
 }
+
+/** The code's line in the sign-in and pairing dialogs (the 40 sp code on a 48 sp line). */
+internal val CODE_SLOT = 52.dp
 
 /** Same address as SmartTube's QR sign-in. */
 private const val QR_SIGN_IN_URL = "https://youtube.com/qr/activate/"
@@ -209,7 +219,8 @@ fun ProfileDialog(
             Text("Qui regarde ?", fontSize = 44.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.03).em, color = Palette.TextPrimary)
             Spacer(Modifier.height(40.dp))
             Row(
-                Modifier.widthIn(max = 880.dp).horizontalScroll(rememberScrollState()),
+                // Side margins: at 120 % (an ~800 dp wide screen) the tiles, ring and zoom stay off the edges.
+                Modifier.padding(horizontal = Dimens.Gutter).widthIn(max = 880.dp).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(40.dp),
             ) {
                 // The current account first takes the focus.
@@ -344,7 +355,8 @@ fun SettingsDialog(
                         )
                     }
                 }
-                Column(
+                // One scroll per page: a page scrolled down doesn't make the next one open scrolled.
+                androidx.compose.runtime.key(page) { Column(
                     Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(11.dp),
                 ) {
@@ -369,11 +381,11 @@ fun SettingsDialog(
                                 Choice("Nuit", settings.appearance == 2) { onSettings(settings.copy(appearance = 2)) }
                                 Choice("Auto", settings.appearance == 0) { onSettings(settings.copy(appearance = 0)) }
                             }
-                            SettingCard("Taille de l’interface", "Tout l’affichage (textes, cartes, lecteur), appliqué tout de suite. Par défaut : $UI_SCALE_DEFAULT %, pensé pour les TV 4K.") {
-                                val size = settings.uiScale
-                                LumenButton("Plus petit") { onSettings(settings.copy(uiScale = (size - UI_SCALE_STEP).coerceAtLeast(UI_SCALE_MIN))) }
-                                Text("$size %", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Palette.TextPrimary, modifier = Modifier.padding(horizontal = 10.dp))
-                                LumenButton("Plus grand") { onSettings(settings.copy(uiScale = (size + UI_SCALE_STEP).coerceAtMost(UI_SCALE_MAX))) }
+                            // The size in the title: the pills never move under the focus as it changes.
+                            val size = settings.uiScale
+                            SettingCard("Taille de l’interface · $size %", "De $UI_SCALE_MIN à $UI_SCALE_MAX % par pas de $UI_SCALE_STEP %, appliqué tout de suite. Par défaut : $UI_SCALE_DEFAULT %, pensé pour les TV 4K.") {
+                                LumenButton("Plus petit", contentColor = Palette.ChipText) { onSettings(settings.copy(uiScale = (size - UI_SCALE_STEP).coerceAtLeast(UI_SCALE_MIN))) }
+                                LumenButton("Plus grand", contentColor = Palette.ChipText) { onSettings(settings.copy(uiScale = (size + UI_SCALE_STEP).coerceAtMost(UI_SCALE_MAX))) }
                                 Choice("Par défaut", size == UI_SCALE_DEFAULT) { onSettings(settings.copy(uiScale = UI_SCALE_DEFAULT)) }
                             }
                             SettingCard("DeArrow", "Titres et miniatures de la communauté, sans racolage, quand il y en a.") {
@@ -394,7 +406,7 @@ fun SettingsDialog(
                             }
                         }
                     }
-                }
+                } }
             }
         }
         LaunchedEffect(Unit) {
@@ -439,9 +451,12 @@ private fun SettingCard(title: String, help: String, choices: @Composable () -> 
     ) {
         Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Palette.TextPrimary)
         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) { choices() }
-        Text(help, fontSize = 11.sp, color = Palette.TextSecondary, modifier = Modifier.padding(top = 8.dp))
+        Text(help, fontSize = 11.sp, color = if (Palette.colors.isLight) Palette.TextSecondary else SETTINGS_HELP_NIGHT, modifier = Modifier.padding(top = 8.dp))
     }
 }
+
+/** The settings' help text at night (the redesign's, a touch lighter than TextSecondary). */
+private val SETTINGS_HELP_NIGHT = Color(0xFFA3A5AD)
 
 /** A choice of a setting: a pill, checked when it's the current one. */
 @Composable

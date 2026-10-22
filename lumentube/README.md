@@ -36,6 +36,29 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.13.4
+- **Navigation** :
+  - le fondu entre deux pages ne montre plus les données de la nouvelle page sur l'ancienne ;
+  - les onglets de l'en-tête défilent quand ils ne tiennent pas (grandes tailles d'interface) ;
+  - l'heure ne fait plus bouger les boutons ronds (chiffres à largeur fixe) ;
+  - « Reprendre » arrivé en dernier n'est plus caché au-dessus de l'écran ;
+  - « Pas intéressé » laisse le focus sur la carte voisine ;
+  - l'arrivée des données ne vole plus le focus à l'en-tête ou aux tris.
+- **Vidéo envoyée du téléphone ou ouverte par un lien** : les Réglages, l'appairage, la connexion et « Qui regarde ? » se ferment, la télécommande pilote bien le lecteur.
+- **Lecteur** :
+  - pendant une erreur, les touches ne font plus d'avance ni n'ouvrent le menu ;
+  - les commentaires se ferment à la fin de la vidéo et à l'arrivée d'une erreur ;
+  - pendant le chargement, seulement le voile et les points ;
+  - statistiques seulement commandes masquées, et sans déborder ;
+  - sous-titres remontés selon la hauteur réelle de la ligne d'avance, un peu plus petits ;
+  - commentaires longs limités à 6 lignes (OK pour tout lire), « Chargement… » prend le focus ;
+  - retour d'un sous-menu sur la ligne d'origine, valeurs du menu plus coupées inutilement.
+- **Chaîne** : tris défilants, S'abonner / Abonné à largeur fixe (les tris ne glissent plus), anneau des chaînes autour de l'avatar, initiale quand il n'y a pas de photo.
+- **Réglages** : un défilement par page ; Taille de l'interface avec le pourcentage dans le titre.
+- **Connexion et appairage** : le code a une place fixe (plus de saut), le focus revient après « Réessayer ».
+- **Grandes tailles** : petite fenêtre à un tiers de la largeur, message du bas décalé quand elle est là, « Qui regarde ? » avec des marges, rangées à hauteur fixe même mélangées, marges qui suivent la taille de police du système.
+- **Finitions** : boutons avec « … » quand le texte est trop long, pastilles plus fines, petits espacements.
+
 ### 0.13.3
 - **Lecteur** : l'heure revient, dans le coin en haut à droite, centrée sur la première ligne du titre (masquée quand un panneau est ouvert).
 

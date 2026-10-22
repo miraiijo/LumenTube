@@ -22,6 +22,7 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,12 +50,14 @@ fun LumenButton(
     containerColor: Color = Palette.ControlIdle,
     /** Text and icon when not focused (white on the red S'abonner, by day too). */
     contentColor: Color = Palette.TextPrimary,
+    /** 13 dp on choice pills (sorts, suggestions), the redesign's. */
+    iconSize: Dp = 15.dp,
     onClick: () -> Unit,
 ) {
     Button(
         onClick = onClick,
         modifier = modifier.height(Dimens.ControlHeight + 6.dp),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
         shape = ButtonDefaults.shape(shape = CircleShape),
         scale = ButtonDefaults.scale(focusedScale = FocusScale.Control, pressedScale = FocusScale.Control),
         colors = ButtonDefaults.colors(
@@ -67,10 +70,11 @@ fun LumenButton(
         ),
     ) {
         icon?.let {
-            Icon(it, size = 15.dp)
-            Spacer(Modifier.width(8.dp))
+            Icon(it, size = iconSize)
+            Spacer(Modifier.width(7.dp))
         }
-        Text(text, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
+        // One line; too long for the room ("Se déconnecter de <a long name>" at 120 %): an ellipsis.
+        Text(text, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -94,6 +98,18 @@ private class MarginSpec(private val start: Float, private val end: Float) : Bri
 fun RowsScroll(start: Dp, end: Dp, content: @Composable () -> Unit) {
     val density = LocalDensity.current
     val spec = remember(density, start, end) { with(density) { MarginSpec(start.toPx(), end.toPx()) } }
+    CompositionLocalProvider(LocalBringIntoViewSpec provides spec, content = content)
+}
+
+/**
+ * A scrolling line of pills or tabs (header tabs, search suggestions, a channel's sorts): it only
+ * scrolls when the focused one would leave it, keeping [margin] — never TV's default "pivot"
+ * scrolling, which moved the whole line on every Left / Right.
+ */
+@Composable
+fun EdgeScroll(margin: Dp, content: @Composable () -> Unit) {
+    val density = LocalDensity.current
+    val spec = remember(density, margin) { with(density) { MarginSpec(margin.toPx(), margin.toPx()) } }
     CompositionLocalProvider(LocalBringIntoViewSpec provides spec, content = content)
 }
 

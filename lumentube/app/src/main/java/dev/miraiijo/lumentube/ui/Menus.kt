@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -60,7 +61,7 @@ fun CardMenuDialog(
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, bottom = 10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp)) {
                 Box(Modifier.width(112.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).background(Palette.Tile)) {
                     Thumbnail(video.videoId, video.thumbnail, Modifier.matchParentSize(), custom = video.customThumbnail, small = true)
                 }
@@ -108,10 +109,13 @@ fun PairingDialog(pairing: Pairing, onRetry: () -> Unit, onDismiss: () -> Unit) 
                 fontSize = 15.sp,
                 lineHeight = 21.sp,
             )
-            when {
-                pairing.error != null -> Text(pairing.error, color = Palette.Danger, fontSize = 15.sp)
-                pairing.code == null -> Text("Code en cours…", color = Palette.TextSecondary, fontSize = 28.sp)
-                else -> Text(pairing.code, fontSize = 40.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
+            // A fixed slot: "Code en cours…", the code or the error, the dialog keeps its height.
+            Box(Modifier.fillMaxWidth().height(CODE_SLOT), contentAlignment = Alignment.CenterStart) {
+                when {
+                    pairing.error != null -> Text(pairing.error, color = Palette.Danger, fontSize = 15.sp, lineHeight = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    pairing.code == null -> Text("Code en cours…", color = Palette.TextSecondary, fontSize = 28.sp, lineHeight = 34.sp)
+                    else -> Text(pairing.code, fontSize = 40.sp, lineHeight = 48.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
+                }
             }
             Text(
                 "Ensuite, le bouton Caster du téléphone envoie les vidéos ici (quand LumenTube est ouvert) et le téléphone sert de télécommande.",
@@ -124,7 +128,8 @@ fun PairingDialog(pairing: Pairing, onRetry: () -> Unit, onDismiss: () -> Unit) 
                 LumenButton("Fermer", modifier = Modifier.focusRequester(button), onClick = onDismiss)
             }
         }
-        LaunchedEffect(Unit) {
+        // At opening, and after "Réessayer" (it goes away with the error, focus and all): "Fermer".
+        LaunchedEffect(pairing.error == null) {
             withFrameNanos { }
             button.tryRequestFocus()
         }
