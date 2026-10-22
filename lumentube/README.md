@@ -36,6 +36,9 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.14.4
+- **DualSense corrigée** (box sans pilote PlayStation : Android 10 / 11) : les boutons sont lus d'après leur code brut. Croix = OK, Rond = Retour, Triangle / Options = Menu, Carré = lecture / pause, L1 / R1 = −10 / +10 s, L2 / R2 = chapitre précédent / suivant, Create = Rechercher ; L3 / R3 ne font rien, PS reste au système. Chaque appui est noté dans `adb logcat -s LumenTube.Pad` (pour vérifier).
+
 ### 0.14.3
 - **Onglets en texte, focus en barre** : plus de pastille ; « Pour toi » est aligné sur le titre de la section. Le focus est une barre pleine sous le mot, la section en cours garde une barre discrète (et le texte en gras) quand le focus est ailleurs.
 

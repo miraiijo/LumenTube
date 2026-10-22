@@ -49,9 +49,15 @@ class MainActivity : ComponentActivity() {
      *  L1 / R1 = −10 s / +10 s · L2 / R2 = previous / next chapter (±60 s without chapters).
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // A Sony pad (DualSense, DualShock 4) on a box without the PlayStation driver (Android 10's
-        // Generic.kl): its buttons come as BUTTON_1…16; read them as the gamepad buttons they are.
-        val sony = if (event.device?.vendorId == SONY_VENDOR) SONY_BUTTONS[event.keyCode] else null
+        // A Sony pad (DualSense, DualShock 4) on a box without the PlayStation driver (Android 10/11
+        // kernels): Android's Generic.kl scrambles it (Cross came as B = Back, Square as A = OK).
+        // Its buttons are read from their raw code instead, the same whatever the key layout.
+        val sony = if (event.device?.vendorId == SONY_VENDOR && android.os.Build.VERSION.SDK_INT < SONY_DRIVER_SDK) SONY_SCANCODES[event.scanCode] else null
+        if (event.device?.vendorId == SONY_VENDOR && event.action == KeyEvent.ACTION_DOWN) {
+            android.util.Log.d("LumenTube.Pad", "key=${KeyEvent.keyCodeToString(event.keyCode)} scan=0x${Integer.toHexString(event.scanCode)} → ${sony?.let(KeyEvent::keyCodeToString)}")
+        }
+        // L3 / R3: nothing (they used to come as Select / Start).
+        if (sony == IGNORED) return true
         val mapped = GAMEPAD_KEYS[sony ?: event.keyCode]
         if (mapped == null || (sony == null && !event.isFromSource(InputDevice.SOURCE_GAMEPAD))) return super.dispatchKeyEvent(event)
         val copy = KeyEvent(
@@ -108,18 +114,29 @@ class MainActivity : ComponentActivity() {
         )
         const val MAX_START_S = 24 * 3600L
         const val SONY_VENDOR = 0x054c
-        /** Generic HID order of Sony pads: Square, Cross, Circle, Triangle, L1, R1, L2, R2, Create, Options (PS left to the system). */
-        val SONY_BUTTONS = mapOf(
-            KeyEvent.KEYCODE_BUTTON_1 to KeyEvent.KEYCODE_BUTTON_X,
-            KeyEvent.KEYCODE_BUTTON_2 to KeyEvent.KEYCODE_BUTTON_A,
-            KeyEvent.KEYCODE_BUTTON_3 to KeyEvent.KEYCODE_BUTTON_B,
-            KeyEvent.KEYCODE_BUTTON_4 to KeyEvent.KEYCODE_BUTTON_Y,
-            KeyEvent.KEYCODE_BUTTON_5 to KeyEvent.KEYCODE_BUTTON_L1,
-            KeyEvent.KEYCODE_BUTTON_6 to KeyEvent.KEYCODE_BUTTON_R1,
-            KeyEvent.KEYCODE_BUTTON_7 to KeyEvent.KEYCODE_BUTTON_L2,
-            KeyEvent.KEYCODE_BUTTON_8 to KeyEvent.KEYCODE_BUTTON_R2,
-            KeyEvent.KEYCODE_BUTTON_9 to KeyEvent.KEYCODE_BUTTON_SELECT,
-            KeyEvent.KEYCODE_BUTTON_10 to KeyEvent.KEYCODE_BUTTON_START,
-        )
+        /** Sony pads read right (hid-playstation driver, Android 12+ key layouts) from this version. */
+        const val SONY_DRIVER_SDK = 31
+        const val IGNORED = KeyEvent.KEYCODE_UNKNOWN
+        /**
+         * Raw codes of a Sony pad without its driver (HID button order: Square, Cross, Circle,
+         * Triangle, L1, R1, L2, R2, Create, Options, L3, R3, PS), as gamepad buttons (BTN_SOUTH…
+         * when the pad declares itself a gamepad, BTN_TRIGGER… when a joystick). PS is left to the system.
+         */
+        val SONY_SCANCODES: Map<Int, Int> = listOf(0x130, 0x120).flatMap { base ->
+            listOf(
+                KeyEvent.KEYCODE_BUTTON_X, // Square: play / pause
+                KeyEvent.KEYCODE_BUTTON_A, // Cross: OK
+                KeyEvent.KEYCODE_BUTTON_B, // Circle: Back
+                KeyEvent.KEYCODE_BUTTON_Y, // Triangle: Menu
+                KeyEvent.KEYCODE_BUTTON_L1,
+                KeyEvent.KEYCODE_BUTTON_R1,
+                KeyEvent.KEYCODE_BUTTON_L2,
+                KeyEvent.KEYCODE_BUTTON_R2,
+                KeyEvent.KEYCODE_BUTTON_SELECT, // Create: Rechercher
+                KeyEvent.KEYCODE_BUTTON_START, // Options: Menu
+                IGNORED, // L3
+                IGNORED, // R3
+            ).mapIndexed { index, key -> base + index to key }
+        }.toMap()
     }
 }
