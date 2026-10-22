@@ -36,6 +36,9 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.13.1
+- **Petite fenêtre** : l'étiquette « OK : plein écran » est retirée (le focus est sur « Lecture en cours », c'est lui qui remet la vidéo en plein écran).
+
 ### 0.13.0
 - **Lecteur, nouvelle disposition** : titre en haut à gauche, plus petit et en entier (2 lignes), avec dessous la chaîne, le chapitre et les compteurs J'aime / Je n'aime pas. En bas, seulement la barre, les boutons et le temps. Les 9 boutons sont des ronds identiques (les compteurs ne sont plus collés aux pouces).
 - **Lecteur, corrections** : focus rendu à Lecture après « Réessayer » ; « À suivre » lisible en Jour, ferme les commandes et garde le focus ; sous-titres masqués avec les commandes et remontés pendant l'avance ; libellés du menu plus coupés, valeurs alignées ; curseur rond sur la barre ; le bouton du panneau ouvert reste en surbrillance ; panneau Commentaires plus étroit ; écran d'erreur avec voile ; notice SponsorBlock plus cachée par les stats ; nouvelle icône Chapitres.

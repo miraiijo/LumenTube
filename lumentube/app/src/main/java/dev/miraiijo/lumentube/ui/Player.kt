@@ -921,21 +921,6 @@ fun PlayerScreen(
                 ),
             ) {
                 Box(Modifier.fillMaxSize()) {
-                    // Always shown in the small window (the focus is usually on "Lecture en cours",
-                    // where OK does the same).
-                    if (error == null) {
-                        Text(
-                            "OK : plein écran",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color.White,
-                            modifier = Modifier
-                                .align(Alignment.BottomStart)
-                                .padding(8.dp)
-                                .background(Color.Black.copy(alpha = 0.65f), ControlShape)
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                    }
                 }
             }
         }
