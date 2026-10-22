@@ -3,6 +3,11 @@
 package dev.miraiijo.lumentube.ui
 
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -100,7 +105,7 @@ fun TopHeader(
             // The tabs scroll when they don't fit (signed in, 9 tabs, from ~95 %): before, the last
             // ones were squeezed to nothing and the focus went invisible on them.
             EdgeScroll(TAB_MARGIN) {
-                Row(Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(TAB_GAP)) {
                     sections.forEach { item ->
                         Tab(
                             label = if (item == Section.HOME) "Pour toi" else item.label,
@@ -136,26 +141,44 @@ fun TopHeader(
     }
 }
 
-/** A section tab: bold when it's the current one, a solid pill when focused. */
+/**
+ * A section tab, as text (no pill: "Pour toi" starts right under the title): bold when it's the
+ * current section; a solid bar under the word when focused, a faint one under the current section.
+ */
 @Composable
 private fun Tab(label: String, current: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
     Surface(
         onClick = onClick,
-        modifier = modifier.height(34.dp),
-        shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
+        modifier = modifier.onFocusChanged { focused = it.isFocused },
+        shape = ClickableSurfaceDefaults.shape(shape = RectangleShape),
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
             contentColor = if (current) Palette.TextPrimary else Palette.TextSecondary,
-            focusedContainerColor = Palette.Focus,
-            focusedContentColor = Palette.OnFocus,
-            pressedContainerColor = Palette.Focus,
-            pressedContentColor = Palette.OnFocus,
+            focusedContainerColor = Color.Transparent,
+            focusedContentColor = Palette.TextPrimary,
+            pressedContainerColor = Color.Transparent,
+            pressedContentColor = Palette.TextPrimary,
         ),
     ) {
-        // fillMaxHeight, not fillMaxSize: in the tabs' Row, a full-width tab pushed all the others out.
-        Box(Modifier.fillMaxHeight().padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+        // As wide as the word: the bar sits right under it.
+        Column(Modifier.width(IntrinsicSize.Max).padding(top = 8.dp)) {
             Text(label, fontSize = 15.sp, fontWeight = if (current) FontWeight.Bold else FontWeight.Medium, maxLines = 1, softWrap = false)
+            Box(
+                Modifier
+                    .padding(top = 5.dp)
+                    .fillMaxWidth()
+                    .height(TAB_BAR)
+                    .clip(RoundedCornerShape(TAB_BAR / 2))
+                    .background(
+                        when {
+                            focused -> Palette.Focus
+                            current -> Palette.TextPrimary.copy(alpha = 0.25f)
+                            else -> Color.Transparent
+                        },
+                    ),
+            )
         }
     }
 }
@@ -212,6 +235,9 @@ fun Modifier.lumenBackground(): Modifier = drawBehind {
 }
 
 private val HEADER_BUTTON = 38.dp
+/** Tabs as text: the gap between two words, and the bar under the focused / current one. */
+private val TAB_GAP = 28.dp
+private val TAB_BAR = 3.dp
 /** Room kept on each side of the focused tab when the tabs scroll. */
 private val TAB_MARGIN = 24.dp
 private const val GLOW_RADIUS = 0.25f

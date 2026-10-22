@@ -36,6 +36,9 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.14.3
+- **Onglets en texte, focus en barre** : plus de pastille ; « Pour toi » est aligné sur le titre de la section. Le focus est une barre pleine sous le mot, la section en cours garde une barre discrète (et le texte en gras) quand le focus est ailleurs.
+
 ### 0.14.2
 - **Rangées** : une rangée focalisée n'est plus coupée en bas, la dernière comprise. Le défilement garde sous sa légende la marge de la rangée et un peu d'air (28 dp).
 
