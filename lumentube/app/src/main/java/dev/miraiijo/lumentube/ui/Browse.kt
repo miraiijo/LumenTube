@@ -284,15 +284,23 @@ fun VideoCard(
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
             color = if (isFocused) Palette.TextPrimary else Palette.TextPrimary.copy(alpha = 0.88f),
-            // Always 2 lines and the channel line, even empty: every card of a row has the same height,
-            // so a row never grows or shrinks as it scrolls sideways (the rows around stay put).
-            minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            lineHeight = 18.sp,
-            modifier = Modifier.padding(top = 10.dp),
+            lineHeight = TITLE_LINE,
+            // A fixed height (2 lines), whatever the title holds: minLines alone still let a title with
+            // emoji or another script come out a few dp taller, and the whole row (and every row
+            // below) moved as such a card scrolled into view. Same for the channel line.
+            modifier = Modifier.padding(top = 10.dp).height(lines(TITLE_LINE, 2)),
         )
-        Text(video.channel, fontSize = 13.sp, lineHeight = 16.sp, color = Palette.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
+        Text(
+            video.channel,
+            fontSize = 13.sp,
+            lineHeight = CHANNEL_LINE,
+            color = Palette.TextSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp).height(lines(CHANNEL_LINE, 1)),
+        )
     }
 }
 
@@ -386,16 +394,22 @@ private fun ChannelCard(video: Video, modifier: Modifier, onFocus: () -> Unit, o
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
             color = if (isFocused) Palette.TextPrimary else Palette.TextPrimary.copy(alpha = 0.85f),
-            minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
             lineHeight = 17.sp,
-            modifier = Modifier.padding(top = 10.dp),
+            modifier = Modifier.padding(top = 10.dp).height(lines(17.sp, 2)),
         )
     }
 }
 
 private val CHANNEL_CARD = 120.dp
+private val TITLE_LINE = 18.sp
+private val CHANNEL_LINE = 16.sp
+
+/** The height of [count] lines of [lineHeight], in dp (follows the font scale). */
+@Composable
+private fun lines(lineHeight: androidx.compose.ui.unit.TextUnit, count: Int): androidx.compose.ui.unit.Dp =
+    with(androidx.compose.ui.platform.LocalDensity.current) { (lineHeight * count).toDp() }
 private val CHANNEL_AVATAR = 96.dp
 private const val CHANNEL_FOCUS_SCALE = 1.06f

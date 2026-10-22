@@ -36,6 +36,9 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.12.7
+- **Rangées vraiment stables** : le titre (2 lignes) et la chaîne (1 ligne) des cartes ont maintenant une hauteur fixe. Un titre avec emoji ou dans une autre écriture rendait encore la carte quelques dp plus haute, et les rangées autour bougeaient quand on défilait de côté.
+
 ### 0.12.6
 - **DualSense sans pilote Sony** (Freebox Android 10) : ses boutons arrivaient en BUTTON_1…16 génériques et ne faisaient rien. Ils sont traduits (manettes Sony uniquement, constructeur 054c) : Croix = OK, Rond = Retour, Triangle / Options = Menu, Carré = lecture / pause, L1 / R1 = −10 / +10 s, L2 / R2 = chapitre précédent / suivant, Create = Rechercher.
 - **Micro de la télécommande** : ouvre Rechercher et lance la dictée directement (le clavier s'il n'y a pas de reconnaissance vocale sur la box).
