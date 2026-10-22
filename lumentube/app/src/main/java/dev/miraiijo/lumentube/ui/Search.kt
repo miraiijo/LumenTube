@@ -84,6 +84,7 @@ fun SearchPage(
     /** A filter changed: its chip takes the focus back (its label changed under it). */
     var refocusChip by remember { mutableIntStateOf(-1) }
     var refocusTick by remember { mutableIntStateOf(0) }
+    var chipsHaveFocus by remember { mutableStateOf(false) }
     fun search(text: String) {
         if (text.isBlank()) return
         followResults = true
@@ -101,10 +102,10 @@ fun SearchPage(
         bar.tryRequestFocus()
     }
     Column(Modifier.fillMaxSize()) {
-        SearchBar(query, bar, belowBar, ::search, onTyping, Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 28.dp))
+        SearchBar(query, bar, belowBar, ::search, onTyping, Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 28.dp), chipFocused = { chipsHaveFocus })
         // One line under the bar: the suggestions while typing, else the filters.
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = Dimens.Gutter, vertical = 12.dp),
+            Modifier.fillMaxWidth().onFocusChanged { chipsHaveFocus = it.hasFocus }.horizontalScroll(rememberScrollState()).padding(horizontal = Dimens.Gutter, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -157,7 +158,16 @@ fun SearchPage(
 }
 
 @Composable
-private fun SearchBar(query: String, requester: FocusRequester, below: FocusRequester, onSearch: (String) -> Unit, onTyping: (String) -> Unit, modifier: Modifier) {
+private fun SearchBar(
+    query: String,
+    requester: FocusRequester,
+    below: FocusRequester,
+    onSearch: (String) -> Unit,
+    onTyping: (String) -> Unit,
+    modifier: Modifier,
+    /** A chip under the bar has the focus (then a cancelled typing leaves it there). */
+    chipFocused: () -> Boolean = { false },
+) {
     val context = LocalContext.current
     val keyboard = LocalSoftwareKeyboardController.current
     var text by remember(query) { mutableStateOf(query) }
@@ -181,12 +191,18 @@ private fun SearchBar(query: String, requester: FocusRequester, below: FocusRequ
         }
     }
 
-    fun finish(run: Boolean) {
-        editing = false
+    /** [run]: search (keyboard's search key). [lost]: the field lost the focus (Down to a chip, keyboard closed). */
+    fun finish(run: Boolean, lost: Boolean = false) {
+        // First: the field losing the focus below must not call finish again.
         hadFocus = false
         keyboard?.hide()
-        // A search moves the focus to its results; a cancel goes back to the pill.
-        if (run) onSearch(text) else refocus++
+        // The focus goes back to the pill before the field it's in goes away (it fell into the
+        // side menu, which opened and closed); the results take it when they arrive. Not when the
+        // field lost it: the remote moved it on purpose (a suggestion), it stays there.
+        if (!lost) requester.tryRequestFocus()
+        editing = false
+        // A search moves the focus to its results; a cancel goes back to the pill unless a chip has it.
+        if (run) onSearch(text) else if (lost) refocus++
     }
 
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap), verticalAlignment = Alignment.CenterVertically) {
@@ -227,7 +243,7 @@ private fun SearchBar(query: String, requester: FocusRequester, below: FocusRequ
                             .focusRequester(field)
                             .onFocusChanged {
                                 // Keyboard closed with Back: back to the pill, nothing searched.
-                                if (it.isFocused) hadFocus = true else if (hadFocus) finish(run = false)
+                                if (it.isFocused) hadFocus = true else if (hadFocus) finish(run = false, lost = true)
                             },
                     )
                     LaunchedEffect(Unit) {
@@ -255,7 +271,7 @@ private fun SearchBar(query: String, requester: FocusRequester, below: FocusRequ
     LaunchedEffect(refocus) {
         if (refocus == 0) return@LaunchedEffect
         withFrameNanos { }
-        requester.tryRequestFocus()
+        if (!chipFocused()) requester.tryRequestFocus()
     }
 }
 

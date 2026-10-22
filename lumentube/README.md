@@ -36,6 +36,12 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.11.4
+- Recherche : Bas pendant la saisie vers une suggestion (ou un filtre) laisse le focus dessus, au lieu de le renvoyer sur la barre. OK sur la suggestion lance la recherche comme la loupe du clavier : focus sur la barre, puis sur la première vidéo trouvée.
+
+### 0.11.3
+- Recherche : valider avec la loupe du clavier ne fait plus passer le focus par le menu latéral ; il revient sur la barre, puis va sur la première vidéo trouvée dès qu'elle arrive.
+
 ### 0.11.2
 - Recherche : OK sur une suggestion ne fait plus passer le focus par le menu latéral (il va sur la barre, puis sur le premier résultat quand il arrive). OK sur un filtre garde le focus sur ce filtre (pour enchaîner les choix) ; les résultats se mettent à jour dessous, Bas pour y aller.
 
