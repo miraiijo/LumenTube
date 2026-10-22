@@ -36,6 +36,9 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.14.2
+- **Rangées** : une rangée focalisée n'est plus coupée en bas, la dernière comprise. Le défilement garde sous sa légende la marge de la rangée et un peu d'air (28 dp).
+
 ### 0.14.1
 - **Abonnements triés** : plus une seule rangée sans fin, mais des rangées par date de publication : En direct, Bientôt, Aujourd'hui, Hier, Cette semaine, Ce mois-ci, Plus ancien (3 pages chargées d'un coup ; la dernière rangée continue de charger au défilement).
 - **Historique trié** : « À reprendre » (vidéos commencées) puis « Déjà vues ».

@@ -76,6 +76,8 @@ private val ROW_TITLE_LINE = 20.sp
 /** Default card width; on a page it follows the screen (as many cards as fit at ~[CARD_SLOT] fill the width). */
 private val CARD_WIDTH = 204.dp
 /** Width per card used to count the cards of a row: 4 at 100 %, 5 at 80 %, 6 at 60 %, 3 at 120 %. */
+/** Below a focused card's caption when the rows scroll: the row's bottom padding (12) + air (16). */
+private val ROW_BOTTOM_AIR = 28.dp
 private val CARD_SLOT = 232.dp
 
 /**
@@ -130,9 +132,10 @@ fun BrowsePage(
     }
     // Room kept above / below a focused card when the rows scroll, from the text lines (they follow
     // the system's font scale): the row title (8 + line + 4) with the row's top padding (12), and
-    // the card's title (10 + 2 lines) and channel (2 + line).
+    // the card's title (10 + 2 lines) and channel (2 + line), then the row's bottom padding (12) and
+    // some air (16): the last row's caption never touches the screen's bottom edge.
     val rowTitle = 24.dp + lines(ROW_TITLE_LINE, 1)
-    val cardCaption = 12.dp + lines(TITLE_LINE, 2) + lines(CHANNEL_LINE, 1)
+    val cardCaption = 12.dp + lines(TITLE_LINE, 2) + lines(CHANNEL_LINE, 1) + ROW_BOTTOM_AIR
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     // A row inserted on top (Reprendre arriving after the feed) while the page was at its top: back
     // to the top, the list kept the old first row in place and hid the new one above the screen.
