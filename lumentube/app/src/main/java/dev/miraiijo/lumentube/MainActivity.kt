@@ -2,9 +2,13 @@ package dev.miraiijo.lumentube
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.InputDevice
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
+import dev.miraiijo.lumentube.ui.Appearance
 import dev.miraiijo.lumentube.ui.LumenTubeTheme
 import dev.miraiijo.lumentube.ui.Root
 
@@ -17,7 +21,10 @@ class MainActivity : ComponentActivity() {
         // (in the background) instead of during the first video's start. Here rather than in the
         // Application: a feed query from Lumen starts the process without needing all that.
         com.liskovsoft.youtubeapi.service.YouTubeServiceManager.instance().refreshCacheIfNeeded()
-        setContent { LumenTubeTheme { Root(vm) } }
+        setContent {
+            val settings = vm.state.collectAsState().value.settings
+            LumenTubeTheme(Appearance.entries.getOrElse(settings.appearance) { Appearance.AUTO }, uiScale = settings.uiScale) { Root(vm) }
+        }
         if (savedInstanceState == null) handleLink(intent)
     }
 
@@ -31,6 +38,24 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         vm.onForeground(false)
         super.onStop()
+    }
+
+    /**
+     * Gamepad (DualSense, Xbox…): its buttons become the keys the app already understands. Only
+     * events from a gamepad are touched, never the remote's. Android's own fallbacks (A → OK,
+     * B / Y → Back, X / Start → OK) are replaced by this mapping:
+     *  A = OK · B = Back · X = play / pause (and the small window back full screen) ·
+     *  Y / Start = Menu (a card's menu, the player's settings) · Select = search ·
+     *  L1 / R1 = −10 s / +10 s · L2 / R2 = previous / next chapter (±60 s without chapters).
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val mapped = GAMEPAD_KEYS[event.keyCode]
+        if (mapped == null || !event.isFromSource(InputDevice.SOURCE_GAMEPAD)) return super.dispatchKeyEvent(event)
+        val copy = KeyEvent(
+            event.downTime, event.eventTime, event.action, mapped, event.repeatCount, event.metaState,
+            event.deviceId, event.scanCode, event.flags, event.source,
+        )
+        return super.dispatchKeyEvent(copy)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -66,6 +91,18 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         val VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")
+        val GAMEPAD_KEYS = mapOf(
+            KeyEvent.KEYCODE_BUTTON_A to KeyEvent.KEYCODE_DPAD_CENTER,
+            KeyEvent.KEYCODE_BUTTON_B to KeyEvent.KEYCODE_BACK,
+            KeyEvent.KEYCODE_BUTTON_X to KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+            KeyEvent.KEYCODE_BUTTON_Y to KeyEvent.KEYCODE_MENU,
+            KeyEvent.KEYCODE_BUTTON_START to KeyEvent.KEYCODE_MENU,
+            KeyEvent.KEYCODE_BUTTON_SELECT to KeyEvent.KEYCODE_SEARCH,
+            KeyEvent.KEYCODE_BUTTON_L1 to KeyEvent.KEYCODE_MEDIA_REWIND,
+            KeyEvent.KEYCODE_BUTTON_R1 to KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
+            KeyEvent.KEYCODE_BUTTON_L2 to KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+            KeyEvent.KEYCODE_BUTTON_R2 to KeyEvent.KEYCODE_MEDIA_NEXT,
+        )
         const val MAX_START_S = 24 * 3600L
     }
 }

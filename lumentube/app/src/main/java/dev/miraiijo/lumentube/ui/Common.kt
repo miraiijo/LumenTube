@@ -58,10 +58,10 @@ fun LumenButton(
         colors = ButtonDefaults.colors(
             containerColor = containerColor,
             contentColor = Palette.TextPrimary,
-            focusedContainerColor = Color.White,
-            focusedContentColor = Color.Black,
-            pressedContainerColor = Color.White,
-            pressedContentColor = Color.Black,
+            focusedContainerColor = Palette.Focus,
+            focusedContentColor = Palette.OnFocus,
+            pressedContainerColor = Palette.Focus,
+            pressedContentColor = Palette.OnFocus,
         ),
     ) {
         icon?.let {
@@ -70,11 +70,6 @@ fun LumenButton(
         }
         Text(text, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
     }
-}
-
-/** Always scrolls the focused element to [start] from the top: the active row stays in place. */
-private class PinSpec(private val start: Float) : BringIntoViewSpec {
-    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = offset - start
 }
 
 /** Scrolls only when the focused element would leave the visible area, keeping margins. */
@@ -89,11 +84,14 @@ private class MarginSpec(private val start: Float, private val end: Float) : Bri
     }
 }
 
-/** Page rows: the active row pinned at [start] (the sheet above it never moves). */
+/**
+ * Page rows: the column only scrolls when the focused card would leave the screen, keeping its row
+ * title ([start]) and its caption ([end]) visible. The page doesn't move on every Up / Down.
+ */
 @Composable
-fun PinnedRowsScroll(start: Dp, content: @Composable () -> Unit) {
+fun RowsScroll(start: Dp, end: Dp, content: @Composable () -> Unit) {
     val density = LocalDensity.current
-    val spec = remember(density, start) { with(density) { PinSpec(start.toPx()) } }
+    val spec = remember(density, start, end) { with(density) { MarginSpec(start.toPx(), end.toPx()) } }
     CompositionLocalProvider(LocalBringIntoViewSpec provides spec, content = content)
 }
 

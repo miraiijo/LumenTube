@@ -10,6 +10,8 @@ import androidx.compose.foundation.focusable
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -32,8 +34,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import dev.miraiijo.lumentube.MainViewModel
 
 /**
- * Lumen's side-menu layout: the menu on the left (account, sections, Compte at the bottom), the
- * section's rows on the right with the focused video's sheet above them. A video plays full screen.
+ * The redesign's layout (Lumen's): a header with the section's name, the sections as tabs and the
+ * round buttons (search, account, settings), the section's rows under it. Search and opened
+ * channels / playlists take the whole screen. A video plays full screen, or in a small window.
  */
 @Composable
 fun Root(vm: MainViewModel) {
@@ -42,7 +45,7 @@ fun Root(vm: MainViewModel) {
     // time it's read): a notice, the player or a dialog doesn't recompose every card.
     val page = remember(state.section, state.pages, state.opened, state.search, state.resume, state.deArrow) { state.page }
     val content = remember { FocusRequester() }
-    val rail = remember { FocusRequester() }
+    val header = remember { FocusRequester() }
     // Incremented when a page should take the focus (section opened from the menu, channel opened).
     // Starts at 1: at launch, Accueil takes the focus as soon as its rows arrive.
     var pageFocusTick by remember { mutableIntStateOf(1) }
@@ -65,19 +68,39 @@ fun Root(vm: MainViewModel) {
         }
     }
 
-    // Back: channel/playlist → its section; page → menu; menu → Accueil (then the system closes).
-    var inMenu by remember { androidx.compose.runtime.mutableStateOf(false) }
+    val Search = dev.miraiijo.lumentube.data.Section.SEARCH
+    val Home = dev.miraiijo.lumentube.data.Section.HOME
+    /** The section shown before Rechercher (Back from the search returns to it). */
+    var beforeSearch by remember { androidx.compose.runtime.mutableStateOf(Home) }
+    /** The focus is in the header (tabs, round buttons). */
+    var inHeader by remember { androidx.compose.runtime.mutableStateOf(false) }
+    fun showSection(section: dev.miraiijo.lumentube.data.Section) {
+        // The page takes the focus (the header may not even be there: Rechercher).
+        inHeader = false
+        if (section == Search && state.section != Search) beforeSearch = state.section
+        vm.show(section)
+        pageFocusTick++
+    }
+    // The header (tabs) is shown on the sections' pages, not on Rechercher nor an opened channel.
+    val showHeader = state.opened == null && state.section != Search
+
+    // Back: channel / playlist → its page; Rechercher → the section before; rows → the tabs;
+    // tabs → Accueil; then, with a video in the small window, the last Back closes it (the next
+    // one leaves the app).
     val fullScreenPlayer = (state.playingId != null || state.playing != null) && !state.minimized
-    // …then, with a video in the small window, the last Back closes it (the next one leaves the app).
-    BackHandler(enabled = !fullScreenPlayer && (state.opened != null || !inMenu || state.section != dev.miraiijo.lumentube.data.Section.HOME || state.minimized)) {
+    BackHandler(enabled = !fullScreenPlayer && (state.opened != null || state.section == Search || !inHeader || state.section != Home || state.minimized)) {
         when {
             state.opened != null -> {
                 holdFocus()
                 vm.closeOpened()
                 pageFocusTick++
             }
-            !inMenu -> rail.tryRequestFocus()
-            state.section != dev.miraiijo.lumentube.data.Section.HOME -> vm.show(dev.miraiijo.lumentube.data.Section.HOME)
+            state.section == Search -> {
+                holdFocus()
+                showSection(beforeSearch)
+            }
+            !inHeader -> header.tryRequestFocus()
+            state.section != Home -> showSection(Home)
             else -> vm.stopPlaying()
         }
     }
@@ -85,11 +108,17 @@ fun Root(vm: MainViewModel) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Palette.Background)
+            .lumenBackground()
             // Shortcut: the remote's play / pause key brings the small window back to full screen.
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                if (!state.minimized || native.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                if (native.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                // Search key (gamepad Select): straight to Rechercher, from any page (not over the video).
+                if (native.keyCode == android.view.KeyEvent.KEYCODE_SEARCH && !fullScreenPlayer) {
+                    if (native.repeatCount == 0) showSection(Search)
+                    return@onPreviewKeyEvent true
+                }
+                if (!state.minimized) return@onPreviewKeyEvent false
                 when (native.keyCode) {
                     android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
                     android.view.KeyEvent.KEYCODE_MEDIA_PLAY,
@@ -102,12 +131,28 @@ fun Root(vm: MainViewModel) {
                 }
             },
     ) {
+        Column(Modifier.fillMaxSize()) {
+        if (showHeader) {
+            TopHeader(
+                section = state.section,
+                signedIn = state.signedIn,
+                accountName = state.accountName,
+                accountAvatar = state.accountAvatar,
+                minimized = state.minimized,
+                modifier = Modifier.focusRequester(header),
+                onFocusChange = { inHeader = it },
+                onSection = ::showSection,
+                onAccount = vm::openAccounts,
+                onSettings = vm::openSettings,
+                onRestorePlayer = vm::restore,
+            )
+        }
         Box(
             Modifier
-                .fillMaxSize()
-                .padding(start = RAIL_WIDTH)
+                .weight(1f)
+                .fillMaxWidth()
                 .focusRequester(content)
-                // Right from the menu: back to the card you left.
+                // Down from the tabs: back to the card you left.
                 .focusRestorer(),
         ) {
             Box(
@@ -152,18 +197,7 @@ fun Root(vm: MainViewModel) {
                 }
             }
         }
-        SideRail(
-            state = state,
-            modifier = Modifier.focusRequester(rail),
-            onFocusChange = { inMenu = it },
-            onSection = { section ->
-                vm.show(section)
-                pageFocusTick++
-            },
-            onAccount = vm::openAccounts,
-            onSettings = vm::openSettings,
-            onRestorePlayer = vm::restore,
-        )
+        }
         if (state.signingIn) {
             SignInDialog(code = state.signInCode, error = state.signInError, onRetry = vm::startSignIn, onDismiss = vm::cancelSignIn)
         } else if (state.choosingAccount || state.accountsOpen) {
@@ -245,7 +279,7 @@ fun Root(vm: MainViewModel) {
     LaunchedEffect(returnFocusTick) {
         if (returnFocusTick == 0) return@LaunchedEffect
         withFrameNanos { }
-        if (!content.tryRequestFocus()) rail.tryRequestFocus()
+        if (!content.tryRequestFocus()) header.tryRequestFocus()
     }
 }
 

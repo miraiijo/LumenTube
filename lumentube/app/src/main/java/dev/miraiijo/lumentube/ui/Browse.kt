@@ -7,6 +7,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -49,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.em
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -64,16 +66,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.runtime.snapshotFlow
 
-private val SHEET_TOP = 48.dp
-private val SHEET_HEIGHT = 130.dp
 /**
- * Where the focused row's cards are pinned, from the top of the rows: its title (8 + ~21 + 4 dp)
- * plus the row's top padding (12 dp), so the title stays fully visible above the cards.
+ * Room kept above a focused card when the rows scroll: its row title (8 + ~21 + 4 dp) plus the
+ * row's top padding (12 dp), so the title stays fully visible above the cards.
  */
 private val ROW_TITLE = 46.dp
-private val CARD_WIDTH = 232.dp
-/** Wait before the sheet follows the focus (no image storm while scrolling along a row). */
-private const val SHEET_SETTLE_MS = 300L
+/** Room kept below a focused card: its title and channel (and the zoom). */
+private val CARD_CAPTION = 64.dp
+/** Default card width; on a page it follows the screen (as many cards as fit at ~[CARD_SLOT] fill the width). */
+private val CARD_WIDTH = 204.dp
+/** Width per card used to count the cards of a row: 4 at 100 %, 5 at 80 %, 6 at 60 %, 3 at 120 %. */
+private val CARD_SLOT = 232.dp
 
 /**
  * A section (or an opened channel / playlist), like Lumen's Bibliothèque in the side-menu layout:
@@ -99,19 +102,9 @@ fun BrowsePage(
     signedIn: Boolean = false,
     onSubscribe: () -> Unit = {},
     onSort: (Int) -> Unit = {},
-    /** Room above the sheet (less under the search bar). */
-    top: androidx.compose.ui.unit.Dp = SHEET_TOP,
+    /** Room above the page's own title / channel header. */
+    top: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
-    var focused by remember { mutableStateOf<Video?>(null) }
-    var shown by remember { mutableStateOf<Video?>(null) }
-    // Read in a flow, not as an effect key: a focus move doesn't recompose the whole page, and the
-    // sheet / backdrop only follow once the focus rests on a card.
-    LaunchedEffect(Unit) {
-        snapshotFlow { focused }.collectLatest {
-            if (shown != null) delay(SHEET_SETTLE_MS)
-            shown = it
-        }
-    }
     val first = remember { FocusRequester() }
     val action = remember { FocusRequester() }
     LaunchedEffect(focusTick, page.rows.isNotEmpty(), page.error, needsAccount) {
@@ -120,45 +113,53 @@ fun BrowsePage(
         if (!first.tryRequestFocus()) action.tryRequestFocus()
     }
 
-    Box(Modifier.fillMaxSize()) {
-        Backdrop(shown)
-        Column(Modifier.fillMaxSize()) {
-            Spacer(Modifier.height(top))
-            if (channel != null) {
-                ChannelSheet(channel, shown, signedIn, onSubscribe, onSort)
-            } else {
-                Sheet(shown, title)
-            }
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                when {
-                    needsAccount -> Message(
-                        "Connecte ton compte YouTube pour voir cette page.",
-                        button = "Se connecter",
-                        buttonModifier = Modifier.focusRequester(action),
-                        onClick = onSignIn,
-                    )
-                    page.rows.isEmpty() && page.loading -> Message("Chargement…")
-                    page.rows.isEmpty() -> Message(
-                        page.error ?: "Rien à afficher.",
-                        button = if (showRetry) "Réessayer" else null,
-                        buttonModifier = Modifier.focusRequester(action),
-                        onClick = onRetry,
-                    )
-                    else -> PinnedRowsScroll(ROW_TITLE) {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 64.dp),
-                        ) {
-                            itemsIndexed(page.rows, key = { _, row -> row.key }, contentType = { _, _ -> 0 }) { index, row ->
-                                VideoRowView(
-                                    row,
-                                    firstRequester = if (index == 0) first else null,
-                                    onFocus = { focused = it },
-                                    onSelect = onSelect,
-                                    onLoadMore = onLoadMore,
-                                    onLongPress = onLongPress,
-                                )
-                            }
+    Column(Modifier.fillMaxSize()) {
+        Spacer(Modifier.height(top))
+        when {
+            channel != null -> ChannelSheet(channel, signedIn, onSubscribe, onSort)
+            title != null -> Text(
+                title,
+                fontSize = 34.sp,
+                lineHeight = 40.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = DisplayTracking,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 20.dp, bottom = 6.dp),
+            )
+        }
+        // The cards share the screen's width: the same layout on any TV, box or density.
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val perRow = (maxWidth / CARD_SLOT).toInt().coerceIn(3, 7)
+            val cardWidth = ((maxWidth - Dimens.Gutter * 2 - Dimens.CardGap * (perRow - 1)) / perRow).coerceAtLeast(120.dp)
+            when {
+                needsAccount -> Message(
+                    "Connecte ton compte YouTube pour voir cette page.",
+                    button = "Se connecter",
+                    buttonModifier = Modifier.focusRequester(action),
+                    onClick = onSignIn,
+                )
+                page.rows.isEmpty() && page.loading -> Message("Chargement…")
+                page.rows.isEmpty() -> Message(
+                    page.error ?: "Rien à afficher.",
+                    button = if (showRetry) "Réessayer" else null,
+                    buttonModifier = Modifier.focusRequester(action),
+                    onClick = onRetry,
+                )
+                else -> RowsScroll(ROW_TITLE, CARD_CAPTION) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 64.dp),
+                    ) {
+                        itemsIndexed(page.rows, key = { _, row -> row.key }, contentType = { _, _ -> 0 }) { index, row ->
+                            VideoRowView(
+                                row,
+                                cardWidth = cardWidth,
+                                firstRequester = if (index == 0) first else null,
+                                onSelect = onSelect,
+                                onLoadMore = onLoadMore,
+                                onLongPress = onLongPress,
+                            )
                         }
                     }
                 }
@@ -170,8 +171,8 @@ fun BrowsePage(
 @Composable
 private fun VideoRowView(
     row: VideoRow,
+    cardWidth: androidx.compose.ui.unit.Dp,
     firstRequester: FocusRequester?,
-    onFocus: (Video) -> Unit,
     onSelect: (Video) -> Unit,
     onLoadMore: (VideoRow) -> Unit,
     onLongPress: (Video) -> Unit,
@@ -180,7 +181,7 @@ private fun VideoRowView(
         Text(
             row.title,
             fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Bold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(start = Dimens.Gutter, top = 8.dp, bottom = 4.dp),
@@ -194,9 +195,9 @@ private fun VideoRowView(
                 itemsIndexed(row.items, key = { _, video -> video.key }, contentType = { _, video -> if (video.isChannel) 1 else 0 }) { index, video ->
                     VideoCard(
                         video,
+                        width = cardWidth,
                         modifier = if (index == 0 && firstRequester != null) Modifier.focusRequester(firstRequester) else Modifier,
                         onFocus = {
-                            onFocus(video)
                             // Near the end: the next page of the row.
                             if (index >= row.items.size - 4) onLoadMore(row)
                         },
@@ -211,10 +212,17 @@ private fun VideoRowView(
 
 /** 16:9 thumbnail (duration badge, watched lane), title and channel below. */
 @Composable
-fun VideoCard(video: Video, modifier: Modifier = Modifier, onFocus: () -> Unit, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
+fun VideoCard(
+    video: Video,
+    modifier: Modifier = Modifier,
+    width: androidx.compose.ui.unit.Dp = CARD_WIDTH,
+    onFocus: () -> Unit,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+) {
     if (video.isChannel) return ChannelCard(video, modifier, onFocus, onClick)
     var isFocused by remember { mutableStateOf(false) }
-    Column(Modifier.width(CARD_WIDTH)) {
+    Column(Modifier.width(width)) {
         Surface(
             onClick = onClick,
             onLongClick = onLongClick,
@@ -227,9 +235,10 @@ fun VideoCard(video: Video, modifier: Modifier = Modifier, onFocus: () -> Unit, 
                     if (it.isFocused) onFocus()
                 },
             shape = ClickableSurfaceDefaults.shape(shape = CardShape),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = FocusScale.Card),
+            // The redesign's focus: a ring around the card, a small gap from it, a light zoom.
+            scale = ClickableSurfaceDefaults.scale(focusedScale = FocusScale.CardRing),
             border = ClickableSurfaceDefaults.border(
-                focusedBorder = Border(androidx.compose.foundation.BorderStroke(2.dp, Color.White), shape = CardShape),
+                focusedBorder = Border(androidx.compose.foundation.BorderStroke(2.5.dp, Palette.FocusRing), inset = (-4).dp, shape = CardShape),
             ),
             colors = ClickableSurfaceDefaults.colors(containerColor = Palette.Tile, focusedContainerColor = Palette.TileFocused),
         ) {
@@ -249,14 +258,23 @@ fun VideoCard(video: Video, modifier: Modifier = Modifier, onFocus: () -> Unit, 
                         color = Color.White,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(8.dp)
+                            .padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = if (video.watchedPercent in 1..99) 14.dp else 8.dp)
                             .background(if (video.live) Palette.Danger else Color.Black.copy(alpha = 0.75f), RoundedCornerShape(6.dp))
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                     )
                 }
                 if (video.watchedPercent in 1..99) {
-                    Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Palette.Track)) {
-                        Box(Modifier.fillMaxWidth(video.watchedPercent / 100f).fillMaxHeight().background(Palette.Highlight))
+                    // Watched: a thin white lane inside the picture (always on the artwork).
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(horizontal = 9.dp, vertical = 6.dp)
+                            .fillMaxWidth()
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(Color.White.copy(alpha = 0.3f)),
+                    ) {
+                        Box(Modifier.fillMaxWidth(video.watchedPercent / 100f).fillMaxHeight().background(Color.White))
                     }
                 }
             }
@@ -264,8 +282,8 @@ fun VideoCard(video: Video, modifier: Modifier = Modifier, onFocus: () -> Unit, 
         Text(
             video.title,
             fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = if (isFocused) Palette.TextPrimary else Palette.TextPrimary.copy(alpha = 0.85f),
+            fontWeight = FontWeight.SemiBold,
+            color = if (isFocused) Palette.TextPrimary else Palette.TextPrimary.copy(alpha = 0.88f),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             lineHeight = 18.sp,
@@ -273,75 +291,6 @@ fun VideoCard(video: Video, modifier: Modifier = Modifier, onFocus: () -> Unit, 
         )
         if (video.channel.isNotBlank()) {
             Text(video.channel, fontSize = 13.sp, color = Palette.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
-        }
-    }
-}
-
-/** The focused video's picture, top right, melting into the page (Lumen's Bibliothèque backdrop). */
-@Composable
-private fun Backdrop(video: Video?) {
-    // Picture = (video id for the HD version, feed thumbnail as fallback).
-    val picture = video?.takeIf { it.videoId != null || it.thumbnail != null }?.let { it.videoId to it.thumbnail }
-    val channel = video?.takeIf { it.isChannel }
-    Crossfade(targetState = picture to channel, animationSpec = tween(300), label = "backdrop") { (image, shownChannel) ->
-        Box(Modifier.fillMaxSize()) {
-            if (shownChannel != null) {
-                // A channel: its round avatar (a channel picture stretched to 16:9 is a blur).
-                Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = SHEET_TOP, end = Dimens.Gutter * 2)
-                        .size(CHANNEL_BACKDROP)
-                        .clip(CircleShape)
-                        .background(Palette.Tile),
-                ) {
-                    GlideImage(model = avatarUrl(shownChannel.thumbnail), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                }
-            } else if (image != null) {
-                // Top-right quarter: the whole picture, melting into the page on its left (towards
-                // the details) and at its bottom.
-                Box(Modifier.fillMaxWidth(0.5f).aspectRatio(16f / 9f).align(Alignment.TopEnd).then(MeltIntoPage)) {
-                    Thumbnail(image.first, image.second, Modifier.fillMaxSize())
-                }
-            }
-        }
-    }
-}
-
-/**
- * The picture melts into the page: left edge towards the details, bottom towards the rows. The
- * page's own color drawn over it (the page is a solid color), not an alpha mask: a mask needs an
- * offscreen layer of half the screen, redrawn on every frame of the fade — heavy for the box's GPU.
- */
-private val MeltIntoPage = Modifier.drawWithContent {
-    drawContent()
-    drawRect(Brush.horizontalGradient(0f to Palette.Background, 0.2f to Palette.Background.copy(alpha = 0.65f), 0.45f to Color.Transparent))
-    drawRect(Brush.verticalGradient(0.5f to Color.Transparent, 0.82f to Palette.Background.copy(alpha = 0.6f), 1f to Palette.Background))
-}
-
-/** Title (or the opened channel / playlist), then channel · duration. */
-@Composable
-private fun Sheet(video: Video?, pageTitle: String?) {
-    Box(Modifier.fillMaxWidth().height(SHEET_HEIGHT).padding(start = Dimens.Gutter, end = Dimens.Gutter)) {
-        video.let { shown ->
-            Column(Modifier.fillMaxWidth(0.55f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (pageTitle != null) {
-                    Text(pageTitle.uppercase(), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary, maxLines = 1)
-                }
-                if (shown != null) {
-                    Text(shown.title, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 31.sp, letterSpacing = DisplayTracking)
-                    val meta = listOfNotNull(
-                        shown.channel.takeIf { it.isNotBlank() },
-                        when {
-                            shown.live -> "En direct"
-                            shown.durationMs > 0 -> formatDuration(shown.durationMs)
-                            else -> null
-                        },
-                        shown.badge?.takeIf { !shown.live && shown.durationMs <= 0 },
-                    ).joinToString("  ·  ")
-                    if (meta.isNotEmpty()) Text(meta, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Palette.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
         }
     }
 }
@@ -355,24 +304,29 @@ private fun Modifier.menuKey(action: (() -> Unit)?): Modifier = if (action == nu
 }
 
 /**
- * A channel page's header: round avatar, name, "S'abonner" / "Abonné", then its orders
- * ("Accueil", "Plus récentes", "Populaires"…). The focused video's title shows under it.
+ * A channel page's header, like Lumen's detail page: "CHAÎNE" above its round avatar and name in
+ * large, then "S'abonner" / "Abonné" and its orders (Accueil, Plus récentes, Populaires…).
  */
 @Composable
-private fun ChannelSheet(channel: ChannelHeader, focused: Video?, signedIn: Boolean, onSubscribe: () -> Unit, onSort: (Int) -> Unit) {
+private fun ChannelSheet(channel: ChannelHeader, signedIn: Boolean, onSubscribe: () -> Unit, onSort: (Int) -> Unit) {
     Column(
-        Modifier.fillMaxWidth().height(SHEET_HEIGHT).padding(start = Dimens.Gutter, end = Dimens.Gutter),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        Modifier.fillMaxWidth().padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 36.dp, bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Box(Modifier.size(56.dp).clip(CircleShape).background(Palette.Tile), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(66.dp).clip(CircleShape).background(Palette.Tile), contentAlignment = Alignment.Center) {
                 if (channel.avatar != null) {
                     GlideImage(model = avatarUrl(channel.avatar), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                 } else {
-                    Text(channel.name.take(1).uppercase(), fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
+                    Text(channel.name.take(1).uppercase(), fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 }
             }
-            Text(channel.name, fontSize = 26.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, letterSpacing = DisplayTracking, modifier = Modifier.weight(1f, fill = false))
+            Column {
+                Text("CHAÎNE", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.08.em, color = Palette.TextSecondary)
+                Text(channel.name, fontSize = 48.sp, lineHeight = 52.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, letterSpacing = (-0.035).em)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap), verticalAlignment = Alignment.CenterVertically) {
             if (signedIn && channel.subscribed != null) {
                 LumenButton(
                     if (channel.subscribed) "Abonné" else "S'abonner",
@@ -381,21 +335,10 @@ private fun ChannelSheet(channel: ChannelHeader, focused: Video?, signedIn: Bool
                     onClick = onSubscribe,
                 )
             }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap), verticalAlignment = Alignment.CenterVertically) {
             if (channel.sorts.isNotEmpty()) {
+                if (signedIn && channel.subscribed != null) Spacer(Modifier.width(12.dp))
                 SortChip("Accueil", channel.sort == -1) { onSort(-1) }
                 channel.sorts.forEachIndexed { index, name -> SortChip(name, channel.sort == index) { onSort(index) } }
-            }
-            if (focused != null) {
-                Text(
-                    listOfNotNull(focused.title, focused.durationMs.takeIf { it > 0 }?.let(::formatDuration)).joinToString("  ·  "),
-                    fontSize = 14.sp,
-                    color = Palette.TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false),
-                )
             }
         }
     }
@@ -431,7 +374,7 @@ private fun ChannelCard(video: Video, modifier: Modifier, onFocus: () -> Unit, o
             shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
             scale = ClickableSurfaceDefaults.scale(focusedScale = CHANNEL_FOCUS_SCALE),
             border = ClickableSurfaceDefaults.border(
-                focusedBorder = Border(androidx.compose.foundation.BorderStroke(2.dp, Color.White), shape = CircleShape),
+                focusedBorder = Border(androidx.compose.foundation.BorderStroke(2.dp, Palette.FocusRing), shape = CircleShape),
             ),
             colors = ClickableSurfaceDefaults.colors(containerColor = Palette.Tile, focusedContainerColor = Palette.TileFocused),
         ) {
@@ -453,5 +396,4 @@ private fun ChannelCard(video: Video, modifier: Modifier, onFocus: () -> Unit, o
 
 private val CHANNEL_CARD = 120.dp
 private val CHANNEL_AVATAR = 96.dp
-private val CHANNEL_BACKDROP = 120.dp
 private const val CHANNEL_FOCUS_SCALE = 1.06f

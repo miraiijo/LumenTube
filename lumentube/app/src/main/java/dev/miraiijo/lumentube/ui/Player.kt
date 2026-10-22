@@ -91,6 +91,17 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 private const val SEEK_STEP_MS = 10_000L
+/** Gamepad L2 / R2 on a video without chapters. */
+private const val CHAPTERLESS_JUMP_MS = 60_000L
+/** Previous chapter within its first 3 s: the one before (else the start of the current one). */
+private const val CHAPTER_RESTART_MS = 3_000L
+
+/** Held seek keys speed up: ×1, then ×3, then ×6 (never more). */
+private fun seekSpeed(repeatCount: Int) = when {
+    repeatCount >= 20 -> 6
+    repeatCount >= 8 -> 3
+    else -> 1
+}
 /** Same gap between every button of the controls row (a thumb's count sits inside its own slot). */
 private val BUTTON_GAP = 10.dp
 private const val CONTROLS_HIDE_MS = 4_000L
@@ -231,6 +242,25 @@ fun PlayerScreen(
     var firstFrameMs by remember(videoId) { mutableLongStateOf(-1L) }
     val scope = rememberCoroutineScope()
 
+    /**
+     * Previous / next chapter (gamepad L2 / R2): the start of the next one, or of the current one
+     * (or the previous one when just past its start, like a CD player). Without chapters: ±60 s.
+     */
+    fun jumpChapter(direction: Int) {
+        if (live && duration <= 0) return
+        val at = player.exo.currentPosition
+        val target = if (chapters.isEmpty()) {
+            at + direction * CHAPTERLESS_JUMP_MS
+        } else if (direction > 0) {
+            chapters.firstOrNull { it.startMs > at + 1_000 }?.startMs ?: return
+        } else {
+            chapters.lastOrNull { it.startMs < at - CHAPTER_RESTART_MS }?.startMs ?: 0L
+        }.coerceIn(0L, (duration - 1_000L).coerceAtLeast(0L))
+        player.exo.seekTo(target)
+        position = target
+        seekFlash++
+    }
+
     fun closeMenu() {
         if (menu == null) return
         menu = null
@@ -257,11 +287,7 @@ fun PlayerScreen(
      */
     fun nudge(direction: Int, repeatCount: Int) {
         if (live && duration <= 0) return
-        val step = SEEK_STEP_MS * when {
-            repeatCount >= 20 -> 6
-            repeatCount >= 8 -> 3
-            else -> 1
-        }
+        val step = SEEK_STEP_MS * seekSpeed(repeatCount)
         val from = pendingSeek ?: player.exo.currentPosition.also { position = it }
         pendingSeek = (from + direction * step).coerceIn(0L, (duration - 1_000L).coerceAtLeast(0L))
         seekFlash++
@@ -592,7 +618,10 @@ fun PlayerScreen(
             )
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                val isOk = native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER || native.keyCode == AndroidKeyEvent.KEYCODE_ENTER
+                // Small window: not the player's keys (the page keeps the remote; OK on it restores it).
+                if (minimized) return@onPreviewKeyEvent false
+                val isOk = native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER || native.keyCode == AndroidKeyEvent.KEYCODE_ENTER ||
+                    native.keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER
                 // The OK that showed the controls: its release must not click the play button that
                 // just took the focus (it would pause).
                 if (native.action == AndroidKeyEvent.ACTION_UP && isOk && swallowOkUp) {
@@ -602,6 +631,25 @@ fun PlayerScreen(
                 if (native.action != AndroidKeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
                 // The "À suivre" card and the comments panel have their own focus.
                 if (upNext != null || commentsOpen) return@onPreviewKeyEvent false
+                // Media keys (remote, or the gamepad: X, L1 / R1, L2 / R2) and Menu (gamepad Y / Start)
+                // act the same with the controls shown or hidden.
+                when (native.keyCode) {
+                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { togglePlay(); return@onPreviewKeyEvent true }
+                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY -> { player.exo.playWhenReady = true; show(); return@onPreviewKeyEvent true }
+                    AndroidKeyEvent.KEYCODE_MEDIA_PAUSE -> { player.exo.playWhenReady = false; show(); return@onPreviewKeyEvent true }
+                    AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> { nudge(-1, native.repeatCount); return@onPreviewKeyEvent true }
+                    AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { nudge(1, native.repeatCount); return@onPreviewKeyEvent true }
+                    AndroidKeyEvent.KEYCODE_MEDIA_PREVIOUS -> { if (native.repeatCount == 0) jumpChapter(-1); return@onPreviewKeyEvent true }
+                    AndroidKeyEvent.KEYCODE_MEDIA_NEXT -> { if (native.repeatCount == 0) jumpChapter(1); return@onPreviewKeyEvent true }
+                    AndroidKeyEvent.KEYCODE_MENU -> {
+                        if (native.repeatCount == 0 && menu == null) {
+                            show()
+                            menuRoot = PlayerMenu.MAIN
+                            menu = PlayerMenu.MAIN
+                        }
+                        return@onPreviewKeyEvent true
+                    }
+                }
                 if (controls) {
                     activity++
                     return@onPreviewKeyEvent false
@@ -609,11 +657,10 @@ fun PlayerScreen(
                 when (native.keyCode) {
                     // OK only shows the controls (play / pause is the focused button then); the remote's
                     // play-pause key still toggles directly.
-                    AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER -> { swallowOkUp = true; show(); true }
-                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { togglePlay(); true }
+                    AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> { swallowOkUp = true; show(); true }
                     // Seek without bringing the buttons (nor their focus): only the time line flashes.
-                    AndroidKeyEvent.KEYCODE_DPAD_LEFT, AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> { nudge(-1, native.repeatCount); true }
-                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT, AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { nudge(1, native.repeatCount); true }
+                    AndroidKeyEvent.KEYCODE_DPAD_LEFT -> { nudge(-1, native.repeatCount); true }
+                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> { nudge(1, native.repeatCount); true }
                     AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_DPAD_DOWN -> { show(); true }
                     else -> false
                 }
@@ -1049,7 +1096,7 @@ private fun ControlButton(
                 }
             },
         colors = IconButtonDefaults.colors(
-            containerColor = if (active) Palette.ControlOnArt else Color.Transparent,
+            containerColor = if (active) Color.White.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.12f),
             focusedContainerColor = Color.White,
             contentColor = Color.White,
             focusedContentColor = Color.Black,
@@ -1091,9 +1138,10 @@ private fun ProgressBar(
                 val native = event.nativeKeyEvent
                 when (native.action) {
                     AndroidKeyEvent.ACTION_DOWN -> when (native.keyCode) {
-                        AndroidKeyEvent.KEYCODE_DPAD_LEFT -> { onPreview(-SEEK_STEP_MS * (1 + native.repeatCount / 5)); true }
-                        AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> { onPreview(SEEK_STEP_MS * (1 + native.repeatCount / 5)); true }
-                        AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER -> { if (native.repeatCount == 0) onClick(); true }
+                        // Held: faster, like Left / Right with the controls hidden (×3, then ×6 at most).
+                        AndroidKeyEvent.KEYCODE_DPAD_LEFT -> { onPreview(-SEEK_STEP_MS * seekSpeed(native.repeatCount)); true }
+                        AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> { onPreview(SEEK_STEP_MS * seekSpeed(native.repeatCount)); true }
+                        AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> { if (native.repeatCount == 0) onClick(); true }
                         AndroidKeyEvent.KEYCODE_DPAD_UP -> { onUp(); true }
                         else -> false
                     }
@@ -1108,7 +1156,7 @@ private fun ProgressBar(
         contentAlignment = Alignment.CenterStart,
     ) {
         val barShape = RoundedCornerShape(50)
-        Box(Modifier.fillMaxWidth().height(height.dp).clip(barShape).background(Palette.Track)) {
+        Box(Modifier.fillMaxWidth().height(height.dp).clip(barShape).background(Color.White.copy(alpha = 0.22f))) {
             Box(Modifier.fillMaxWidth(loaded).fillMaxHeight().background(Color.White.copy(alpha = 0.35f)))
             Box(Modifier.fillMaxWidth(shownPlayed).fillMaxHeight().background(Color.White))
             if (duration > 0 && (segments.isNotEmpty() || chapters.size > 1)) {
@@ -1276,7 +1324,7 @@ private fun SeekLine(position: Long, duration: Long, buffered: Long, storyboard:
             }
             Text("${formatTime(position)} / ${formatTime(duration)}", fontSize = 15.sp, color = Color.White.copy(alpha = 0.9f), modifier = Modifier.align(Alignment.End))
             Spacer(Modifier.height(10.dp))
-            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Palette.Track)) {
+            Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.22f))) {
                 Box(Modifier.fillMaxWidth(loaded).fillMaxHeight().background(Color.White.copy(alpha = 0.35f)))
                 Box(Modifier.fillMaxWidth(played).fillMaxHeight().background(Color.White))
             }

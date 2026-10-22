@@ -36,6 +36,26 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.12.2
+- **Taille de l'interface réglable** : Réglages › Affichage › « Taille de l'interface » : Plus petit / Plus grand, de 60 % à 120 % par pas de 5 %, appliqué tout de suite (Par défaut : 80 %). Le nombre de cartes par rangée suit (6 à 60 %, 5 à 80 %, 4 à 100 %, 3 à 120 %). L'ancien choix « Grande » est repris en 100 %.
+
+### 0.12.1
+- **Interface plus compacte et aérée** : tout est dessiné 20 % plus petit (textes, boutons, cartes, panneaux, dialogues), et les rangées montrent 5 cartes au lieu de 4. Pensé pour les TV 4K où les éléments paraissaient énormes. Réglages › Affichage › « Taille de l'interface » : Compacte (par défaut) ou Grande (la taille d'avant).
+
+### 0.12.0
+- **Refonte graphique, sur le modèle de celle de Lumen** :
+  - thèmes **Jour** et **Nuit**, et **Auto** (clair de 7 h 30 à 19 h 30) : Réglages › Affichage › Apparence ; fond aux deux halos (chaud en haut à droite, froid en bas à gauche) ;
+  - **en-tête à onglets** à la place du menu latéral : nom de la section en grand, sections en onglets (OK pour ouvrir), boutons ronds Rechercher, compte (« Qui regarde ? ») et Réglages, heure, et « Lecture en cours » avec une vidéo en petite fenêtre ;
+  - focus : aplat plein (blanc la nuit, noir le jour) sur les boutons et pastilles, anneau détaché autour des cartes et des avatars, zoom plus léger ;
+  - cartes : titre et chaîne dessous, plus d'image de fond ni de fiche en haut de page ; largeur calculée d'après l'écran (4 cartes par ligne sur toute TV, box ou densité) ;
+  - **Rechercher** : grande barre en pilule ; **chaîne** : en-tête façon fiche Lumen (« CHAÎNE », avatar, nom en grand, S'abonner, tris) ;
+  - **« Qui regarde ? »** et **Réglages** en plein écran ; Réglages en deux colonnes (Lecture, Affichage, Téléphone, Compte) avec des choix en pastilles ;
+  - lecteur : boutons ronds translucides, panneaux (réglages, commentaires) aux couleurs du thème.
+- **Défilement plus calme** : les rangées ne bougent plus à chaque Haut / Bas ; la page ne défile que si la carte visée sortirait de l'écran (titre de rangée et légende gardés visibles).
+- **Retour** : rangées → onglets (ou « Lecture en cours » avec une petite fenêtre) → Accueil → ferme la petite fenêtre → quitte. Depuis Rechercher, Retour revient à la section d'avant.
+- **Manette (DualSense…)** : A = OK, B = Retour, X = lecture/pause (et petite fenêtre en plein écran), Y / Start = menu (menu de la carte, réglages du lecteur), Select = Rechercher, L1 / R1 = −10 s / +10 s, L2 / R2 = chapitre précédent / suivant (±60 s sans chapitres). Seuls les événements de la manette sont convertis, la télécommande ne change pas.
+- **Télécommande** : la petite fenêtre ne capte plus Gauche / Droite (qui faisaient avancer la vidéo réduite) et OK la remet en plein écran du premier coup ; touches média (lecture, pause, retour/avance rapide) actives aussi commandes affichées ; Menu ouvre les réglages du lecteur ; maintenir Gauche / Droite sur la barre accélère au plus ×6 (au lieu de sans limite).
+
 ### 0.11.4
 - Recherche : Bas pendant la saisie vers une suggestion (ou un filtre) laisse le focus dessus, au lieu de le renvoyer sur la barre. OK sur la suggestion lance la recherche comme la loupe du clavier : focus sur la barre, puis sur la première vidéo trouvée.
 

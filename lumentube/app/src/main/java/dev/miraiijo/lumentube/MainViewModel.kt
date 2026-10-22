@@ -11,6 +11,7 @@ import dev.miraiijo.lumentube.data.VideoRow
 import dev.miraiijo.lumentube.data.YouTube
 import dev.miraiijo.lumentube.player.PlayerPrefs
 import dev.miraiijo.lumentube.remote.RemoteControl
+import dev.miraiijo.lumentube.ui.UI_SCALE_DEFAULT
 import kotlinx.coroutines.delay
 import io.reactivex.disposables.Disposable
 import kotlinx.coroutines.Job
@@ -43,7 +44,17 @@ data class ChannelHeader(
 )
 
 /** The app-wide switches of the "Compte et réglages" dialog. */
-data class Settings(val sponsorBlock: Boolean, val autoplay: Boolean, val stableVolume: Boolean, val deArrow: Boolean, val remote: Boolean = false)
+data class Settings(
+    val sponsorBlock: Boolean,
+    val autoplay: Boolean,
+    val stableVolume: Boolean,
+    val deArrow: Boolean,
+    val remote: Boolean = false,
+    /** 0 = Auto, 1 = Jour, 2 = Nuit (ui.Appearance). */
+    val appearance: Int = 0,
+    /** "Taille de l'interface", in % (ui.UI_SCALE_MIN..UI_SCALE_MAX). */
+    val uiScale: Int = UI_SCALE_DEFAULT,
+)
 
 /** "Lier un téléphone": the TV code to type in the phone's YouTube app (null while it's requested). */
 data class Pairing(val code: String? = null, val error: String? = null)
@@ -523,6 +534,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.stableVolume = settings.stableVolume
         prefs.deArrow = settings.deArrow
         prefs.remote = settings.remote
+        prefs.appearance = settings.appearance
+        prefs.uiScale = settings.uiScale
         if (settings.remote != _state.value.settings.remote) {
             if (settings.remote && foreground) RemoteControl.start(getApplication()) else if (!settings.remote) RemoteControl.stop()
         }

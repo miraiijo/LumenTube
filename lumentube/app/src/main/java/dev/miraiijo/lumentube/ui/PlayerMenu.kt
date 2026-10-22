@@ -318,10 +318,10 @@ private fun MenuRow(entry: Entry, modifier: Modifier) {
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (entry.selected) Palette.Selected else Color.Transparent,
             contentColor = Palette.TextPrimary,
-            focusedContainerColor = Color.White,
-            focusedContentColor = Color.Black,
-            pressedContainerColor = Color.White,
-            pressedContentColor = Color.Black,
+            focusedContainerColor = Palette.Focus,
+            focusedContentColor = Palette.OnFocus,
+            pressedContainerColor = Palette.Focus,
+            pressedContentColor = Palette.OnFocus,
         ),
     ) {
         Row(Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {

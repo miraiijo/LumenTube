@@ -102,7 +102,7 @@ fun SearchPage(
         bar.tryRequestFocus()
     }
     Column(Modifier.fillMaxSize()) {
-        SearchBar(query, bar, belowBar, ::search, onTyping, Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 28.dp), chipFocused = { chipsHaveFocus })
+        SearchBar(query, bar, belowBar, ::search, onTyping, Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 32.dp), chipFocused = { chipsHaveFocus })
         // One line under the bar: the suggestions while typing, else the filters.
         Row(
             Modifier.fillMaxWidth().onFocusChanged { chipsHaveFocus = it.hasFocus }.horizontalScroll(rememberScrollState()).padding(horizontal = Dimens.Gutter, vertical = 12.dp),
@@ -142,7 +142,8 @@ fun SearchPage(
         Box(Modifier.weight(1f).fillMaxWidth()) {
             BrowsePage(
                 page = if (query.isBlank() && page.rows.isEmpty() && !page.loading) page.copy(error = "Cherche une vidéo, une chaîne ou une playlist.") else page,
-                title = query.takeIf { it.isNotBlank() }?.let { "Résultats pour « $it »" },
+                // No page title: the query is in the bar right above.
+                title = null,
                 focusTick = if (followResults) resultsTick else 0,
                 onSelect = onSelect,
                 onLoadMore = onLoadMore,
@@ -210,22 +211,23 @@ private fun SearchBar(
             // The pill only opens the keyboard: moving across it with the remote never pops it up.
             onClick = { editing = true },
             // Down: the chips right under the bar (the 2D search sometimes picked the side menu).
-            modifier = Modifier.weight(1f).height(48.dp).focusRequester(requester).focusProperties { down = below },
-            shape = ClickableSurfaceDefaults.shape(shape = ControlShape),
+            // The redesign's big pill (Lumen's search): light by day, translucent at night.
+            modifier = Modifier.weight(1f).height(56.dp).focusRequester(requester).focusProperties { down = below },
+            shape = ClickableSurfaceDefaults.shape(shape = androidx.compose.foundation.shape.CircleShape),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
             colors = ClickableSurfaceDefaults.colors(
-                containerColor = Palette.ControlIdle,
+                containerColor = if (Palette.colors.isLight) Palette.Panel else Palette.ControlIdle,
                 contentColor = Palette.TextPrimary,
-                focusedContainerColor = Palette.Selected,
+                focusedContainerColor = if (Palette.colors.isLight) Palette.Panel else Palette.Selected,
                 focusedContentColor = Palette.TextPrimary,
             ),
             border = ClickableSurfaceDefaults.border(
-                focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(2.dp, androidx.compose.ui.graphics.Color.White), shape = ControlShape),
+                focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(2.dp, Palette.FocusRing), shape = androidx.compose.foundation.shape.CircleShape),
             ),
         ) {
-            Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(LumenIcon.SEARCH, size = 18.dp)
-                Spacer(Modifier.width(12.dp))
+            Row(Modifier.fillMaxSize().padding(horizontal = 22.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(LumenIcon.SEARCH, size = 18.dp, color = Palette.TextSecondary)
+                Spacer(Modifier.width(14.dp))
                 if (editing) {
                     BasicTextField(
                         value = text,
@@ -234,7 +236,7 @@ private fun SearchBar(
                             onTyping(it)
                         },
                         singleLine = true,
-                        textStyle = TextStyle(color = Palette.TextPrimary, fontSize = 18.sp, fontFamily = InterFamily),
+                        textStyle = TextStyle(color = Palette.TextPrimary, fontSize = 22.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, fontFamily = InterFamily),
                         cursorBrush = SolidColor(Palette.Highlight),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { finish(run = true) }, onDone = { finish(run = true) }),
@@ -254,7 +256,8 @@ private fun SearchBar(
                 } else {
                     Text(
                         text.ifBlank { "Rechercher sur YouTube" },
-                        fontSize = 18.sp,
+                        fontSize = 22.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
                         color = if (text.isBlank()) Palette.TextSecondary else Palette.TextPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

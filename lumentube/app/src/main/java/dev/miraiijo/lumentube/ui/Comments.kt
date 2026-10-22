@@ -231,10 +231,10 @@ private fun CommentRow(comment: Comment, reply: Boolean, expanded: Boolean, modi
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
             contentColor = Palette.TextPrimary,
-            focusedContainerColor = Color.White,
-            focusedContentColor = Color.Black,
-            pressedContainerColor = Color.White,
-            pressedContentColor = Color.Black,
+            focusedContainerColor = Palette.Focus,
+            focusedContentColor = Palette.OnFocus,
+            pressedContainerColor = Palette.Focus,
+            pressedContentColor = Palette.OnFocus,
         ),
     ) {
         Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -285,8 +285,8 @@ private fun PanelButton(label: String, modifier: Modifier, onClick: () -> Unit) 
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
             contentColor = Palette.TextSecondary,
-            focusedContainerColor = Color.White,
-            focusedContentColor = Color.Black,
+            focusedContainerColor = Palette.Focus,
+            focusedContentColor = Palette.OnFocus,
         ),
     ) {
         Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp))

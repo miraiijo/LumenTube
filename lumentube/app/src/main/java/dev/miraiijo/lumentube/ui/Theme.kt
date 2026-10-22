@@ -3,6 +3,8 @@ package dev.miraiijo.lumentube.ui
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -17,33 +19,78 @@ import androidx.tv.material3.Typography
 import androidx.tv.material3.darkColorScheme
 import dev.miraiijo.lumentube.R
 
-/* Lumen's design tokens (same palette, radii, Inter typography): LumenTube looks like Lumen. */
+/* Lumen's design tokens (same palettes, radii, Inter typography): LumenTube looks like Lumen. */
+
+/**
+ * The two looks of the redesign (Lumen's): Nuit (dark) and Jour (light). Colors are read from the
+ * current one, a snapshot state: switching the appearance recomposes everything that uses them.
+ */
+class LumenColors(
+    val background: Color,
+    val panel: Color,
+    val tile: Color,
+    val tileFocused: Color,
+    val textPrimary: Color,
+    val textSecondary: Color,
+    val controlIdle: Color,
+    val selected: Color,
+    val outline: Color,
+    val track: Color,
+    val divider: Color,
+    /** Focused element: a solid pill (white at night, near-black by day) and its content. */
+    val focus: Color,
+    val onFocus: Color,
+    /** Ring around a focused card. */
+    val focusRing: Color,
+    /** Soft lights of the background: warm top right, cool bottom left. */
+    val glowWarm: Color,
+    val glowCool: Color,
+    val isLight: Boolean,
+)
+
+val NightColors = LumenColors(
+    background = Color(0xFF0E1014), panel = Color(0xFF171A20), tile = Color(0xFF1B1E25), tileFocused = Color(0xFF272B33),
+    textPrimary = Color(0xFFF5F5F7), textSecondary = Color(0xFF9A9CA5),
+    controlIdle = Color.White.copy(alpha = 0.10f), selected = Color.White.copy(alpha = 0.16f), outline = Color.White.copy(alpha = 0.22f),
+    track = Color.White.copy(alpha = 0.22f), divider = Color.White.copy(alpha = 0.08f),
+    focus = Color(0xFFF5F5F7), onFocus = Color(0xFF0E1014), focusRing = Color(0xFFF5F5F7),
+    glowWarm = Color(0x33A0784F), glowCool = Color(0x383C5AAA), isLight = false,
+)
+
+val DayColors = LumenColors(
+    background = Color(0xFFECEEF2), panel = Color(0xFFF7F8FA), tile = Color(0xFFDDE0E6), tileFocused = Color(0xFFD0D4DC),
+    textPrimary = Color(0xFF121317), textSecondary = Color(0xFF5F626B),
+    controlIdle = Color(0x0F121317), selected = Color(0xFFFFFFFF), outline = Color(0x29121317),
+    track = Color(0x29121317), divider = Color(0x14121317),
+    focus = Color(0xFF121317), onFocus = Color(0xFFFFFFFF), focusRing = Color(0xFF121317),
+    glowWarm = Color(0x73D6BE96), glowCool = Color(0x7396AFEB), isLight = true,
+)
 
 object Palette {
-    val Background = Color(0xFF070707)
-    val Panel = Color(0xFF161618)
-    val Tile = Color(0xFF1C1C1E)
-    val TileFocused = Color(0xFF2C2C2E)
-    val TextPrimary = Color(0xFFF5F5F7)
-    val TextSecondary = Color(0xFF98989D)
-    /** White highlight: progress bars, text cursor, pairing codes. */
-    val Highlight = Color(0xFFFFFFFF)
+    /** Set by LumenTubeTheme from the "Apparence" setting. */
+    var colors by androidx.compose.runtime.mutableStateOf(NightColors)
+
+    val Background get() = colors.background
+    val Panel get() = colors.panel
+    val Tile get() = colors.tile
+    val TileFocused get() = colors.tileFocused
+    val TextPrimary get() = colors.textPrimary
+    val TextSecondary get() = colors.textSecondary
+    /** Progress bars, text cursor, pairing codes (the main text color). */
+    val Highlight get() = colors.textPrimary
     /** Idle fill of a control (button, field, chip). */
-    val ControlIdle = Color.White.copy(alpha = 0.10f)
+    val ControlIdle get() = colors.controlIdle
     /** Selected / active state (with a check icon). */
-    val Selected = Color.White.copy(alpha = 0.16f)
-    /** Idle stroke of outlined controls. */
-    val Outline = Color.White.copy(alpha = 0.22f)
-    /** Primary button laid over artwork (hero, title sheet): translucent white. */
+    val Selected get() = colors.selected
+    val Outline get() = colors.outline
+    /** Over artwork (video thumbnails, the player): always light on dark. */
     val ControlOnArt = Color.White.copy(alpha = 0.22f)
-    /** Secondary text laid over artwork (card captions). */
     val TextOnArtSecondary = Color.White.copy(alpha = 0.75f)
-    /** Progress / health track behind a filled bar. */
-    val Track = Color.White.copy(alpha = 0.22f)
-    /** Thin separators. */
-    val Divider = Color.White.copy(alpha = 0.08f)
-    /** Underline of the active top tab (bright white when focused). */
-    val TabIndicator = Color.White.copy(alpha = 0.45f)
+    val Track get() = colors.track
+    val Divider get() = colors.divider
+    val Focus get() = colors.focus
+    val OnFocus get() = colors.onFocus
+    val FocusRing get() = colors.focusRing
     val Danger = Color(0xFFFF453A)
     val Warning = Color(0xFFFF9F0A)
 }
@@ -52,6 +99,8 @@ object Palette {
 object FocusScale {
     const val Control = 1.05f
     const val Card = 1.08f
+    /** A card with the focus ring (the redesign): a lighter zoom, the ring already shows it. */
+    const val CardRing = 1.04f
     const val Avatar = 1.1f
 }
 
@@ -85,8 +134,42 @@ private val LumenTypography: Typography = Typography().let { t ->
     )
 }
 
+/** "Apparence": Auto (day from 7:30 to 19:30, night otherwise), Jour, Nuit. */
+enum class Appearance { AUTO, DAY, NIGHT }
+
+/** Day or night now, for Auto (re-checked every minute). */
+private fun isDaytime(): Boolean {
+    val now = java.util.Calendar.getInstance()
+    val minutes = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
+    return minutes in DAY_START_MIN until DAY_END_MIN
+}
+
+private const val DAY_START_MIN = 7 * 60 + 30
+/** "Taille de l'interface", in %: from [UI_SCALE_MIN] to [UI_SCALE_MAX] by [UI_SCALE_STEP]. */
+const val UI_SCALE_DEFAULT = 80
+const val UI_SCALE_MIN = 60
+const val UI_SCALE_MAX = 120
+const val UI_SCALE_STEP = 5
+private const val DAY_END_MIN = 19 * 60 + 30
+
 @Composable
-fun LumenTubeTheme(content: @Composable () -> Unit) {
+fun LumenTubeTheme(appearance: Appearance = Appearance.NIGHT, uiScale: Int = UI_SCALE_DEFAULT, content: @Composable () -> Unit) {
+    var daytime by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(isDaytime()) }
+    if (appearance == Appearance.AUTO) {
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            while (true) {
+                daytime = isDaytime()
+                kotlinx.coroutines.delay(60_000)
+            }
+        }
+    }
+    val light = when (appearance) {
+        Appearance.DAY -> true
+        Appearance.NIGHT -> false
+        Appearance.AUTO -> daytime
+    }
+    val target = if (light) DayColors else NightColors
+    if (Palette.colors !== target) Palette.colors = target
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = Palette.Highlight,
@@ -98,7 +181,18 @@ fun LumenTubeTheme(content: @Composable () -> Unit) {
     ) {
         // tv-material's Text takes LocalContentColor, black by default outside a Surface: without
         // this, every Text with no explicit color (row titles, the sheet's title) is black on black.
-        CompositionLocalProvider(LocalContentColor provides Palette.TextPrimary, content = content)
+        // "Taille de l'interface": everything drawn at uiScale % — dp and sp alike, dialogs included
+        // (80 % by default, so a 4K TV shows more room around smaller elements).
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val scale = uiScale.coerceIn(UI_SCALE_MIN, UI_SCALE_MAX) / 100f
+        val scaled = androidx.compose.runtime.remember(density, scale) {
+            androidx.compose.ui.unit.Density(density.density * scale, density.fontScale)
+        }
+        CompositionLocalProvider(
+            LocalContentColor provides Palette.TextPrimary,
+            androidx.compose.ui.platform.LocalDensity provides scaled,
+            content = content,
+        )
     }
 }
 
@@ -118,8 +212,8 @@ object Dimens {
     val CardGap = 16.dp
 
     /** Radii: controls, cards (tiles, banners, menus), dialogs. */
-    val RadiusControl = 12.dp
-    val RadiusCard = 16.dp
+    val RadiusControl = 14.dp
+    val RadiusCard = 14.dp
     val RadiusDialog = 24.dp
 
     /** Smallest text used anywhere (10-foot legibility). */

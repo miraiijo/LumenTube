@@ -2,6 +2,7 @@ package dev.miraiijo.lumentube.player
 
 import android.content.Context
 import dev.miraiijo.lumentube.Settings
+import dev.miraiijo.lumentube.ui.UI_SCALE_DEFAULT
 
 /** LumenTube's own preferences (not SmartTube's): player choices and the app's switches. */
 class PlayerPrefs(context: Context) {
@@ -51,7 +52,21 @@ class PlayerPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_REMOTE, false)
         set(value) = prefs.edit().putBoolean(KEY_REMOTE, value).apply()
 
-    fun settings() = Settings(sponsorBlock = sponsorBlock, autoplay = autoplay, stableVolume = stableVolume, deArrow = deArrow, remote = remote)
+    /** "Apparence": 0 = Auto (day / night by the hour), 1 = Jour, 2 = Nuit. */
+    var appearance: Int
+        get() = prefs.getInt(KEY_APPEARANCE, 0)
+        set(value) = prefs.edit().putInt(KEY_APPEARANCE, value).apply()
+
+    /** "Taille de l'interface", in %; 0.12.1's "Grande" (large_ui) is read as 100 %. */
+    var uiScale: Int
+        get() = if (prefs.contains(KEY_UI_SCALE)) prefs.getInt(KEY_UI_SCALE, UI_SCALE_DEFAULT)
+            else if (prefs.getBoolean(KEY_LARGE_UI, false)) 100 else UI_SCALE_DEFAULT
+        set(value) = prefs.edit().putInt(KEY_UI_SCALE, value).remove(KEY_LARGE_UI).apply()
+
+    fun settings() = Settings(
+        sponsorBlock = sponsorBlock, autoplay = autoplay, stableVolume = stableVolume, deArrow = deArrow,
+        remote = remote, appearance = appearance, uiScale = uiScale,
+    )
 
     private companion object {
         const val KEY_QUALITY = "quality"
@@ -63,5 +78,8 @@ class PlayerPrefs(context: Context) {
         const val KEY_PICTURE_FORMAT = "picture_format"
         const val KEY_STATS = "stats"
         const val KEY_REMOTE = "remote"
+        const val KEY_APPEARANCE = "appearance"
+        const val KEY_LARGE_UI = "large_ui"
+        const val KEY_UI_SCALE = "ui_scale"
     }
 }
