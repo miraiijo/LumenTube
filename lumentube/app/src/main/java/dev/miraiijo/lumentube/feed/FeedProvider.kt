@@ -8,8 +8,8 @@ import android.database.MatrixCursor
 import android.net.Uri
 import android.os.Bundle
 import com.liskovsoft.sharedutils.prefs.GlobalPreferences
-import dev.miraiijo.lumentube.BuildConfig
 import dev.miraiijo.lumentube.data.YouTube
+import dev.miraiijo.lumentube.link.LumenLink
 import dev.miraiijo.lumentube.remote.RemoteControl
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -24,8 +24,9 @@ import java.util.concurrent.TimeUnit
  * Contract v2 (contract=2&account=<account_id> on /continue, /subscriptions and /search): that
  * account's data, whatever account LumenTube shows, without switching it; an unknown account (or
  * an id longer than 128 characters) gets an empty list. Without account: LumenTube's account.
- * Only answers Lumen: the calling package must be dev.miraiijo.lumen, signed with Lumen's
- * certificate (SHA-256 in BuildConfig). Not a signature permission: the two apps have their own keys.
+ * Trust (lumen-link v3, see link/LumenLink.kt): only answers Lumen, the calling package must be
+ * dev.miraiijo.lumen signed with the certificate in BuildConfig.CERT_LUMEN (gradle.properties).
+ * Not a signature permission: the two apps have their own keys. LumenTube also works without Lumen.
  * Each account has its own cache (FeedCache); older than 30 min and signed in: refreshed first, 8 s
  * at most, else the old cache is served. Signed out: empty. No e-mail, token or cookie, ever.
  */
@@ -161,24 +162,12 @@ class FeedProvider : ContentProvider() {
     }
 
     /**
-     * The caller is Lumen: its package name (given by the system, not by the caller) and its
-     * signing certificate, checked by the system. Any other app, or Lumen built with another key,
-     * is refused.
+     * The caller is Lumen (lumen-link v3): its package name, given by the system and not by the
+     * caller, and its signing certificate, the one this build expects (BuildConfig.CERT_LUMEN). Any
+     * other app, Lumen signed with another key, or a build without that certificate, is refused.
      */
-    private fun isLumen(ctx: android.content.Context): Boolean {
-        val expected = BuildConfig.LUMEN_CERT_SHA256
-        val caller = callingPackage ?: return false
-        if (caller != LUMEN_PACKAGE || expected.length != 64) return false
-        return runCatching {
-            ctx.packageManager.hasSigningCertificate(
-                android.os.Binder.getCallingUid(),
-                expected.hexToBytes(),
-                android.content.pm.PackageManager.CERT_INPUT_SHA256,
-            )
-        }.getOrDefault(false)
-    }
-
-    private fun String.hexToBytes(): ByteArray = chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+    private fun isLumen(ctx: android.content.Context): Boolean =
+        callingPackage == LumenLink.LUMEN && runCatching { LumenLink.callerIsOneOf(ctx, LumenLink.LUMEN) }.getOrDefault(false)
 
     override fun getType(uri: Uri): String? = when (matcher.match(uri)) {
         CODE_CONTINUE, CODE_SUBSCRIPTIONS -> "vnd.android.cursor.dir/vnd.lumentube.video"
@@ -204,7 +193,6 @@ class FeedProvider : ContentProvider() {
         const val MAX_QUERY = 200
         const val MAX_AGE_MS = 30 * 60 * 1000L
         const val REFRESH_TIMEOUT_S = 8L
-        const val LUMEN_PACKAGE = "dev.miraiijo.lumen"
         const val METHOD_SELECT_ACCOUNT = "select_account"
         const val PARAM_ACCOUNT = "account"
         const val MAX_ACCOUNT_ID = 128

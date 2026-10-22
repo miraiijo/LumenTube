@@ -12,6 +12,7 @@ import dev.miraiijo.lumentube.data.YouTube
 import dev.miraiijo.lumentube.player.PlayerPrefs
 import dev.miraiijo.lumentube.remote.RemoteControl
 import dev.miraiijo.lumentube.ui.UI_SCALE_DEFAULT
+import dev.miraiijo.lumentube.update.Updater
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.withLock
 import io.reactivex.disposables.Disposable
@@ -57,6 +58,20 @@ data class Settings(
     val uiScale: Int = UI_SCALE_DEFAULT,
     /** "Recevoir même LumenTube fermé": the phone link listens in the background (remote.CastService). */
     val backgroundCast: Boolean = false,
+)
+
+/**
+ * Réglages › Mises à jour: the installed version, « Recevoir les versions bêta », and the version
+ * found on the public channel ([found], null: up to date or not checked). [progress]: download 0..1.
+ */
+@androidx.compose.runtime.Immutable
+data class UpdateUi(
+    val installed: String = "",
+    val wantsBeta: Boolean = false,
+    val busy: Boolean = false,
+    val progress: Float? = null,
+    val found: Updater.UpdateInfo? = null,
+    val message: String? = null,
 )
 
 /** "Lier un téléphone": the TV code to type in the phone's YouTube app (null while it's requested). */
@@ -106,6 +121,8 @@ data class UiState(
     val notice: String? = null,
     /** "Lier un téléphone" dialog open. */
     val pairing: Pairing? = null,
+    /** Réglages › Mises à jour. */
+    val update: UpdateUi = UpdateUi(),
 ) {
     val page: Page
         get() = when {
@@ -180,6 +197,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 show(Section.HOME)
             }
         }
+        initUpdates()
     }
 
     fun show(section: Section) {
@@ -636,6 +654,92 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ---- Self-update (Réglages › Mises à jour) -------------------------------------------------
+
+    /** The installed version, then the silent daily check (a notice when a version is ready). */
+    private fun initUpdates() {
+        val app = getApplication<Application>()
+        _state.update {
+            it.copy(
+                update = UpdateUi(
+                    installed = runCatching { Updater.installedVersionName(app) }.getOrDefault(""),
+                    wantsBeta = runCatching { Updater.wantsBeta(app) }.getOrDefault(false),
+                ),
+            )
+        }
+        viewModelScope.launch {
+            val found = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { if (Updater.dailyCheckDue(app)) Updater.check(app, UPDATE_APP) else null }.getOrNull()
+            }
+            if (found != null) {
+                _state.update { it.copy(update = it.update.copy(found = found)) }
+                showNotice("Mise à jour disponible : ${found.versionName} (Réglages › Mises à jour).")
+            }
+        }
+    }
+
+    fun setWantsBeta(on: Boolean) {
+        runCatching { Updater.setWantsBeta(getApplication(), on) }
+        _state.update { it.copy(update = it.update.copy(wantsBeta = on, found = null, message = null)) }
+        checkUpdate()
+    }
+
+    fun checkUpdate() {
+        if (_state.value.update.busy) return
+        val app = getApplication<Application>()
+        _state.update { it.copy(update = it.update.copy(busy = true, message = null)) }
+        viewModelScope.launch {
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { Updater.check(app, UPDATE_APP) } }
+            _state.update {
+                it.copy(
+                    update = it.update.copy(
+                        busy = false,
+                        found = result.getOrNull(),
+                        message = result.fold(
+                            { found -> if (found == null) "LumenTube est à jour." else "Nouvelle version : ${found.versionName}." },
+                            { e -> e.message ?: "Vérification impossible." },
+                        ),
+                    ),
+                )
+            }
+        }
+    }
+
+    fun installUpdate() {
+        val current = _state.value.update
+        val found = current.found ?: return
+        if (current.busy) return
+        val app = getApplication<Application>()
+        if (!runCatching { Updater.canInstall(app) }.getOrDefault(false)) {
+            runCatching { Updater.openInstallPermissionSettings(app) }
+            _state.update { it.copy(update = it.update.copy(message = "Autorise LumenTube à installer des applis, puis relance l’installation.")) }
+            return
+        }
+        _state.update { it.copy(update = it.update.copy(busy = true, progress = 0f, message = null)) }
+        viewModelScope.launch {
+            var shown = 0f
+            val apk = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    Updater.download(app, found) { p ->
+                        // A step every 2 %: no state update per 64 KB block.
+                        if (p - shown >= 0.02f || p >= 1f) {
+                            shown = p
+                            _state.update { it.copy(update = it.update.copy(progress = p.coerceIn(0f, 1f))) }
+                        }
+                    }
+                }
+            }
+            _state.update { it.copy(update = it.update.copy(busy = false, progress = null)) }
+            apk.fold(
+                { file ->
+                    runCatching { Updater.install(app, file) }
+                        .onFailure { e -> _state.update { it.copy(update = it.update.copy(message = "Installation impossible : ${e.message}")) } }
+                },
+                { e -> _state.update { it.copy(update = it.update.copy(message = "Échec : ${e.message ?: "téléchargement impossible"}")) } },
+            )
+        }
+    }
+
     // ---- Settings -----------------------------------------------------------------------------
 
     fun openSettings() = _state.update { it.copy(settingsOpen = true) }
@@ -745,6 +849,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val RESUME_REFRESH_DELAY_MS = 1_500L
         const val SUGGEST_DELAY_MS = 300L
         const val NOTICE_MS = 3_000L
+        /** This app's file on the update channel (lumen-releases › channel › lumentube.json). */
+        const val UPDATE_APP = "lumentube"
         /** After a play-as video stops: the player's last position save starts (dispose)… */
         const val HISTORY_SETTLE_MS = 400L
         /** …and is waited for, at most this long, before LumenTube's account comes back. */

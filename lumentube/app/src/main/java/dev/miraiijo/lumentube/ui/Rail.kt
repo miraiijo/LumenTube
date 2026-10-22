@@ -56,6 +56,8 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import dev.miraiijo.lumentube.UpdateUi
+import dev.miraiijo.lumentube.update.Updater
 import com.bumptech.glide.integration.compose.GlideImage
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
@@ -298,7 +300,7 @@ private fun ProfileTile(name: String, caption: String?, modifier: Modifier, onCl
 }
 
 /** Réglages' categories (left column). */
-private enum class SettingsPage(val label: String) { PLAYBACK("Lecture"), DISPLAY("Affichage"), PHONE("Téléphone"), ACCOUNT("Compte") }
+private enum class SettingsPage(val label: String) { PLAYBACK("Lecture"), DISPLAY("Affichage"), PHONE("Téléphone"), ACCOUNT("Compte"), UPDATES("Mises à jour") }
 
 /**
  * Réglages (the redesign: full screen, like Lumen's): the categories on the left (the one focused
@@ -315,6 +317,10 @@ fun SettingsDialog(
     onDismiss: () -> Unit,
     /** The pairing dialog is open over Réglages: when it closes, the focus goes back to "Lier un téléphone". */
     pairingOpen: Boolean = false,
+    update: UpdateUi = UpdateUi(),
+    onCheckUpdate: () -> Unit = {},
+    onInstallUpdate: () -> Unit = {},
+    onWantsBeta: (Boolean) -> Unit = {},
 ) {
     LumenDialog(onDismissRequest = onDismiss) {
         val first = remember { FocusRequester() }
@@ -417,6 +423,40 @@ fun SettingsDialog(
                         SettingsPage.ACCOUNT -> {
                             SettingCard("Compte YouTube", "Les autres comptes liés restent sur la box (« Qui regarde ? »).") {
                                 LumenButton("Se déconnecter de ${accountName.orEmpty()}", icon = LumenIcon.CLOSE, onClick = onSignOut)
+                            }
+                        }
+                        SettingsPage.UPDATES -> {
+                            val installedBeta = Updater.isBeta(update.installed)
+                            SettingCard(
+                                "Version installée · ${update.installed}${if (installedBeta) " (bêta)" else ""}",
+                                update.message ?: "LumenTube vérifie une fois par jour, au démarrage.",
+                            ) {
+                                LumenButton(
+                                    if (update.busy && update.progress == null) "Vérification…" else "Vérifier",
+                                    icon = LumenIcon.REFRESH,
+                                    contentColor = Palette.ChipText,
+                                    onClick = onCheckUpdate,
+                                )
+                            }
+                            SettingCard(
+                                "Recevoir les versions bêta",
+                                "Les bêtas arrivent plus tôt mais peuvent planter ou contenir des bugs. Sans elles, seules les versions stables sont proposées." +
+                                    if (!update.wantsBeta && installedBeta) " Tu restes sur cette bêta jusqu’à la prochaine version stable." else "",
+                            ) {
+                                Choice("Activé", update.wantsBeta) { onWantsBeta(true) }
+                                Choice("Désactivé", !update.wantsBeta) { onWantsBeta(false) }
+                            }
+                            update.found?.let { found ->
+                                SettingCard(
+                                    "${if (found.beta) "BÊTA" else "STABLE"} · ${found.versionName}",
+                                    found.notes.ifBlank { if (found.beta) "Version bêta : elle peut planter ou contenir des bugs." else "Version stable." },
+                                ) {
+                                    LumenButton(
+                                        update.progress?.let { "Téléchargement… ${(it * 100).toInt()} %" } ?: "Installer ${found.versionName}",
+                                        contentColor = Palette.ChipText,
+                                        onClick = onInstallUpdate,
+                                    )
+                                }
                             }
                         }
                     }

@@ -257,6 +257,10 @@ fun Root(vm: MainViewModel) {
                 onSignOut = vm::signOut,
                 onDismiss = vm::closeSettings,
                 pairingOpen = state.pairing != null,
+                update = state.update,
+                onCheckUpdate = vm::checkUpdate,
+                onInstallUpdate = vm::installUpdate,
+                onWantsBeta = vm::setWantsBeta,
             )
         } else if (state.cardMenu != null) {
             val video = state.cardMenu!!

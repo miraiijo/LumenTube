@@ -1,6 +1,6 @@
 # LumenTube
 
-YouTube sans pubs pour le Freebox Player, avec l'interface de Lumen. C'est un fork perso de
+YouTube sans pubs pour Android TV, avec l'interface de Lumen. C'est un fork de
 [SmartTube](https://github.com/yuliskov/SmartTube) (licence MIT, conservée dans `../LICENSE`).
 
 ## Principe
@@ -21,9 +21,19 @@ YouTube sans pubs pour le Freebox Player, avec l'interface de Lumen. C'est un fo
 2. Clone-le avec ses sous-modules : `git clone --recurse-submodules git@github.com:miraiijo/LumenTube.git`
 3. Copie dans le clone le dossier `lumentube/` et le fichier `.github/workflows/lumentube.yml` de l'archive, puis commit et push.
 4. Optionnel : désactive les workflows de SmartTube (CI, VirusTotal…) dans l'onglet Actions du fork.
-5. Pour des mises à jour qui s'installent par-dessus, ajoute une clé de signature dans les secrets du dépôt : `LUMENTUBE_KEYSTORE_B64`, `LUMENTUBE_KEYSTORE_PASSWORD`, `LUMENTUBE_KEY_ALIAS`, `LUMENTUBE_KEY_PASSWORD`. C'est le même principe que pour Lumen. Sans clé, l'APK est signé avec une clé de debug et n'est pas publié en release.
+5. Aucun secret dans GitHub : la CI construit un APK **non signé** (artefact `lumentube-unsigned`). Il est signé sur le Mac avec `lumen-ship` (clé créée par `lumen-keys init`, qui ne quitte jamais le Mac).
 
-La CI produit `lumentube-<version>.apk`, en artefact et en release `lumentube-v<code>`.
+## Distribution et mises à jour
+- Les APK signés sont publiés sur le dépôt public `miraiijo/lumen-releases` (une release par version, plus la release `channel` qui contient `lumentube.json`).
+- Dans l'appli : **Réglages › Mises à jour**. Seules les versions **stables** sont proposées par défaut ; « Recevoir les versions bêta » ajoute les bêtas (plus tôt, mais elles peuvent planter ou contenir des bugs). Une bêta installée active l'option par défaut. Vérification silencieuse une fois par jour au démarrage.
+- Avant l'installation, l'appli vérifie la taille, l'empreinte SHA-256, le paquet, la version et le certificat de l'APK ; Android refuse de son côté toute mise à jour signée par une autre clé.
+- Les versions de travail s'appellent « 1.0 bêta N » ; une version stable n'a pas le mot « bêta ».
+
+## Applis Lumen (lumen-link v3)
+- LumenTube marche seul, sans Lumen.
+- Avec le launcher Lumen installé, `FeedProvider` lui donne les rangées « À reprendre » et « Abonnements » (contrat de données v2), **seulement** si l'appelant est `dev.miraiijo.lumen` signé avec le certificat attendu.
+- Les certificats attendus (empreintes SHA-256, publiques) sont dans `gradle.properties` (`lumen.cert.*`), écrits par `lumen-keys init`. Vides : aucun lien.
+- Le contrat est décrit dans `app/src/main/java/dev/miraiijo/lumentube/link/LumenLink.kt` (même fichier dans les trois applis).
 
 ## Mettre à jour depuis SmartTube
 ```
@@ -36,6 +46,12 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 1.0 bêta 1
+- Identifiant `dev.miraiijo.lumentube` : nouvelle appli pour Android, à réinstaller une fois (compte YouTube à reconnecter).
+- Réglages › Mises à jour : versions stables par défaut, bêtas en option.
+- CI sans signature ni secret ; signature sur le Mac.
+- Lien avec Lumen vérifié par lumen-link v3.
+
 ### 0.16.0
 - **Thème Opale de Lumen** :
   - une seule barre en haut : les sections à gauche (texte, barre sous le mot au focus, barre discrète sous la section en cours), à droite « Lecture en cours » si une vidéo est réduite, les boutons ronds en verre (Rechercher, compte, Réglages) et l'heure ; plus de grand titre de section ;

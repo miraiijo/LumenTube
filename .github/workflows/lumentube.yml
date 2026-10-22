@@ -11,17 +11,16 @@ on:
       - "exoplayer-amzn-2.10.6/**"
       - ".github/workflows/lumentube.yml"
 
-# Read-only token: the build publishes nothing (the APK is a workflow artifact, installed with
-# lumentube-install.sh). No release on this public fork, so the signed APK is never public.
+# Build and check only: the APK comes out UNSIGNED. Signing and publishing happen on the Mac
+# (lumen-ship: the key never leaves it), so there is no secret at all in GitHub. Read-only token:
+# this workflow publishes nothing (the APK is a workflow artifact, signed by lumentube-install.sh
+# or lumen-ship, then published on miraiijo/lumen-releases).
 permissions:
   contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      # Whether the signing secrets exist, without putting the keystore itself in the job's env.
-      HAS_KEYSTORE: ${{ secrets.LUMENTUBE_KEYSTORE_B64 != '' }}
     steps:
       # Third-party actions pinned to a commit (v4 at the time of writing), not to a movable tag.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -50,31 +49,14 @@ jobs:
           cache-read-only: false
           validate-wrappers: false
 
-      # The keystore only exists in this step's env and in a temp file.
-      - name: Restore release keystore
-        if: env.HAS_KEYSTORE == 'true'
-        env:
-          LUMENTUBE_KEYSTORE_B64: ${{ secrets.LUMENTUBE_KEYSTORE_B64 }}
-        run: |
-          echo "$LUMENTUBE_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/lumentube.jks"
-          echo "LUMENTUBE_KEYSTORE_PATH=$RUNNER_TEMP/lumentube.jks" >> "$GITHUB_ENV"
-
       - name: Build release APK
         working-directory: lumentube
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon --build-cache :app:assembleRelease
-        env:
-          LUMENTUBE_KEYSTORE_PASSWORD: ${{ secrets.LUMENTUBE_KEYSTORE_PASSWORD }}
-          LUMENTUBE_KEY_ALIAS: ${{ secrets.LUMENTUBE_KEY_ALIAS }}
-          LUMENTUBE_KEY_PASSWORD: ${{ secrets.LUMENTUBE_KEY_PASSWORD }}
-
-      - name: Remove the keystore
-        if: always()
-        run: rm -f "$RUNNER_TEMP/lumentube.jks"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: lumentube-apk
+          name: lumentube-unsigned
           path: lumentube/app/build/outputs/apk/release/*.apk
           retention-days: 30

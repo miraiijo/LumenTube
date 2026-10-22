@@ -4,7 +4,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-// Release signing from the environment (CI secrets), never from the repo; else the debug key.
+// Release signing from the environment only (never from the repo). Without it the release APK is
+// unsigned: CI builds it that way and lumen-ship signs it on the Mac (the key never reaches GitHub).
 val releaseKeystore: String? = System.getenv("LUMENTUBE_KEYSTORE_PATH")
 
 android {
@@ -15,15 +16,18 @@ android {
         applicationId = "dev.miraiijo.lumentube"
         minSdk = 28
         targetSdk = 35
-        versionCode = 61
-        versionName = "0.16.0"
+        versionCode = 62
+        versionName = "1.0 bêta 1"
         // The Freebox Player POP runs a 32-bit userspace; arm64 kept for other boxes.
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
         // Upstream modules have SmartTube's build flavors: use the "stable" one.
         missingDimensionStrategy("default", "ststable")
-        // The Lumen launcher's certificate: FeedProvider only answers it (see gradle.properties).
-        val lumenCert = System.getenv("LUMEN_CERT_SHA256") ?: (project.findProperty("lumen.certSha256") as String?) ?: ""
-        buildConfigField("String", "LUMEN_CERT_SHA256", "\"${lumenCert.lowercase()}\"")
+        // lumen-link v3: signing certificates of the Lumen apps (public SHA-256, see gradle.properties,
+        // written by lumen-keys init). Empty = no link with that app (FeedProvider answers nobody).
+        fun cert(app: String) = (project.findProperty("lumen.cert.$app") as String?).orEmpty().trim().lowercase().replace(":", "")
+        buildConfigField("String", "CERT_LUMEN", "\"${cert("lumen")}\"")
+        buildConfigField("String", "CERT_LUMENTUBE", "\"${cert("lumentube")}\"")
+        buildConfigField("String", "CERT_LUMENIPTV", "\"${cert("lumeniptv")}\"")
     }
 
     signingConfigs {
@@ -41,7 +45,7 @@ android {
         release {
             // Not minified, like SmartTube: its engine relies on reflection (Retrofit, Gson, JsonPath).
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName(if (releaseKeystore != null) "release" else "debug")
+            signingConfig = if (releaseKeystore != null) signingConfigs.getByName("release") else null
         }
     }
 

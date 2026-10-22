@@ -3,6 +3,7 @@ package dev.miraiijo.lumentube.feed
 import android.content.Context
 import android.net.Uri
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItem
+import dev.miraiijo.lumentube.link.LumenLink
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -14,7 +15,7 @@ import java.io.File
  * Only public video data is stored: no token, cookie or account id.
  */
 object FeedCache {
-    const val AUTHORITY = "dev.miraiijo.lumentube.feed"
+    const val AUTHORITY = LumenLink.TUBE_AUTHORITY
     const val CONTINUE = "continue"
     const val SUBSCRIPTIONS = "subscriptions"
     const val MAX_ROWS = 20
