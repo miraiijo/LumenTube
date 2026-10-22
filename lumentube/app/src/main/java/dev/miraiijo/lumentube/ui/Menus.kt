@@ -31,8 +31,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import dev.miraiijo.lumentube.Pairing
@@ -53,7 +51,7 @@ fun CardMenuDialog(
     onNotInterested: (channel: Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    LumenDialog(onDismissRequest = onDismiss) {
         val first = remember { FocusRequester() }
         Column(
             Modifier
@@ -94,7 +92,7 @@ fun CardMenuDialog(
  */
 @Composable
 fun PairingDialog(pairing: Pairing, onRetry: () -> Unit, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    LumenDialog(onDismissRequest = onDismiss) {
         val button = remember { FocusRequester() }
         Column(
             Modifier

@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -49,7 +50,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
@@ -60,11 +60,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.tv.material3.Border
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.LocalContentColor
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
@@ -98,7 +96,7 @@ internal fun AvatarPicture(url: String?, name: String?, size: androidx.compose.u
  */
 @Composable
 fun SignInDialog(code: String?, error: String?, onRetry: () -> Unit, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    LumenDialog(onDismissRequest = onDismiss) {
         val button = remember { FocusRequester() }
         Row(
             Modifier
@@ -166,7 +164,7 @@ private fun QrCode(content: String, modifier: Modifier) {
  */
 @Composable
 fun ProfileDialog(accounts: List<Account>, onChoose: (Account) -> Unit, onAdd: () -> Unit, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    LumenDialog(onDismissRequest = onDismiss) {
         val first = remember { FocusRequester() }
         Column(
             Modifier.fillMaxSize().lumenBackground(),
@@ -212,22 +210,32 @@ fun ProfileDialog(accounts: List<Account>, onChoose: (Account) -> Unit, onAdd: (
 private fun ProfileTile(name: String, caption: String?, modifier: Modifier, onClick: () -> Unit, picture: @Composable () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Column(Modifier.width(PROFILE_TILE), horizontalAlignment = Alignment.CenterHorizontally) {
-        Surface(
-            onClick = onClick,
-            modifier = modifier.size(PROFILE_AVATAR).onFocusChanged { focused = it.isFocused },
-            shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
-            scale = ClickableSurfaceDefaults.scale(focusedScale = FocusScale.Avatar),
-            // The redesign's ring: a gap, then the focus color around the avatar.
-            border = ClickableSurfaceDefaults.border(
-                focusedBorder = Border(androidx.compose.foundation.BorderStroke(3.dp, Palette.FocusRing), inset = (-6).dp, shape = CircleShape),
-            ),
-            colors = ClickableSurfaceDefaults.colors(
-                containerColor = if (Palette.colors.isLight) Color.White else Palette.ControlIdle,
-                contentColor = Palette.TextPrimary,
-                focusedContainerColor = if (Palette.colors.isLight) Color.White else Palette.Selected,
-                focusedContentColor = Palette.TextPrimary,
-            ),
-        ) { picture() }
+        // The redesign's ring (a gap, then the focus color around the avatar), drawn by this box
+        // rather than Surface's border: tv-material drew its outset border inside the round picture.
+        Box(
+            Modifier
+                .size(PROFILE_RING)
+                .graphicsLayer {
+                    val s = if (focused) FocusScale.Avatar else 1f
+                    scaleX = s
+                    scaleY = s
+                }
+                .then(if (focused) Modifier.border(3.dp, Palette.FocusRing, CircleShape) else Modifier),
+            contentAlignment = Alignment.Center,
+        ) {
+            Surface(
+                onClick = onClick,
+                modifier = modifier.size(PROFILE_AVATAR).onFocusChanged { focused = it.isFocused },
+                shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = if (Palette.colors.isLight) Color.White else Palette.ControlIdle,
+                    contentColor = Palette.TextPrimary,
+                    focusedContainerColor = if (Palette.colors.isLight) Color.White else Palette.Selected,
+                    focusedContentColor = Palette.TextPrimary,
+                ),
+            ) { picture() }
+        }
         Text(
             name,
             fontSize = 16.sp,
@@ -236,7 +244,7 @@ private fun ProfileTile(name: String, caption: String?, modifier: Modifier, onCl
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 16.dp),
+            modifier = Modifier.padding(top = 7.dp),
         )
         Text(caption.orEmpty(), fontSize = 12.sp, color = Palette.TextSecondary, maxLines = 1, textAlign = TextAlign.Center)
     }
@@ -252,7 +260,7 @@ private enum class SettingsPage(val label: String) { PLAYBACK("Lecture"), DISPLA
  */
 @Composable
 fun SettingsDialog(settings: Settings, accountName: String?, onSettings: (Settings) -> Unit, onPair: () -> Unit, onSignOut: () -> Unit, onDismiss: () -> Unit) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    LumenDialog(onDismissRequest = onDismiss) {
         val first = remember { FocusRequester() }
         var page by remember { mutableStateOf(SettingsPage.PLAYBACK) }
         val pages = SettingsPage.entries.filter { it != SettingsPage.ACCOUNT || accountName != null }
@@ -386,6 +394,8 @@ internal fun SectionLabel(text: String) {
 }
 
 private val PROFILE_AVATAR = 110.dp
+/** The avatar, a 6 dp gap and the 3 dp focus ring. */
+private val PROFILE_RING = PROFILE_AVATAR + 18.dp
 private val PROFILE_TILE = 140.dp
 
 @Composable

@@ -238,7 +238,7 @@ fun VideoCard(
             // The redesign's focus: a ring around the card, a small gap from it, a light zoom.
             scale = ClickableSurfaceDefaults.scale(focusedScale = FocusScale.CardRing),
             border = ClickableSurfaceDefaults.border(
-                focusedBorder = Border(androidx.compose.foundation.BorderStroke(2.5.dp, Palette.FocusRing), inset = (-4).dp, shape = CardShape),
+                focusedBorder = Border(androidx.compose.foundation.BorderStroke(2.5.dp, Palette.FocusRing), inset = 4.dp, shape = CardShape),
             ),
             colors = ClickableSurfaceDefaults.colors(containerColor = Palette.Tile, focusedContainerColor = Palette.TileFocused),
         ) {

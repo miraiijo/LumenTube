@@ -36,6 +36,11 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.12.3 – 0.12.4
+- **Onglets de l'en-tête** : « Pour toi » prenait toute la largeur et cachait les autres sections (Abonnements, Historique…), elles sont de nouveau visibles.
+- **Anneau de focus** : il entoure de nouveau les cartes, les avatars de « Qui regarde ? » et les boutons ronds (il était dessiné à l'intérieur de l'image).
+- **Taille de l'interface** appliquée aussi à « Qui regarde ? », Réglages, menus de carte et connexion (ils restaient à 100 %).
+
 ### 0.12.2
 - **Taille de l'interface réglable** : Réglages › Affichage › « Taille de l'interface » : Plus petit / Plus grand, de 60 % à 120 % par pas de 5 %, appliqué tout de suite (Par défaut : 80 %). Le nombre de cartes par rangée suit (6 à 60 %, 5 à 80 %, 4 à 100 %, 3 à 120 %). L'ancien choix « Grande » est repris en 100 %.
 

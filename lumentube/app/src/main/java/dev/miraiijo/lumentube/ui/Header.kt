@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -129,7 +130,8 @@ private fun Tab(label: String, current: Boolean, modifier: Modifier, onClick: ()
             pressedContentColor = Palette.OnFocus,
         ),
     ) {
-        Box(Modifier.fillMaxSize().padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+        // fillMaxHeight, not fillMaxSize: in the tabs' Row, a full-width tab pushed all the others out.
+        Box(Modifier.fillMaxHeight().padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
             Text(label, fontSize = 15.sp, fontWeight = if (current) FontWeight.Bold else FontWeight.Medium, maxLines = 1, softWrap = false)
         }
     }
@@ -152,7 +154,7 @@ private fun RoundButton(onClick: () -> Unit, filled: Boolean = true, content: @C
             pressedContentColor = Palette.OnFocus,
         ),
         border = ClickableSurfaceDefaults.border(
-            focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(2.dp, Palette.FocusRing), inset = (-3).dp, shape = CircleShape),
+            focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(2.dp, Palette.FocusRing), inset = 3.dp, shape = CircleShape),
         ),
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }

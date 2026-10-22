@@ -223,3 +223,18 @@ object Dimens {
 val ControlShape = RoundedCornerShape(Dimens.RadiusControl)
 val CardShape = RoundedCornerShape(Dimens.RadiusCard)
 val DialogShape = RoundedCornerShape(Dimens.RadiusDialog)
+
+/**
+ * A full-window dialog drawn at the "Taille de l'interface" scale: a Dialog is its own window,
+ * whose view provides the raw screen density again, so the scaled one is carried over here.
+ */
+@Composable
+fun LumenDialog(onDismissRequest: () -> Unit, content: @Composable () -> Unit) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides density, content = content)
+    }
+}
