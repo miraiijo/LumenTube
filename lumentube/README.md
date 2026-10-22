@@ -36,6 +36,9 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.13.5
+- **Lier un téléphone par QR code** : Réglages › Téléphone › Lier un téléphone affiche un QR code à côté du code TV. Scanné avec le téléphone, il ouvre la page d'appairage de YouTube avec le code déjà rempli. Le QR est dessiné sur la box (aucun service web), et le code à taper reste affiché.
+
 ### 0.13.4
 - **Navigation** :
   - le fondu entre deux pages ne montre plus les données de la nouvelle page sur l'ancienne ;

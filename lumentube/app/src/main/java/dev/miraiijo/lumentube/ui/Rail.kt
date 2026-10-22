@@ -168,7 +168,7 @@ private const val QR_SIGN_IN_URL = "https://youtube.com/qr/activate/"
 
 /** A QR code drawn on the device (ZXing): the sign-in code never goes through a QR web service. */
 @Composable
-private fun QrCode(content: String, modifier: Modifier) {
+internal fun QrCode(content: String, modifier: Modifier) {
     val matrix = remember(content) {
         runCatching { QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, 0, 0, mapOf(EncodeHintType.MARGIN to 1)) }.getOrNull()
     } ?: return

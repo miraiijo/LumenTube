@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -95,37 +96,46 @@ fun CardMenuDialog(
 fun PairingDialog(pairing: Pairing, onRetry: () -> Unit, onDismiss: () -> Unit) {
     LumenDialog(onDismissRequest = onDismiss) {
         val button = remember { FocusRequester() }
-        Column(
+        // Like the sign-in: the text and the code on the left, the QR code on the right.
+        Row(
             Modifier
-                .width(640.dp)
+                .width(760.dp)
                 .background(Palette.Panel, DialogShape)
                 .padding(32.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(32.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Lier un téléphone", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-            Text(
-                "Dans l’app YouTube du téléphone : photo de profil › Paramètres › Regarder sur la TV › Saisir le code TV, puis tape ce code :",
-                color = Palette.TextSecondary,
-                fontSize = 15.sp,
-                lineHeight = 21.sp,
-            )
-            // A fixed slot: "Code en cours…", the code or the error, the dialog keeps its height.
-            Box(Modifier.fillMaxWidth().height(CODE_SLOT), contentAlignment = Alignment.CenterStart) {
-                when {
-                    pairing.error != null -> Text(pairing.error, color = Palette.Danger, fontSize = 15.sp, lineHeight = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    pairing.code == null -> Text("Code en cours…", color = Palette.TextSecondary, fontSize = 28.sp, lineHeight = 34.sp)
-                    else -> Text(pairing.code, fontSize = 40.sp, lineHeight = 48.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("Lier un téléphone", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Scanne le QR code avec le téléphone. Ou dans l’app YouTube : photo de profil › Paramètres › Regarder sur la TV › Saisir le code TV, puis tape ce code :",
+                    color = Palette.TextSecondary,
+                    fontSize = 15.sp,
+                    lineHeight = 21.sp,
+                )
+                // A fixed slot: "Code en cours…", the code or the error, the dialog keeps its height.
+                Box(Modifier.fillMaxWidth().height(CODE_SLOT), contentAlignment = Alignment.CenterStart) {
+                    when {
+                        pairing.error != null -> Text(pairing.error, color = Palette.Danger, fontSize = 15.sp, lineHeight = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        pairing.code == null -> Text("Code en cours…", color = Palette.TextSecondary, fontSize = 28.sp, lineHeight = 34.sp)
+                        else -> Text(pairing.code, fontSize = 40.sp, lineHeight = 48.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp, maxLines = 1)
+                    }
+                }
+                Text(
+                    "Ensuite, le bouton Caster du téléphone envoie les vidéos ici (quand LumenTube est ouvert) et le téléphone sert de télécommande.",
+                    color = Palette.TextSecondary,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap)) {
+                    if (pairing.error != null) LumenButton("Réessayer", icon = LumenIcon.REFRESH, onClick = onRetry)
+                    LumenButton("Fermer", modifier = Modifier.focusRequester(button), onClick = onDismiss)
                 }
             }
-            Text(
-                "Ensuite, le bouton Caster du téléphone envoie les vidéos ici (quand LumenTube est ouvert) et le téléphone sert de télécommande.",
-                color = Palette.TextSecondary,
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap)) {
-                if (pairing.error != null) LumenButton("Réessayer", icon = LumenIcon.REFRESH, onClick = onRetry)
-                LumenButton("Fermer", modifier = Modifier.focusRequester(button), onClick = onDismiss)
+            Box(Modifier.size(220.dp).clip(ControlShape).background(Color.White), contentAlignment = Alignment.Center) {
+                // YouTube's pairing link with the TV code (digits only): the phone opens YouTube and links.
+                val digits = pairing.code?.filter(Char::isDigit).orEmpty()
+                if (pairing.error == null && digits.isNotEmpty()) QrCode(QR_PAIR_URL + digits, Modifier.fillMaxSize().padding(14.dp))
             }
         }
         // At opening, and after "Réessayer" (it goes away with the error, focus and all): "Fermer".
@@ -135,6 +145,9 @@ fun PairingDialog(pairing: Pairing, onRetry: () -> Unit, onDismiss: () -> Unit) 
         }
     }
 }
+
+/** YouTube's "link with TV code" page, the code in it (what YouTube's own TV apps put in their QR). */
+private const val QR_PAIR_URL = "https://www.youtube.com/pair?pairingCode="
 
 /** A short message at the bottom center ("Ajoutée à À regarder plus tard."), never focusable. */
 @Composable
