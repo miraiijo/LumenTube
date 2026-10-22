@@ -90,22 +90,16 @@ fun TopHeader(
             // "Lecture en cours" with a video in the small window (Back then OK: full screen again).
             .focusProperties { enter = { if (minimized) playerButton else if (section in sections) requesters.getValue(section) else FocusRequester.Default } }
             .focusGroup()
-            .padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 28.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.Top,
+            .padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 22.dp, bottom = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                if (section == Section.HOME) "Accueil" else section.label,
-                fontSize = 44.sp,
-                lineHeight = 50.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.03).em,
-                color = Palette.TextPrimary,
-            )
-            // The tabs scroll when they don't fit (signed in, 9 tabs, from ~95 %): before, the last
-            // ones were squeezed to nothing and the focus went invisible on them.
+        // Opale: one bar. The sections on the left (no big title), then the round glass buttons
+        // and the time right-most, all on one line.
+        // The tabs scroll when they don't fit (signed in, 9 tabs, from ~95 %): before, the last
+        // ones were squeezed to nothing and the focus went invisible on them.
+        Box(Modifier.weight(1f)) {
             EdgeScroll(TAB_MARGIN) {
-                Row(Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(TAB_GAP)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(TAB_GAP)) {
                     sections.forEach { item ->
                         Tab(
                             label = if (item == Section.HOME) "Pour toi" else item.label,
@@ -117,26 +111,25 @@ fun TopHeader(
                 }
             }
         }
-        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            // The clock in the top right corner, at the end of the buttons' line.
-            Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
-                RoundButton(onClick = { onSection(Section.SEARCH) }) { Icon(LumenIcon.SEARCH, size = 16.dp) }
-                RoundButton(onClick = onAccount, filled = false) { AvatarPicture(accountAvatar, accountName, HEADER_BUTTON, 17.sp) }
-                RoundButton(onClick = onSettings) { Icon(LumenIcon.SETTINGS, size = 16.dp) }
-                HeaderClock(Modifier.padding(start = 7.dp))
-            }
+        Row(
+            Modifier.padding(start = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (minimized) {
-                Row {
-                    // White by day with a light shadow, like the round buttons (translucent at night).
-                    LumenButton(
-                        "Lecture en cours",
-                        modifier = Modifier.dayShadow().focusRequester(playerButton),
-                        icon = LumenIcon.PIP,
-                        containerColor = if (Palette.colors.isLight) Color.White else Palette.ControlIdle,
-                        onClick = onRestorePlayer,
-                    )
-                }
+                LumenButton(
+                    "Lecture en cours",
+                    modifier = Modifier.focusRequester(playerButton),
+                    icon = LumenIcon.PIP,
+                    containerColor = Palette.Glass,
+                    onClick = onRestorePlayer,
+                )
             }
+            RoundButton(onClick = { onSection(Section.SEARCH) }) { Icon(LumenIcon.SEARCH, size = 16.dp) }
+            RoundButton(onClick = onAccount, filled = false) { AvatarPicture(accountAvatar, accountName, HEADER_BUTTON, 17.sp) }
+            RoundButton(onClick = onSettings) { Icon(LumenIcon.SETTINGS, size = 16.dp) }
+            // The time right-most, as in Lumen.
+            HeaderClock(Modifier.padding(start = 2.dp))
         }
     }
 }
@@ -188,20 +181,24 @@ private fun Tab(label: String, current: Boolean, modifier: Modifier, onClick: ()
 private fun RoundButton(onClick: () -> Unit, filled: Boolean = true, content: @Composable () -> Unit) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.then(if (filled) Modifier.dayShadow() else Modifier).size(HEADER_BUTTON),
+        modifier = Modifier.size(HEADER_BUTTON),
         shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = FocusScale.Avatar),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = FocusScale.Avatar, pressedScale = FocusScale.Avatar),
+        // Opale's glass button: translucent fill and a thin edge; focused, the solid focus color
+        // (the avatar keeps its picture: a ring around it instead).
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (!filled) Color.Transparent else if (Palette.colors.isLight) Color.White else Palette.ControlIdle,
+            containerColor = if (filled) Palette.Glass else Color.Transparent,
             contentColor = Palette.TextPrimary,
-            focusedContainerColor = Palette.Focus,
+            focusedContainerColor = if (filled) Palette.Focus else Color.Transparent,
             focusedContentColor = Palette.OnFocus,
-            pressedContainerColor = Palette.Focus,
+            pressedContainerColor = if (filled) Palette.Focus else Color.Transparent,
             pressedContentColor = Palette.OnFocus,
         ),
         border = ClickableSurfaceDefaults.border(
-            focusedBorder = androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(2.dp, Palette.FocusRing), inset = 3.dp, shape = CircleShape),
+            border = if (filled) androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(1.dp, Palette.GlassBorder), shape = CircleShape) else androidx.tv.material3.Border.None,
+            focusedBorder = if (filled) androidx.tv.material3.Border.None else androidx.tv.material3.Border(androidx.compose.foundation.BorderStroke(3.dp, Palette.Focus), inset = 3.dp, shape = CircleShape),
         ),
+        glow = ClickableSurfaceDefaults.glow(focusedGlow = androidx.tv.material3.Glow(elevationColor = Palette.Shadow, elevation = 12.dp)),
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
     }
@@ -219,7 +216,7 @@ private fun HeaderClock(modifier: Modifier = Modifier) {
         }
     }
     // Tabular figures: every digit as wide, so the round buttons don't shift each minute.
-    Text(time, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Palette.TextSecondary, style = androidx.tv.material3.LocalTextStyle.current.copy(fontFeatureSettings = "tnum"), modifier = modifier)
+    Text(time, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextPrimary, style = androidx.tv.material3.LocalTextStyle.current.copy(fontFeatureSettings = "tnum"), modifier = modifier)
 }
 
 /**
@@ -228,10 +225,11 @@ private fun HeaderClock(modifier: Modifier = Modifier) {
  */
 fun Modifier.lumenBackground(): Modifier = drawBehind {
     val colors = Palette.colors
-    drawRect(colors.background)
-    // Lights fading out at a quarter of the width (the redesign's 860 px glow, transparent at 70 %).
-    drawRect(Brush.radialGradient(listOf(colors.glowWarm, Color.Transparent), center = Offset(size.width * 0.78f, 0f), radius = size.width * GLOW_RADIUS))
-    drawRect(Brush.radialGradient(listOf(colors.glowCool, Color.Transparent), center = Offset(0f, size.height), radius = size.width * GLOW_RADIUS))
+    // Lumen's "Neutre" ambiance: a diagonal of three greys, a warm light from the top right corner
+    // and a cool one from the bottom left (Lumen's 1400 / 1200 px radii on a 1920 px screen).
+    drawRect(Brush.linearGradient(0f to colors.background, 0.55f to colors.backgroundMid, 1f to colors.backgroundEnd, start = Offset.Zero, end = Offset(size.width, size.height)))
+    drawRect(Brush.radialGradient(listOf(colors.glowWarm, Color.Transparent), center = Offset(size.width, 0f), radius = size.width * GLOW_WARM_RADIUS))
+    drawRect(Brush.radialGradient(listOf(colors.glowCool, Color.Transparent), center = Offset(0f, size.height), radius = size.width * GLOW_COOL_RADIUS))
 }
 
 private val HEADER_BUTTON = 38.dp
@@ -240,7 +238,8 @@ private val TAB_GAP = 28.dp
 private val TAB_BAR = 3.dp
 /** Room kept on each side of the focused tab when the tabs scroll. */
 private val TAB_MARGIN = 24.dp
-private const val GLOW_RADIUS = 0.25f
+private const val GLOW_WARM_RADIUS = 0.73f
+private const val GLOW_COOL_RADIUS = 0.625f
 
 /** By day, the header's white buttons get a soft shadow (none at night, on the dark page). */
 @Composable

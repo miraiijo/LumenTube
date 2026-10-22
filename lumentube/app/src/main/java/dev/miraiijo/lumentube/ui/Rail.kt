@@ -430,8 +430,8 @@ fun SettingsDialog(
     }
 }
 
-/** Panels of Réglages: white veil by day, a light one at night. */
-private fun settingsPanel(): Color = if (Palette.colors.isLight) Color.White.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.05f)
+/** Panels of Réglages: Opale's glass (white veil by day, a light one at night). */
+private fun settingsPanel(): Color = Palette.Glass
 
 @Composable
 private fun SettingsNavItem(label: String, current: Boolean, modifier: Modifier, onFocus: () -> Unit) {

@@ -277,10 +277,14 @@ fun VideoCard(
                     if (it.isFocused) onFocus()
                 },
             shape = ClickableSurfaceDefaults.shape(shape = CardShape),
-            // The redesign's focus: a ring around the card, a small gap from it, a light zoom.
-            scale = ClickableSurfaceDefaults.scale(focusedScale = FocusScale.CardRing),
+            // Lumen's Opale focus: lifted (1.05) with a soft ring on its edge and a deep shadow.
+            scale = ClickableSurfaceDefaults.scale(focusedScale = FocusScale.CardOpale, pressedScale = FocusScale.CardOpale),
             border = ClickableSurfaceDefaults.border(
-                focusedBorder = Border(androidx.compose.foundation.BorderStroke(2.5.dp, Palette.FocusRing), inset = 4.dp, shape = CardShape),
+                focusedBorder = Border(androidx.compose.foundation.BorderStroke(3.dp, Palette.FocusRing.copy(alpha = OPALE_RING_ALPHA)), shape = CardShape),
+            ),
+            glow = ClickableSurfaceDefaults.glow(
+                focusedGlow = androidx.tv.material3.Glow(elevationColor = Palette.Shadow, elevation = 24.dp),
+                pressedGlow = androidx.tv.material3.Glow(elevationColor = Palette.Shadow, elevation = 24.dp),
             ),
             colors = ClickableSurfaceDefaults.colors(containerColor = Palette.Tile, focusedContainerColor = Palette.TileFocused),
         ) {
@@ -319,6 +323,8 @@ fun VideoCard(
                         Box(Modifier.fillMaxWidth(video.watchedPercent / 100f).fillMaxHeight().background(Color.White))
                     }
                 }
+                // Lumen's shine: one light sweep across the card when it gets the focus.
+                CardShine(isFocused)
             }
         }
         Text(
@@ -344,6 +350,41 @@ fun VideoCard(
             modifier = Modifier.padding(top = 2.dp).height(lines(CHANNEL_LINE, 1)),
         )
     }
+}
+
+/** Opale's soft ring on a focused card (the focus color at 35 %). */
+private const val OPALE_RING_ALPHA = 0.35f
+private const val SHINE_MS = 600
+private const val SHINE_ALPHA = 0.16f
+
+/** One soft light sweep across a card when it gains the focus (Lumen's shine), nothing otherwise. */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.CardShine(focused: Boolean) {
+    val sweep = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(focused) {
+        if (focused) {
+            sweep.snapTo(0f)
+            sweep.animateTo(1f, androidx.compose.animation.core.tween(SHINE_MS))
+        }
+    }
+    if (!focused) return
+    Box(
+        Modifier.matchParentSize().drawWithContent {
+            val progress = sweep.value
+            if (progress in 0.001f..0.999f) {
+                val x = -size.width * 0.6f + progress * size.width * 2.2f
+                drawRect(
+                    androidx.compose.ui.graphics.Brush.linearGradient(
+                        0f to Color.Transparent,
+                        0.5f to Color.White.copy(alpha = SHINE_ALPHA),
+                        1f to Color.Transparent,
+                        start = androidx.compose.ui.geometry.Offset(x, 0f),
+                        end = androidx.compose.ui.geometry.Offset(x + size.width * 0.6f, size.height),
+                    ),
+                )
+            }
+        },
+    )
 }
 
 /** The remote's Menu key, when it has one, does what a long press does. */

@@ -46,24 +46,36 @@ class LumenColors(
     val glowWarm: Color,
     val glowCool: Color,
     val isLight: Boolean,
+    /** Lumen's Opale: the background's diagonal ("Neutre" ambiance), from [background] to these. */
+    val backgroundMid: Color,
+    val backgroundEnd: Color,
+    /** Glass surfaces (round buttons, panels) and their thin edge; drop shadow of lifted elements. */
+    val glass: Color,
+    val glassBorder: Color,
+    val shadow: Color,
 )
 
+// Lumen's Opale charter (Lumen Common.kt / Backdrop.kt, "Neutre" ambiance): neutral greys, no blue tint.
 val NightColors = LumenColors(
-    background = Color(0xFF0E1014), panel = Color(0xFF171A20), tile = Color(0xFF1B1E25), tileFocused = Color(0xFF272B33),
-    textPrimary = Color(0xFFF5F5F7), textSecondary = Color(0xFF9A9CA5),
+    background = Color(0xFF0A0B0E), panel = Color(0xFF161618), tile = Color(0xFF1C1C1E), tileFocused = Color(0xFF2C2C2E),
+    textPrimary = Color(0xFFF5F5F7), textSecondary = Color(0xFF98989D),
     controlIdle = Color.White.copy(alpha = 0.10f), selected = Color.White.copy(alpha = 0.16f), outline = Color.White.copy(alpha = 0.22f),
     track = Color.White.copy(alpha = 0.22f), divider = Color.White.copy(alpha = 0.08f),
-    focus = Color(0xFFF5F5F7), onFocus = Color(0xFF0E1014), focusRing = Color(0xFFF5F5F7),
-    glowWarm = Color(0x33A0784F), glowCool = Color(0x383C5AAA), isLight = false,
+    focus = Color(0xFFF5F5F7), onFocus = Color(0xFF0A0A0B), focusRing = Color(0xFFF5F5F7),
+    glowWarm = Color(0x24C8A46A), glowCool = Color(0x1A5A8CFF), isLight = false,
+    backgroundMid = Color(0xFF0E0F13), backgroundEnd = Color(0xFF111216),
+    glass = Color.White.copy(alpha = 0.08f), glassBorder = Color.White.copy(alpha = 0.10f), shadow = Color.Black.copy(alpha = 0.55f),
 )
 
 val DayColors = LumenColors(
-    background = Color(0xFFECEEF2), panel = Color(0xFFF7F8FA), tile = Color(0xFFDDE0E6), tileFocused = Color(0xFFD0D4DC),
-    textPrimary = Color(0xFF121317), textSecondary = Color(0xFF5F626B),
-    controlIdle = Color(0x0F121317), selected = Color(0xFFFFFFFF), outline = Color(0x29121317),
-    track = Color(0x29121317), divider = Color(0x14121317),
-    focus = Color(0xFF121317), onFocus = Color(0xFFFFFFFF), focusRing = Color(0xFF121317),
-    glowWarm = Color(0x73D6BE96), glowCool = Color(0x7396AFEB), isLight = true,
+    background = Color(0xFFEDEFF3), panel = Color(0xFFFFFFFF), tile = Color(0xFFE2E4EA), tileFocused = Color(0xFFFFFFFF),
+    textPrimary = Color(0xFF16171A), textSecondary = Color(0xFF62656D),
+    controlIdle = Color.Black.copy(alpha = 0.06f), selected = Color.White.copy(alpha = 0.90f), outline = Color.Black.copy(alpha = 0.16f),
+    track = Color.Black.copy(alpha = 0.14f), divider = Color.Black.copy(alpha = 0.08f),
+    focus = Color(0xFF16171A), onFocus = Color(0xFFFFFFFF), focusRing = Color(0xFF16171A),
+    glowWarm = Color(0x4DC8A46A), glowCool = Color(0x2E5A8CFF), isLight = true,
+    backgroundMid = Color(0xFFE8EAF0), backgroundEnd = Color(0xFFE3E6ED),
+    glass = Color.White.copy(alpha = 0.66f), glassBorder = Color.White.copy(alpha = 0.92f), shadow = Color(0xFF141928).copy(alpha = 0.22f),
 )
 
 object Palette {
@@ -91,6 +103,9 @@ object Palette {
     val Focus get() = colors.focus
     val OnFocus get() = colors.onFocus
     val FocusRing get() = colors.focusRing
+    val Glass get() = colors.glass
+    val GlassBorder get() = colors.glassBorder
+    val Shadow get() = colors.shadow
     val Danger = Color(0xFFFF453A)
     val Warning = Color(0xFFFF9F0A)
     /** The redesign's red (S'abonner, "EN DIRECT") and SponsorBlock's yellow on the bar. */
@@ -106,6 +121,8 @@ object FocusScale {
     const val Card = 1.08f
     /** A card with the focus ring (the redesign): a lighter zoom, the ring already shows it. */
     const val CardRing = 1.04f
+    /** Lumen's Opale cards: a 1.05 lift (with its soft ring and shadow). */
+    const val CardOpale = 1.05f
     const val Avatar = 1.1f
 }
 
@@ -221,7 +238,8 @@ object Dimens {
 
     /** Radii: controls, cards (tiles, banners, menus), dialogs. */
     val RadiusControl = 14.dp
-    val RadiusCard = 14.dp
+    /** Opale's cards: 13 dp. */
+    val RadiusCard = 13.dp
     val RadiusDialog = 24.dp
 
     /** Smallest text used anywhere (10-foot legibility). */

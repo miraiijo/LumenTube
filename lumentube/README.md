@@ -36,6 +36,13 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.16.0
+- **Thème Opale de Lumen** :
+  - une seule barre en haut : les sections à gauche (texte, barre sous le mot au focus, barre discrète sous la section en cours), à droite « Lecture en cours » si une vidéo est réduite, les boutons ronds en verre (Rechercher, compte, Réglages) et l'heure ; plus de grand titre de section ;
+  - couleurs de Lumen : gris neutres sans teinte bleue, fond « Neutre » (diagonale de gris, halo chaud en haut à droite, froid en bas à gauche), verre translucide au liseré fin ; même chose en Jour ;
+  - cartes à coins de 13 dp ; au focus : soulevées (×1.05), anneau doux sur le bord, ombre portée et reflet lumineux, comme dans Lumen ;
+  - panneaux des Réglages en verre.
+
 ### 0.15.0
 - **Contrat v2 avec Lumen** :
   - le feed (`/continue`, `/subscriptions`, `/search`) accepte `contract=2&account=<account_id>` : les données de ce compte, quel que soit le compte de LumenTube, sans le changer ; compte inconnu (ou id de plus de 128 caractères) : liste vide ; sans `account` : le compte de LumenTube, comme avant ;
