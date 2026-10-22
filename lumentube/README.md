@@ -36,6 +36,24 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.11.2
+- Recherche : OK sur une suggestion ne fait plus passer le focus par le menu latéral (il va sur la barre, puis sur le premier résultat quand il arrive). OK sur un filtre garde le focus sur ce filtre (pour enchaîner les choix) ; les résultats se mettent à jour dessous, Bas pour y aller.
+
+### 0.11.1
+- Lecteur : Retour quitte la vidéo directement, même avec les commandes affichées (avant, un premier Retour les masquait seulement). Dans un panneau (Réglages, sous-titres, commentaires…), Retour ferme toujours d'abord le panneau.
+
+### 0.11.0
+- **HDR** : les pistes HDR de YouTube (VP9.2 et AV1 10 bits, HDR10 ou HLG) sont reconnues et proposées comme les autres qualités. Le menu Qualité les liste avec leur nom complet (« 2160p60 · 4K HDR », « 2160p60 · 4K », « 1080p60 »…), uniquement si le téléviseur affiche le HDR et que le décodeur de la box les prend en charge. En Auto, le HDR est choisi quand l'écran le gère (sinon SDR, jamais d'image HDR délavée sur un écran SDR), toujours avec la connexion et le plafond de charge.
+- La qualité est désormais appliquée comme un choix explicite de pistes : Auto reste adaptatif entre les pistes retenues, une qualité choisie est tenue.
+- Statistiques : type HDR de la piste jouée et formats HDR que l'écran annonce (HDR10, HLG, HDR10+, Dolby Vision) ; la ligne Vidéo indique HDR10 / HLG.
+- Dolby Vision : YouTube ne diffuse pas de flux Dolby Vision ; sur un téléviseur Dolby Vision, les vidéos HDR sont lues en HDR10 / HLG.
+
+### 0.10.4
+- Recherche : Bas depuis la barre (ou « Dicter ») va toujours au premier filtre / à la première suggestion, et Haut depuis cette ligne revient à la barre (la recherche de focus automatique partait parfois vers le menu latéral).
+
+### 0.10.3
+- **Qualité Auto sans plafond fixe** : jusqu'à la résolution maximale que le décodeur accepte, selon la connexion (adaptatif d'ExoPlayer) et la charge de la box : si plus de 10 % des images sont perdues sur ~6 s (20 au moins), Auto descend d'un cran sous la qualité jouée, pour le reste de la session (« Auto : plafonné à …p » dans les statistiques, journalisé sous `LumenTube.Freeze`). Une qualité choisie à la main reste tenue. Remplace le plafond à 1080p de la 0.7.3.
+
 ### 0.10.2
 - **Image figée, son qui continue** : le décodeur vidéo de la box peut se bloquer (vu sur Amlogic, surtout en VP9). Le chien de garde le détecte (aucune nouvelle image pendant ~4,5 s alors que la position avance) et relance le décodage sur place, à la même position. Chaque gel est compté dans les statistiques (« Gels relancés ») et journalisé avec le codec : `adb logcat -s LumenTube.Freeze`.
 

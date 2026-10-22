@@ -181,7 +181,7 @@ private fun buildEntries(
         add(Entry("LECTURE", header = true) {})
         val qualities = player.qualities()
         if (qualities.isNotEmpty()) {
-            val value = if (prefs.quality == 0) "Auto" + (player.playingQuality?.let { " · ${qualityName(it)}" } ?: "") else qualityName(prefs.quality)
+            val value = if (prefs.quality == 0) "Auto" + (player.playingLabel?.let { " · $it" } ?: "") else player.qualityLabel(prefs.quality)
             add(Entry("Qualité", value, submenu = true) { onMenu(PlayerMenu.QUALITY) })
         }
         val subtitles = player.subtitleTracks()
@@ -233,8 +233,9 @@ private fun buildEntries(
             changed()
             onMenu(PlayerMenu.MAIN)
         }
-        add(Entry("Auto", "jusqu'à 1080p", selected = prefs.quality == 0) { pick(0) })
-        player.qualities().forEach { quality -> add(Entry(qualityName(quality), selected = prefs.quality == quality) { pick(quality) }) }
+        add(Entry("Auto", if (player.screenHdr) "connexion, box · HDR si dispo" else "selon la connexion et la box", selected = prefs.quality == 0) { pick(0) })
+        // Each height once per kind: "2160p60 · 4K HDR", then "2160p60 · 4K", "1080p60"…
+        player.qualities().forEach { quality -> add(Entry(player.qualityLabel(quality), selected = prefs.quality == quality) { pick(quality) }) }
     }
     PlayerMenu.SUBTITLES -> buildList {
         val tracks = player.subtitleTracks()
@@ -303,12 +304,6 @@ private fun InfoText(details: Details?, modifier: Modifier) {
         Text(details?.description?.takeIf { it.isNotBlank() } ?: "Pas de description.", fontSize = 13.sp, lineHeight = 19.sp, color = Palette.TextPrimary.copy(alpha = 0.9f))
         Spacer(Modifier.height(24.dp))
     }
-}
-
-private fun qualityName(quality: Int) = when (quality) {
-    2160 -> "2160p · 4K"
-    1440 -> "1440p · 2K"
-    else -> "${quality}p"
 }
 
 private fun speedName(speed: Float) = if (speed == 1f) "Normale" else "${speed.toString().removeSuffix(".0").replace('.', ',')}×"

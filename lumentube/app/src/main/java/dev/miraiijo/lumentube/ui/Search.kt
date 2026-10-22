@@ -30,6 +30,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
@@ -73,12 +74,26 @@ fun SearchPage(
     onLongPress: (Video) -> Unit = {},
 ) {
     val bar = remember { FocusRequester() }
+    /** The chips under the bar (suggestions or filters); the first one is where Down from the bar goes. */
+    val chips = remember { List(MAX_CHIPS) { FocusRequester() } }
+    val belowBar = chips[0]
     // Incremented on each search: the results take the focus when they arrive.
     var resultsTick by remember { mutableIntStateOf(0) }
+    /** False after a filter: the focus stays on the filter (to try the next choice), not on the results. */
+    var followResults by remember { mutableStateOf(true) }
+    /** A filter changed: its chip takes the focus back (its label changed under it). */
+    var refocusChip by remember { mutableIntStateOf(-1) }
+    var refocusTick by remember { mutableIntStateOf(0) }
     fun search(text: String) {
         if (text.isBlank()) return
+        followResults = true
         resultsTick++
         onSearch(text)
+    }
+    LaunchedEffect(refocusTick) {
+        if (refocusTick == 0) return@LaunchedEffect
+        withFrameNanos { }
+        chips.getOrNull(refocusChip)?.tryRequestFocus()
     }
     LaunchedEffect(focusTick) {
         if (focusTick == 0) return@LaunchedEffect
@@ -86,25 +101,38 @@ fun SearchPage(
         bar.tryRequestFocus()
     }
     Column(Modifier.fillMaxSize()) {
-        SearchBar(query, bar, ::search, onTyping, Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 28.dp))
+        SearchBar(query, bar, belowBar, ::search, onTyping, Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 28.dp))
         // One line under the bar: the suggestions while typing, else the filters.
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = Dimens.Gutter, vertical = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Up from this line: back to the bar (not the side menu).
+            fun chip(index: Int) = (chips.getOrNull(index)?.let { Modifier.focusRequester(it) } ?: Modifier).focusProperties { up = bar }
             if (suggestions.isNotEmpty()) {
-                suggestions.forEach { suggestion -> LumenButton(suggestion, icon = LumenIcon.SEARCH) { search(suggestion) } }
+                suggestions.forEachIndexed { index, suggestion ->
+                    LumenButton(suggestion, modifier = chip(index), icon = LumenIcon.SEARCH) {
+                        // The suggestions line is about to give way to the filters: the focus moves to
+                        // the bar first (it fell into the side menu), then to the results when they come.
+                        bar.tryRequestFocus()
+                        search(suggestion)
+                    }
+                }
             } else {
-                SEARCH_FILTERS.forEach { filter ->
+                SEARCH_FILTERS.forEachIndexed { index, filter ->
                     val current = filter.choices.indexOfFirst { (flag, _) -> flag != 0 && options and flag != 0 }.coerceAtLeast(0)
                     val (_, name) = filter.choices[current]
                     LumenButton(
                         if (current == 0) filter.label else "${filter.label} : $name",
+                        modifier = chip(index),
                         containerColor = if (current == 0) Palette.ControlIdle else Palette.Selected,
                     ) {
                         // OK = the next choice of this filter (then back to "all").
                         val next = filter.choices[(current + 1) % filter.choices.size].first
+                        followResults = false
+                        refocusChip = index
+                        refocusTick++
                         onOptions(options and filter.mask.inv() or next)
                     }
                 }
@@ -114,7 +142,7 @@ fun SearchPage(
             BrowsePage(
                 page = if (query.isBlank() && page.rows.isEmpty() && !page.loading) page.copy(error = "Cherche une vidéo, une chaîne ou une playlist.") else page,
                 title = query.takeIf { it.isNotBlank() }?.let { "Résultats pour « $it »" },
-                focusTick = resultsTick,
+                focusTick = if (followResults) resultsTick else 0,
                 onSelect = onSelect,
                 onLoadMore = onLoadMore,
                 onRetry = { search(query) },
@@ -129,7 +157,7 @@ fun SearchPage(
 }
 
 @Composable
-private fun SearchBar(query: String, requester: FocusRequester, onSearch: (String) -> Unit, onTyping: (String) -> Unit, modifier: Modifier) {
+private fun SearchBar(query: String, requester: FocusRequester, below: FocusRequester, onSearch: (String) -> Unit, onTyping: (String) -> Unit, modifier: Modifier) {
     val context = LocalContext.current
     val keyboard = LocalSoftwareKeyboardController.current
     var text by remember(query) { mutableStateOf(query) }
@@ -165,7 +193,8 @@ private fun SearchBar(query: String, requester: FocusRequester, onSearch: (Strin
         Surface(
             // The pill only opens the keyboard: moving across it with the remote never pops it up.
             onClick = { editing = true },
-            modifier = Modifier.weight(1f).height(48.dp).focusRequester(requester),
+            // Down: the chips right under the bar (the 2D search sometimes picked the side menu).
+            modifier = Modifier.weight(1f).height(48.dp).focusRequester(requester).focusProperties { down = below },
             shape = ClickableSurfaceDefaults.shape(shape = ControlShape),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
             colors = ClickableSurfaceDefaults.colors(
@@ -218,7 +247,7 @@ private fun SearchBar(query: String, requester: FocusRequester, onSearch: (Strin
             }
         }
         if (canDictate) {
-            LumenButton("Dicter", icon = LumenIcon.MIC) {
+            LumenButton("Dicter", modifier = Modifier.focusProperties { down = below }, icon = LumenIcon.MIC) {
                 runCatching { dictation.launch(voiceIntent) }
             }
         }
@@ -276,3 +305,6 @@ private val SEARCH_FILTERS = listOf(
         ),
     ),
 )
+
+/** Suggestions shown at most (YouTube's, see YouTube.suggestions) and filters: chips with a requester. */
+private const val MAX_CHIPS = 8

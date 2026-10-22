@@ -7,7 +7,7 @@ import dev.miraiijo.lumentube.Settings
 class PlayerPrefs(context: Context) {
     private val prefs = context.getSharedPreferences("player", Context.MODE_PRIVATE)
 
-    /** Held quality (1080 = 1080p), 0 = Auto. */
+    /** Held quality (1080 = 1080p, + LumenPlayer.HDR_FLAG for its HDR version), 0 = Auto. */
     var quality: Int
         get() = prefs.getInt(KEY_QUALITY, 0)
         set(value) = prefs.edit().putInt(KEY_QUALITY, value).apply()

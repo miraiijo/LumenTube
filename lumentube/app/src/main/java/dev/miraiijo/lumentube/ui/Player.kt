@@ -551,9 +551,9 @@ fun PlayerScreen(
         scope.launch { if (!YouTube.watchLater(videoId)) watchLaterDone = false }
     }
 
-    BackHandler(enabled = !minimized) {
-        if (controls && isPlaying) controls = false else onExit()
-    }
+    // Back leaves the video, controls shown or not (they hide by themselves, OK brings them back).
+    // The panels (settings, comments) have their own Back, declared after.
+    BackHandler(enabled = !minimized) { onExit() }
     // Declared after: while the panel is open, Back goes up one level, then closes it.
     BackHandler(enabled = menu != null && !minimized) {
         // Up one level, or closed when it's the level the panel was opened on.

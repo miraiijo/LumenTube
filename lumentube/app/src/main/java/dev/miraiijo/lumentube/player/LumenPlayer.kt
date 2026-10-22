@@ -73,7 +73,7 @@ class LumenPlayer(context: Context) {
         val audio = exo.audioFormat
         if (video != null) {
             val fps = video.frameRate.takeIf { it > 0f }?.let { " · ${"%.0f".format(Locale.US, it)} i/s" }.orEmpty()
-            add("Vidéo" to "${video.width}×${video.height}$fps · ${codecName(video)}")
+            add("Vidéo" to "${video.width}×${video.height}$fps · ${codecName(video)}" + (hdrKind(video)?.let { " · $it" } ?: ""))
             if (video.bitrate > 0) add("Débit vidéo" to kbps(video.bitrate))
         }
         if (audio != null) {
@@ -86,6 +86,12 @@ class LumenPlayer(context: Context) {
             counters.ensureUpdated()
             add("Images perdues" to "${counters.droppedBufferCount} / ${counters.renderedOutputBufferCount + counters.droppedBufferCount}")
             if (freezesRecovered > 0) add("Gels relancés" to freezesRecovered.toString())
+            autoCap?.let { add("Auto" to "plafonné à ${it}p (images perdues)") }
+            add("HDR" to buildString {
+                append(video?.let { hdrKind(it) } ?: "non (SDR)")
+                append(" · écran : ")
+                append(if (screenHdr) displayHdr.mapNotNull(::hdrTypeName).joinToString(", ") else "SDR")
+            })
         }
         add("Tampon" to "%.1f s".format(Locale.US, (exo.bufferedPosition - exo.currentPosition).coerceAtLeast(0L) / 1000f))
         bandwidth.bitrateEstimate.takeIf { it > 0 }?.let { add("Connexion" to kbps(it)) }
@@ -194,7 +200,51 @@ class LumenPlayer(context: Context) {
                 exo.playWhenReady = true
             }
             checkVideoFrozen()
+            checkLoad()
             handler.postDelayed(this, STUCK_MS)
+        }
+    }
+
+    /** Quality asked (0 = Auto). */
+    private var currentQuality = 0
+    private var loadDropped = -1
+    private var loadRendered = -1
+    private var loadChecks = 0
+
+    /**
+     * Auto and the box can't keep up: over ~6 s ([LOAD_CHECKS] checks), more than 10 % of the
+     * frames dropped (and at least [LOAD_MIN_DROPPED]) → one step down, below the quality playing,
+     * held for the rest of the session ([autoCap]). The connection side is ExoPlayer's own.
+     */
+    private fun checkLoad() {
+        val counters = exo.videoDecoderCounters
+        val playing = playingQuality?.rem(HDR_FLAG)
+        if (currentQuality != 0 || !exo.isPlaying || counters == null || playing == null) {
+            loadChecks = 0
+            loadDropped = -1
+            return
+        }
+        counters.ensureUpdated()
+        val dropped = counters.droppedBufferCount
+        val rendered = counters.renderedOutputBufferCount
+        // A new decoder (track change, seek) restarts its counters: a new window.
+        if (loadDropped < 0 || dropped < loadDropped || rendered < loadRendered) {
+            loadDropped = dropped
+            loadRendered = rendered
+            loadChecks = 0
+            return
+        }
+        if (++loadChecks < LOAD_CHECKS) return
+        val lost = dropped - loadDropped
+        val shown = rendered - loadRendered
+        loadDropped = dropped
+        loadRendered = rendered
+        loadChecks = 0
+        if (lost >= LOAD_MIN_DROPPED && lost * 10 > lost + shown) {
+            val lower = qualities().map { it % HDR_FLAG }.firstOrNull { it < playing } ?: return
+            autoCap = lower
+            android.util.Log.w(FREEZE_TAG, "$lost/${lost + shown} frames dropped at ${playing}p: Auto capped at ${lower}p")
+            setQuality(0)
         }
     }
 
@@ -233,6 +283,8 @@ class LumenPlayer(context: Context) {
             }
 
             override fun onTracksChanged(trackGroups: TrackGroupArray, trackSelections: TrackSelectionArray) {
+                // The video's tracks are known: Auto / the chosen quality (and HDR) applied to them.
+                applyVideoSelection()
                 onTracksChanged?.invoke()
             }
 
@@ -318,34 +370,93 @@ class LumenPlayer(context: Context) {
     // ---- Quality, subtitles, audio, speed (menus of the player screen) ---------------------------
 
     /**
-     * Qualities this box can decode for the current video, highest first, as YouTube names them
-     * (1080 = 1080p). Tracks the decoder can't handle (4K on some boxes) are left out.
+     * HDR types this TV / box can show (Display.HdrCapabilities: HDR10, HLG, HDR10+, Dolby Vision).
+     * Empty: SDR screen, HDR tracks are never picked by Auto (a tone-mapped picture looks washed out).
      */
-    fun qualities(): List<Int> {
+    private val displayHdr: Set<Int> = runCatching {
+        val display = (context.getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager).getDisplay(android.view.Display.DEFAULT_DISPLAY)
+        display?.hdrCapabilities?.supportedHdrTypes?.toSet().orEmpty()
+    }.getOrDefault(emptySet())
+
+    /** The screen shows HDR (HDR10 or HLG: the kinds YouTube streams). */
+    val screenHdr: Boolean
+        get() = android.view.Display.HdrCapabilities.HDR_TYPE_HDR10 in displayHdr || android.view.Display.HdrCapabilities.HDR_TYPE_HLG in displayHdr
+
+    /** Handled video tracks: (group, track, format). Tracks the decoder can't take (4K, HDR on some boxes) are left out. */
+    private fun videoTracks(): List<Triple<Int, Int, Format>> {
         val (renderer, groups) = renderer(C.TRACK_TYPE_VIDEO) ?: return emptyList()
         val info = selector.currentMappedTrackInfo ?: return emptyList()
-        val found = sortedSetOf<Int>(reverseOrder())
-        for (g in 0 until groups.length) for (t in 0 until groups[g].length) {
-            if (info.getTrackSupport(renderer, g, t) == RendererCapabilities.FORMAT_HANDLED) qualityOf(groups[g].getFormat(t))?.let(found::add)
+        return buildList {
+            for (g in 0 until groups.length) for (t in 0 until groups[g].length) {
+                if (info.getTrackSupport(renderer, g, t) == RendererCapabilities.FORMAT_HANDLED) add(Triple(g, t, groups[g].getFormat(t)))
+            }
         }
-        return found.toList()
     }
 
-    /** Quality being played right now (null before the first frame). */
-    val playingQuality: Int? get() = exo.videoFormat?.let(::qualityOf)
+    /**
+     * Qualities this box can play for the current video, highest first, as codes: the YouTube height
+     * (1080 = 1080p), plus [HDR_FLAG] for the HDR version. HDR ones only when the screen shows HDR.
+     */
+    fun qualities(): List<Int> = videoTracks()
+        .mapNotNull { (_, _, format) -> qualityOf(format)?.let { if (isHdr(format)) it + HDR_FLAG else it } }
+        .filter { it < HDR_FLAG || screenHdr }
+        .distinct()
+        .sortedWith(compareByDescending<Int> { it % HDR_FLAG }.thenByDescending { it >= HDR_FLAG })
+
+    /** "2160p60 HDR", "1080p60", "720p" (frame rate shown above 30 i/s, like YouTube). */
+    fun qualityLabel(code: Int): String {
+        val height = code % HDR_FLAG
+        val hdr = code >= HDR_FLAG
+        val fps = videoTracks().filter { (_, _, f) -> qualityOf(f) == height && isHdr(f) == hdr }.maxOfOrNull { it.third.frameRate } ?: -1f
+        return nameOf(height, fps, if (hdr) "HDR" else null)
+    }
+
+    /** Quality being played right now, as a code (null before the first frame). */
+    val playingQuality: Int? get() = exo.videoFormat?.let { f -> qualityOf(f)?.let { if (isHdr(f)) it + HDR_FLAG else it } }
+
+    /** What's playing, named: "2160p60 HDR10". */
+    val playingLabel: String? get() = exo.videoFormat?.let { f -> qualityOf(f)?.let { nameOf(it, f.frameRate, hdrKind(f)) } }
 
     /**
-     * 0 = Auto (adapts to the connection). Otherwise the chosen quality, held: the highest track up to
-     * it, without dropping lower when the bandwidth varies. Both sides capped so vertical videos work too.
+     * 0 = Auto: as high as the decoder takes and the connection allows, in HDR when the screen
+     * shows it, minus what this box was seen to choke on (autoCap, learnt from dropped frames).
+     * Otherwise the quality code chosen, held (the highest track at it, not lower when the bandwidth
+     * varies). Applied as an explicit choice of tracks once the video's tracks are known.
      */
     fun setQuality(quality: Int) {
-        // Auto stops at 1080p: 4K (often 60 i/s) drops frames on a 2 GB box; it stays selectable.
-        val side = LONG_SIDE[if (quality == 0) AUTO_MAX else quality] ?: Int.MAX_VALUE
-        selector.setParameters(
-            selector.buildUponParameters()
-                .setMaxVideoSize(side, side)
-                .setForceHighestSupportedBitrate(quality != 0),
-        )
+        currentQuality = quality
+        appliedFor = null
+        applyVideoSelection()
+    }
+
+    private var appliedFor: TrackGroupArray? = null
+
+    private fun applyVideoSelection() {
+        val (renderer, groups) = renderer(C.TRACK_TYPE_VIDEO) ?: return
+        if (appliedFor === groups) return
+        appliedFor = groups
+        val auto = currentQuality == 0
+        val wantHdr = if (auto) screenHdr else currentQuality >= HDR_FLAG
+        val maxHeight = if (auto) autoCap ?: Int.MAX_VALUE else currentQuality % HDR_FLAG
+        val tracks = videoTracks()
+        fun pick(hdr: Boolean) = tracks.filter { (_, _, f) ->
+            val q = qualityOf(f) ?: return@filter false
+            isHdr(f) == hdr && (if (auto) q <= maxHeight else q == maxHeight)
+        }
+        // HDR wanted but not offered (or not decodable): the SDR tracks.
+        val chosen = pick(wantHdr).ifEmpty { pick(false) }
+        val builder = selector.buildUponParameters().clearSelectionOverrides(renderer)
+        if (chosen.isEmpty()) {
+            // Nothing matches (odd manifest): leave the choice to ExoPlayer, size-capped.
+            val side = LONG_SIDE[maxHeight] ?: Int.MAX_VALUE
+            builder.setMaxVideoSize(side, side)
+        } else {
+            // One group: the one holding most of the chosen tracks (adaptive switching stays inside it).
+            val group = chosen.groupBy { it.first }.maxByOrNull { it.value.size }!!
+            builder.setSelectionOverride(renderer, groups, DefaultTrackSelector.SelectionOverride(group.key, *group.value.map { it.second }.toIntArray()))
+        }
+        builder.setForceHighestSupportedBitrate(!auto)
+        selector.setParameters(builder)
     }
 
     /** Subtitle tracks by name: the video's own, then YouTube's automatic translations. */
@@ -433,6 +544,46 @@ class LumenPlayer(context: Context) {
         /** YouTube's quality names and the long side of their frame (1080p = 1920 × 1080). */
         val LONG_SIDE = linkedMapOf(2160 to 3840, 1440 to 2560, 1080 to 1920, 720 to 1280, 480 to 854, 360 to 640, 240 to 426, 144 to 256)
 
+        /** Added to a height in quality codes for the HDR version (2160 + HDR_FLAG = 2160p HDR). */
+        const val HDR_FLAG = 10_000
+
+        /**
+         * HDR kind of a track: from its color info when the manifest has it (PQ = HDR10, HLG), else
+         * from YouTube's itags (330–337: VP9.2 HDR) or codec (vp09.02…, AV1 10-bit HDR). Null = SDR.
+         */
+        fun hdrKind(format: Format): String? {
+            when (format.colorInfo?.colorTransfer) {
+                C.COLOR_TRANSFER_ST2084 -> return "HDR10"
+                C.COLOR_TRANSFER_HLG -> return "HLG"
+            }
+            val itag = format.id?.toIntOrNull()
+            val codecs = format.codecs.orEmpty()
+            return if ((itag != null && itag in 330..337) || codecs.startsWith("vp09.02") || codecs.startsWith("vp9.2") ||
+                codecs.endsWith("10.0.110.09.18.09.0") || codecs.endsWith("10.0.110.09.16.09.0")
+            ) "HDR" else null
+        }
+
+        fun isHdr(format: Format) = hdrKind(format) != null
+
+        fun hdrTypeName(type: Int): String? = when (type) {
+            android.view.Display.HdrCapabilities.HDR_TYPE_HDR10 -> "HDR10"
+            android.view.Display.HdrCapabilities.HDR_TYPE_HLG -> "HLG"
+            android.view.Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION -> "Dolby Vision"
+            4 -> "HDR10+"
+            else -> null
+        }
+
+        /** "2160p60 HDR": height, frame rate when above 30, HDR kind. */
+        fun nameOf(height: Int, fps: Float, hdr: String?): String {
+            val rate = if (fps > 31f) "%.0f".format(Locale.US, fps) else ""
+            val base = when (height) {
+                2160 -> "${height}p$rate · 4K"
+                1440 -> "${height}p$rate · 2K"
+                else -> "${height}p$rate"
+            }
+            return if (hdr != null) "$base $hdr" else base
+        }
+
         /** Quality name of a video track, from its long side (an ultra-wide 1920 × 800 is still 1080p). */
         fun qualityOf(format: Format): Int? {
             val side = maxOf(format.width, format.height)
@@ -479,6 +630,11 @@ class LumenPlayer(context: Context) {
         const val FROZEN_CHECKS = 3
         const val FREEZE_TAG = "LumenTube.Freeze"
         const val MAX_BUFFER_BYTES = 40 shl 20
-        const val AUTO_MAX = 1080
+        const val LOAD_CHECKS = 4
+        const val LOAD_MIN_DROPPED = 20
+
+        /** Auto's ceiling learnt on this box (dropped frames), for the session; null = none. */
+        @Volatile
+        var autoCap: Int? = null
     }
 }
