@@ -86,6 +86,8 @@ import dev.miraiijo.lumentube.player.LumenPlayer
 import dev.miraiijo.lumentube.remote.RemoteControl
 import dev.miraiijo.lumentube.player.PlayerPrefs
 import kotlinx.coroutines.delay
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -106,6 +108,7 @@ private fun seekSpeed(repeatCount: Int) = when {
 private val BUTTON_GAP = 10.dp
 /** Room kept on the right of the title: the clock, or the open panel (settings: 400 dp). */
 private val PANEL_CLEARANCE = 440.dp
+private val CLOCK_CLEARANCE = 120.dp
 /** The progress bar's handle when focused, and its halo. */
 private val HANDLE = 14.dp
 private val HANDLE_HALO = 3.dp
@@ -1012,13 +1015,24 @@ private fun Controls(
         Box(Modifier.fillMaxWidth().height(150.dp).align(Alignment.TopCenter).background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent))))
         Box(Modifier.fillMaxWidth().height(220.dp).align(Alignment.BottomCenter).background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f)))))
 
+        // Top right corner: the clock, centred on the title's first line (hidden under an open panel).
+        if (!panelOpen) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 26.dp, end = Dimens.Gutter)
+                    .height(with(androidx.compose.ui.platform.LocalDensity.current) { 23.sp.toDp() }),
+                contentAlignment = Alignment.CenterEnd,
+            ) { Clock() }
+        }
+
         // Top left (the redesign): the whole title (2 lines at most), then the channel and the
-        // chapter, then the thumbs' counts. Full width (no clock in the player), or up to the open panel.
+        // chapter, then the thumbs' counts. It stops before the clock, or before the open panel.
         Column(
             Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopStart)
-                .padding(start = Dimens.Gutter, top = 26.dp, end = if (panelOpen) PANEL_CLEARANCE else Dimens.Gutter),
+                .padding(start = Dimens.Gutter, top = 26.dp, end = if (panelOpen) PANEL_CLEARANCE else CLOCK_CLEARANCE),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(title, fontSize = 18.sp, lineHeight = 23.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -1217,6 +1231,18 @@ private fun ProgressBar(
             }
         }
     }
+}
+
+@Composable
+private fun Clock() {
+    var now by remember { mutableStateOf(LocalTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = LocalTime.now()
+            delay(10_000)
+        }
+    }
+    Text(now.format(DateTimeFormatter.ofPattern("HH:mm")), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Color.White.copy(alpha = 0.92f))
 }
 
 /** Three pulsing dots (loading). */
