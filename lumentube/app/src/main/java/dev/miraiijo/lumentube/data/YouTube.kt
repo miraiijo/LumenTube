@@ -173,13 +173,20 @@ object YouTube {
                 // One feed failing (or slow) never empties Accueil.
                 for ((parts, title) in extras) safely { addFeed(parts, limit = 2, titled = title) }
             }
-            Section.SUBSCRIPTIONS -> addFeed(Observable.fromCallable { listOfNotNull(subscriptionsForFeed()) })
+            // One long feed each: cut into rows (by date / by progress) instead of one endless row.
+            Section.SUBSCRIPTIONS -> subscriptionsForFeed()?.let {
+                rows += it.bucketed("SUBSCRIPTIONS", SUBSCRIPTION_BUCKETS) { v -> subscriptionBucket(v) }
+                emit(rows.toList())
+            }
             Section.MUSIC -> addFeed(content.musicObserve)
             Section.GAMING -> addFeed(content.gamingObserve)
             Section.NEWS -> addFeed(content.newsObserve)
             Section.SPORTS -> addFeed(content.sportsObserve)
             Section.LIVE -> addFeed(content.liveObserve)
-            Section.HISTORY -> addFeed(Observable.fromCallable { listOfNotNull(historyForFeed()) })
+            Section.HISTORY -> historyForFeed()?.let {
+                rows += it.bucketed("HISTORY", HISTORY_BUCKETS) { v -> if (v.watchedPercent in 1..RESUME_MAX_PERCENT) "À reprendre" else "Déjà vues" }
+                emit(rows.toList())
+            }
             Section.PLAYLISTS -> addFeed(content.playlistRowsObserve)
         }
         if (rows.isEmpty()) emit(emptyList())
@@ -581,6 +588,66 @@ object YouTube {
     /** Every emission of a (finite) observable, flattened: some sections arrive in several parts. */
     private fun Observable<List<MediaGroup>>.collectAll(): List<MediaGroup?> =
         timeout(OBSERVE_TIMEOUT_S, TimeUnit.SECONDS).toList().blockingGet().flatten()
+
+    /**
+     * A long feed cut into rows: its first [BUCKET_PAGES] pages, each video in the row [bucket]
+     * names, rows in [order] (empty ones left out). The last row keeps the feed's continuation, so
+     * scrolling it loads the rest (older videos come after anyway). Blocking.
+     */
+    private fun MediaGroup.bucketed(keyPrefix: String, order: List<String>, bucket: (Video) -> String): List<VideoRow> {
+        val pages = mutableListOf(this)
+        while (pages.size < BUCKET_PAGES) {
+            pages += runCatching { service.contentService.continueGroup(pages.last()) }.getOrNull() ?: break
+        }
+        val videos = pages.flatMap { it.mediaItems.orEmpty().filterNotNull() }.filter { !it.isShorts }.map { it.toVideo() }.distinctBy { it.key }
+        val groups = videos.groupBy(bucket)
+        val names = order.filter { !groups[it].isNullOrEmpty() }
+        return names.mapIndexed { index, name ->
+            val last = index == names.lastIndex
+            VideoRow("$keyPrefix-$name", name, groups.getValue(name), if (last) pages.last() else this, canLoadMore = last)
+        }
+    }
+
+    /** A subscription video's row: live, upcoming, then by age (published date, else "il y a 3 jours"). */
+    private fun subscriptionBucket(video: Video): String {
+        if (video.live) return "En direct"
+        if (video.upcoming) return "Bientôt"
+        val hours = ageHours(video) ?: return "Plus ancien"
+        return when {
+            hours < 24 -> "Aujourd’hui"
+            hours < 48 -> "Hier"
+            hours < 24 * 7 -> "Cette semaine"
+            hours < 24 * 31 -> "Ce mois-ci"
+            else -> "Plus ancien"
+        }
+    }
+
+    /** Hours since publication: the engine's date when it has one, else read from the card's text. */
+    private fun ageHours(video: Video): Long? {
+        // Milliseconds (seconds on some engine versions: read as such when too small to be ms).
+        val published = runCatching { video.raw.publishedDate }.getOrDefault(0L).let { if (it in 1 until 100_000_000_000L) it * 1000 else it }
+        if (published > 0) return ((System.currentTimeMillis() - published) / 3_600_000L).coerceAtLeast(0)
+        val text = video.raw.secondTitle?.toString()?.lowercase() ?: return null
+        val match = AGE.find(text) ?: return null
+        val n = match.groupValues[1].toLongOrNull() ?: return null
+        val unit = match.groupValues[2]
+        return when {
+            unit.startsWith("min") || unit.startsWith("sec") || unit.startsWith("s") && !unit.startsWith("sem") -> 0
+            unit.startsWith("h") -> n
+            unit.startsWith("j") || unit.startsWith("d") -> n * 24
+            unit.startsWith("sem") || unit.startsWith("w") -> n * 24 * 7
+            unit.startsWith("mo") -> n * 24 * 30
+            unit.startsWith("an") || unit.startsWith("y") -> n * 24 * 365
+            else -> null
+        }
+    }
+
+    private const val BUCKET_PAGES = 3
+    private const val RESUME_MAX_PERCENT = 94
+    private val SUBSCRIPTION_BUCKETS = listOf("En direct", "Bientôt", "Aujourd’hui", "Hier", "Cette semaine", "Ce mois-ci", "Plus ancien")
+    private val HISTORY_BUCKETS = listOf("À reprendre", "Déjà vues")
+    /** "il y a 3 jours", "3 days ago", "il y a 1 semaine"…: the number and its unit. */
+    private val AGE = Regex("""(\d+)\s*(secondes?|seconds?|minutes?|mins?|heures?|hours?|h\b|jours?|days?|semaines?|weeks?|mois|months?|ans?|années?|years?)""")
 
     private fun MediaGroup.toRow(key: String, fallbackTitle: String? = null): VideoRow? {
         val items = mediaItems.orEmpty().filterNotNull().filter { !it.isShorts }.map { it.toVideo() }.distinctBy { it.key }

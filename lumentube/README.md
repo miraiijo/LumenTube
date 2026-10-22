@@ -36,7 +36,12 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.14.1
+- **Abonnements triés** : plus une seule rangée sans fin, mais des rangées par date de publication : En direct, Bientôt, Aujourd'hui, Hier, Cette semaine, Ce mois-ci, Plus ancien (3 pages chargées d'un coup ; la dernière rangée continue de charger au défilement).
+- **Historique trié** : « À reprendre » (vidéos commencées) puis « Déjà vues ».
+
 ### 0.14.0
+- **Onglets** : OK sur un onglet (Gaming…) charge la section mais laisse le focus sur l'onglet : on peut encore changer d'avis (Actus…) ; Bas descend ensuite sur la première vidéo. Retour depuis les onglets revient sur Accueil, focus sur « Pour toi ».
 - **Recevoir même LumenTube fermé** (Réglages › Téléphone, désactivé par défaut) : un service garde le lien avec le téléphone en arrière-plan, redémarre avec la box, et ouvre LumenTube quand le téléphone envoie une vidéo. Coût : environ 50 à 80 Mo de mémoire en permanence.
   - Autorisation à donner une fois (Android TV n'a pas d'écran pour ça) : `adb shell appops set dev.miraiijo.lumentube SYSTEM_ALERT_WINDOW allow`. Sans elle, le téléphone voit la TV mais LumenTube ne s'ouvre pas tout seul.
 
