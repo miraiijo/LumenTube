@@ -99,13 +99,15 @@ fun TopHeader(
             }
         }
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            // The clock in the top right corner, at the end of the buttons' line.
+            Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
                 RoundButton(onClick = { onSection(Section.SEARCH) }) { Icon(LumenIcon.SEARCH, size = 16.dp) }
                 RoundButton(onClick = onAccount, filled = false) { AvatarPicture(accountAvatar, accountName, HEADER_BUTTON, 17.sp) }
                 RoundButton(onClick = onSettings) { Icon(LumenIcon.SETTINGS, size = 16.dp) }
+                HeaderClock(Modifier.padding(start = 7.dp))
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (minimized) {
+            if (minimized) {
+                Row {
                     // White by day with a light shadow, like the round buttons (translucent at night).
                     LumenButton(
                         "Lecture en cours",
@@ -115,7 +117,6 @@ fun TopHeader(
                         onClick = onRestorePlayer,
                     )
                 }
-                HeaderClock()
             }
         }
     }
@@ -170,7 +171,7 @@ private fun RoundButton(onClick: () -> Unit, filled: Boolean = true, content: @C
 }
 
 @Composable
-private fun HeaderClock() {
+private fun HeaderClock(modifier: Modifier = Modifier) {
     var time by remember { mutableStateOf("") }
     LaunchedEffect(Unit) {
         val format = java.text.SimpleDateFormat("HH:mm", java.util.Locale.FRANCE)
@@ -179,7 +180,7 @@ private fun HeaderClock() {
             delay(10_000)
         }
     }
-    Text(time, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Palette.TextSecondary)
+    Text(time, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Palette.TextSecondary, modifier = modifier)
 }
 
 /**

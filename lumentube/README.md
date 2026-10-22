@@ -36,6 +36,10 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.13.2
+- **Heure** : dans le coin en haut à droite, au bout de la ligne des boutons ronds (Rechercher, compte, Réglages). « Lecture en cours » reste seul en dessous.
+- **Lecteur** : plus d'heure ; le titre prend toute la largeur en haut.
+
 ### 0.13.1
 - **Petite fenêtre** : l'étiquette « OK : plein écran » est retirée (le focus est sur « Lecture en cours », c'est lui qui remet la vidéo en plein écran).
 
