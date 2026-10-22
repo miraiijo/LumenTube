@@ -36,6 +36,14 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.15.0
+- **Contrat v2 avec Lumen** :
+  - le feed (`/continue`, `/subscriptions`, `/search`) accepte `contract=2&account=<account_id>` : les données de ce compte, quel que soit le compte de LumenTube, sans le changer ; compte inconnu (ou id de plus de 128 caractères) : liste vide ; sans `account` : le compte de LumenTube, comme avant ;
+  - lancement depuis Lumen avec `dev.miraiijo.lumen.extra.ACCOUNT_ID` et `SKIP_PICKER` : la vidéo démarre tout de suite avec ce compte (historique et position crédités à ce compte), sans « Qui regarde ? » ; à l'arrêt de la vidéo, LumenTube revient à son propre compte et recharge ses pages ; compte inconnu : compte de LumenTube ;
+  - pour lire un autre compte, le moteur bascule silencieusement le temps de la requête puis revient : une bascule à la fois (les lectures sans bascule passent en parallèle), jamais tant que LumenTube est à l'écran ni dans les 10 s après l'avoir quitté (ses requêtes en cours finissent d'abord ; Lumen reçoit alors le cache du compte) ; ni l'app ni Lumen ne voient ces bascules, et un cache n'est écrit que si aucune bascule n'a eu lieu pendant la requête ;
+  - la dernière position d'une vidéo est enregistrée sur le compte qui la regardait avant de revenir au compte de LumenTube ; une bascule interrompue (app tuée) revient au bon compte au démarrage suivant ;
+  - changer de compte (Lumen ou « Qui regarde ? ») pendant une vidéo lancée avec un autre compte change le compte de LumenTube, la vidéo continue sur le sien.
+
 ### 0.14.4
 - **DualSense corrigée** (box sans pilote PlayStation : Android 10 / 11) : les boutons sont lus d'après leur code brut. Croix = OK, Rond = Retour, Triangle / Options = Menu, Carré = lecture / pause, L1 / R1 = −10 / +10 s, L2 / R2 = chapitre précédent / suivant, Create = Rechercher ; L3 / R3 ne font rien, PS reste au système. Chaque appui est noté dans `adb logcat -s LumenTube.Pad` (pour vérifier).
 

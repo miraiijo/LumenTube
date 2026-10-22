@@ -90,6 +90,25 @@ object FeedCache {
 
     private const val PREFS = "lumen_feed"
     private const val KEY_SALT = "account_id_key"
+    private const val KEY_PLAY_AS_HOME = "play_as_home"
+    private const val KEY_SWAP_HOME = "swap_home"
+
+    /** The account to come back to while the engine is switched for one of Lumen's reads. Opaque id only. */
+    var swapHome: String?
+        get() = context?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.getString(KEY_SWAP_HOME, null)
+        set(value) {
+            context?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.apply { if (value == null) remove(KEY_SWAP_HOME) else putString(KEY_SWAP_HOME, value) }?.commit()
+        }
+
+    /**
+     * LumenTube's own account while the engine plays as another one for Lumen (contract v2): kept
+     * on disk so a process killed meanwhile goes back to it at the next start. Opaque id only.
+     */
+    var playAsHome: String?
+        get() = context?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.getString(KEY_PLAY_AS_HOME, null)
+        set(value) {
+            context?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.apply { if (value == null) remove(KEY_PLAY_AS_HOME) else putString(KEY_PLAY_AS_HOME, value) }?.commit()
+        }
 
 
     /** Feed rows from engine items: videos only (no Shorts, no channels / playlists), at most [MAX_ROWS]. */

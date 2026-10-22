@@ -197,18 +197,16 @@ object YouTube {
     /** The account's subscriptions feed, also written to Lumen's feed cache. Blocking. */
     private fun subscriptionsForFeed(): MediaGroup? {
         // The account it's fetched for, taken before: a switch meanwhile never mixes accounts.
+        val epoch = switchEpoch
         val accountId = currentAccountId()
-        return service.contentService.subscriptions?.also {
-            if (accountId != null) FeedCache.store(FeedCache.SUBSCRIPTIONS, FeedCache.itemsFrom(it.mediaItems.orEmpty(), FeedCache.SUBSCRIPTIONS), accountId)
-        }
+        return service.contentService.subscriptions?.also { storeIfSameEpoch(FeedCache.SUBSCRIPTIONS, it.mediaItems.orEmpty(), accountId, epoch) }
     }
 
     /** The account's history, also written to Lumen's feed cache ("continue"). Blocking. */
     private fun historyForFeed(): MediaGroup? {
+        val epoch = switchEpoch
         val accountId = currentAccountId()
-        return service.contentService.history?.also {
-            if (accountId != null) FeedCache.store(FeedCache.CONTINUE, FeedCache.itemsFrom(it.mediaItems.orEmpty(), FeedCache.CONTINUE), accountId)
-        }
+        return service.contentService.history?.also { storeIfSameEpoch(FeedCache.CONTINUE, it.mediaItems.orEmpty(), accountId, epoch) }
     }
 
     /** An account as Lumen sees it: opaque id, display name, https avatar. */
@@ -230,22 +228,220 @@ object YouTube {
         if (!service.signInService.isSigned) null else service.signInService.selectedAccount?.let(::feedId)
     }.getOrNull()
 
-    fun feedAccounts(): List<FeedAccount> = runCatching { service.signInService.accounts }.getOrNull().orEmpty()
-        .filterNotNull()
-        .filter { !it.isEmpty }
-        .mapNotNull { account ->
-            val id = feedId(account) ?: return@mapNotNull null
-            FeedAccount(id, account.name?.takeIf { it.isNotBlank() } ?: "Compte", httpsAvatar(account.avatarImageUrl), account.isSelected)
+    fun feedAccounts(): List<FeedAccount> {
+        // "Selected" = LumenTube's own account, even while the engine plays as another one for Lumen.
+        val home = homeAccountId()
+        return runCatching { service.signInService.accounts }.getOrNull().orEmpty()
+            .filterNotNull()
+            .filter { !it.isEmpty }
+            .mapNotNull { account ->
+                val id = feedId(account) ?: return@mapNotNull null
+                FeedAccount(id, account.name?.takeIf { it.isNotBlank() } ?: "Compte", httpsAvatar(account.avatarImageUrl), id == home)
+            }
+    }
+
+    // ---- Lumen contract v2: an account's data without switching LumenTube's ------------------
+    //
+    // The engine has one active account for all its requests. To read (or play as) another one, it
+    // is switched for the time of the request, then put back. Rules:
+    //  - switches take the write lock; reads made for an account the engine is already on take the
+    //    read lock (several at once), so the engine never changes under a request made through here;
+    //  - the engine tells its listeners asynchronously (main thread): each real switch is counted
+    //    and its notification swallowed, so neither the app nor Lumen reloads for it;
+    //  - the account to come back to is written on disk before any switch: a process killed
+    //    meanwhile goes back to it at the next start ([restoreHome]);
+    //  - feed caches are only written when no switch happened during the fetch ([switchEpoch]).
+
+    private val accountLock = java.util.concurrent.locks.ReentrantReadWriteLock()
+
+    /** Engine notifications still to come for switches made here: swallowed by the listener. */
+    private val silentNotifications = java.util.concurrent.atomic.AtomicInteger()
+
+    /** Incremented on every switch made here: a fetch that saw it change doesn't write the cache. */
+    @Volatile
+    private var switchEpoch = 0
+
+    /** LumenTube's own account while the engine plays a Lumen launch as another one ([beginPlayAs]). */
+    @Volatile
+    private var playAsHome: String? = null
+
+    /** The account to come back to during one of Lumen's read switches (in memory). */
+    @Volatile
+    private var swapHomeMem: String? = null
+
+    /** LumenTube's own account (what its screens and Lumen's "selected" mean). Blocking. */
+    fun homeAccountId(): String? = playAsHome ?: swapHomeMem ?: currentAccountId()
+
+    /** A linked account's opaque id (unknown ids are never acted on). */
+    fun isKnownAccount(id: String): Boolean = id.length <= MAX_ACCOUNT_ID && engineAccount(id) != null
+
+    private fun engineAccount(id: String): com.liskovsoft.mediaserviceinterfaces.oauth.Account? =
+        runCatching { service.signInService.accounts }.getOrNull().orEmpty().filterNotNull().firstOrNull { !it.isEmpty && feedId(it) == id }
+
+    /** Switch made here (write lock held): its notification is swallowed, the epoch moves. */
+    private fun selectSilently(account: com.liskovsoft.mediaserviceinterfaces.oauth.Account) {
+        val now = runCatching { service.signInService.selectedAccount }.getOrNull()
+        // The engine doesn't notify a re-selection of the same account: nothing to swallow then.
+        if (now != null && feedId(now) == feedId(account)) return
+        silentNotifications.incrementAndGet()
+        switchEpoch++
+        service.signInService.selectAccount(account)
+        service.invalidateCache()
+        // Again after: a read that saw the first increment but still the old account can't store.
+        switchEpoch++
+    }
+
+    /** True (and consumed) when an engine notification comes from a switch made here. */
+    private fun swallowSilent(): Boolean {
+        while (true) {
+            val n = silentNotifications.get()
+            if (n <= 0) return false
+            if (silentNotifications.compareAndSet(n, n - 1)) return true
         }
+    }
+
+    /**
+     * Runs [block] with the engine on account [id]: as it is when it's already there (read lock),
+     * else switched for the time of [block] and put back (write lock). Without [allowSwitch]
+     * (LumenTube on screen: its own requests would go out as that account), only the first case.
+     * Null: unknown account, not run, or the engine busy for more than [waitS] s. Blocking.
+     */
+    fun <T> asAccount(id: String, allowSwitch: Boolean, waitS: Long = LOCK_WAIT_S, block: () -> T): T? {
+        val read = accountLock.readLock()
+        if (!read.tryLock(waitS, java.util.concurrent.TimeUnit.SECONDS)) return null
+        try {
+            if (currentAccountId() == id) return block()
+        } finally {
+            read.unlock()
+        }
+        if (!allowSwitch) return null
+        val write = accountLock.writeLock()
+        if (!write.tryLock(waitS, java.util.concurrent.TimeUnit.SECONDS)) return null
+        try {
+            val now = runCatching { service.signInService.selectedAccount }.getOrNull() ?: return null
+            if (feedId(now) == id) return block()
+            val target = engineAccount(id) ?: return null
+            // Written before the switch: a process killed meanwhile comes back to it.
+            val nowId = feedId(now)
+            if (FeedCache.swapHome == null) FeedCache.swapHome = nowId
+            swapHomeMem = playAsHome ?: nowId
+            selectSilently(target)
+            try {
+                return block()
+            } finally {
+                runCatching { selectSilently(now) }
+                swapHomeMem = null
+                FeedCache.swapHome = null
+            }
+        } finally {
+            write.unlock()
+        }
+    }
+
+    /**
+     * A video launched from Lumen with an account: the engine plays as it (history and position
+     * go to it) until [endPlayAs]; LumenTube's own account stays its home. False: same account as
+     * LumenTube's, unknown, or signed out — then any play-as in progress ends too (the video plays
+     * with LumenTube's account). Blocking.
+     */
+    fun beginPlayAs(id: String?): Boolean {
+        val write = accountLock.writeLock()
+        // Waits as long as needed (on IO): giving up would leave the view model unsure of the account.
+        write.lock()
+        try {
+            restoreHomeLocked()
+            val home = playAsHome ?: currentAccountId()
+            val target = id?.let(::engineAccount)
+            if (home == null || id == null || id == home || target == null) {
+                endPlayAsLocked()
+                return false
+            }
+            if (playAsHome == null) {
+                playAsHome = home
+                FeedCache.playAsHome = home
+            }
+            selectSilently(target)
+            // Not told by the (swallowed) notification: the subscribed channels are the new account's.
+            subscribedChannels = null
+            return true
+        } finally {
+            write.unlock()
+        }
+    }
+
+    /** Back to LumenTube's own account after a Lumen launch. Blocking. */
+    fun endPlayAs() {
+        val write = accountLock.writeLock()
+        write.lock()
+        try {
+            endPlayAsLocked()
+        } finally {
+            write.unlock()
+        }
+    }
+
+    private fun endPlayAsLocked() {
+        val home = playAsHome ?: FeedCache.playAsHome ?: return
+        engineAccount(home)?.let { runCatching { selectSilently(it) } }
+        playAsHome = null
+        FeedCache.playAsHome = null
+        subscribedChannels = null
+    }
+
+    /** True while a Lumen launch plays as another account than LumenTube's. */
+    val playingAsOther: Boolean get() = playAsHome != null
+
+    /** A switch cut short (process killed): back to LumenTube's account at the next start. Blocking. */
+    fun restoreHome() {
+        // Nothing to restore (the usual case): no lock taken, every query of the provider goes on.
+        if (playAsHome != null || (FeedCache.playAsHome == null && FeedCache.swapHome == null)) return
+        val write = accountLock.writeLock()
+        if (!write.tryLock(LOCK_WAIT_S, java.util.concurrent.TimeUnit.SECONDS)) return
+        try {
+            restoreHomeLocked()
+        } finally {
+            write.unlock()
+        }
+    }
+
+    private fun restoreHomeLocked() {
+        if (playAsHome != null) return
+        // The play-as home first: a read switch made during a play-as had the played account as "now".
+        val home = FeedCache.playAsHome ?: FeedCache.swapHome ?: return
+        engineAccount(home)?.let { runCatching { selectSilently(it) } }
+        FeedCache.swapHome = null
+        FeedCache.playAsHome = null
+    }
+
+    /** Writes made from a fetch for [accountId] started at [epoch]: only if no switch happened since. */
+    private fun storeIfSameEpoch(list: String, items: List<MediaItem?>, accountId: String?, epoch: Int) {
+        if (accountId != null && epoch == switchEpoch) FeedCache.store(list, FeedCache.itemsFrom(items, list), accountId)
+    }
+
+    private const val LOCK_WAIT_S = 8L
+    private const val MAX_ACCOUNT_ID = 128
 
     /** Lumen's account switch: true when [accountId] is a linked account. */
     fun selectFeedAccount(accountId: String): Boolean {
-        val account = runCatching { service.signInService.accounts }.getOrNull().orEmpty()
-            .filterNotNull().firstOrNull { feedId(it) == accountId } ?: return false
-        return runCatching {
-            service.signInService.selectAccount(account)
-            service.invalidateCache()
-        }.isSuccess
+        val account = engineAccount(accountId) ?: return false
+        val write = accountLock.writeLock()
+        if (!write.tryLock(LOCK_WAIT_S, java.util.concurrent.TimeUnit.SECONDS)) return false
+        try {
+            // A Lumen launch is playing as another account: LumenTube's own account (its home)
+            // changes, the engine stays on the one playing until the video stops.
+            if (playAsHome != null) {
+                playAsHome = accountId
+                FeedCache.playAsHome = accountId
+                FeedCache.notifyReaders()
+                return true
+            }
+            return runCatching {
+                service.signInService.selectAccount(account)
+                service.invalidateCache()
+            }.isSuccess
+        } finally {
+            write.unlock()
+        }
     }
 
     private fun httpsAvatar(url: String?): String? = when {
@@ -268,6 +464,8 @@ object YouTube {
     fun watchAccountChanges() {
         if (accountListener != null) return
         val listener = com.liskovsoft.mediaserviceinterfaces.SignInService.OnAccountChange {
+            // A switch made for Lumen (and undone right after): neither the app nor Lumen reloads.
+            if (swallowSilent()) return@OnAccountChange
             subscribedChannels = null
             FeedCache.notifyReaders()
             appAccountListeners.forEach { it() }
@@ -537,28 +735,58 @@ object YouTube {
 
     /** Keeps YouTube's history (and "resume where you stopped") up to date. */
     suspend fun savePosition(videoId: String, seconds: Float) = withContext(Dispatchers.IO) {
-        runCatching { service.mediaItemService.updateHistoryPosition(videoId, seconds) }
+        historyWrites.incrementAndGet()
+        val read = accountLock.readLock()
+        try {
+            // Not during one of Lumen's read switches (it would go to that account): waits for it.
+            if (read.tryLock(LOCK_WAIT_S, TimeUnit.SECONDS)) {
+                try {
+                    runCatching { service.mediaItemService.updateHistoryPosition(videoId, seconds) }
+                } finally {
+                    read.unlock()
+                }
+            }
+        } finally {
+            historyWrites.decrementAndGet()
+        }
     }
+
+    /** History writes in flight: a play-as ends only once they're done (they go to its account). */
+    val historyWrites = java.util.concurrent.atomic.AtomicInteger()
 
     val signedIn: Boolean get() = runCatching { service.signInService.isSigned }.getOrDefault(false)
 
     /** Accounts linked on this box (sign in again to add one). */
     suspend fun accounts(): List<Account> = withContext(Dispatchers.IO) {
+        // "Selected" = LumenTube's own account, even while a Lumen launch plays as another one.
+        val home = homeAccountId()
         runCatching { service.signInService.accounts }.getOrNull().orEmpty().filterNotNull()
             .filter { !it.isEmpty }
-            .map { Account(it.name ?: it.email ?: "Compte", it.avatarImageUrl, it.isSelected, it) }
+            .map { Account(it.name ?: it.email ?: "Compte", it.avatarImageUrl, feedId(it) == home, it) }
     }
 
-    suspend fun selectAccount(account: Account) = withContext(Dispatchers.IO) {
-        runCatching {
-            service.signInService.selectAccount(account.raw)
-            service.invalidateCache()
+    suspend fun selectAccount(account: Account) {
+        withContext(Dispatchers.IO) {
+            // Through the same lock as Lumen's switches (and as its home while a Lumen launch plays).
+            val id = feedId(account.raw)
+            if (id != null) {
+                selectFeedAccount(id)
+                return@withContext
+            }
+            runCatching {
+                service.signInService.selectAccount(account.raw)
+                service.invalidateCache()
+            }
         }
     }
 
-    val accountName: String? get() = runCatching { service.signInService.selectedAccount?.name }.getOrNull()
+    /** LumenTube's own account (not the one a Lumen launch plays as). */
+    private fun homeAccount(): com.liskovsoft.mediaserviceinterfaces.oauth.Account? =
+        (playAsHome ?: swapHomeMem)?.let(::engineAccount) ?: runCatching { service.signInService.selectedAccount }.getOrNull()
 
-    val accountAvatar: String? get() = runCatching { service.signInService.selectedAccount?.avatarImageUrl }.getOrNull()
+    val accountName: String? get() = runCatching { homeAccount()?.name }.getOrNull()
+
+    val accountAvatar: String? get() = runCatching { homeAccount()?.avatarImageUrl }.getOrNull()
 
     /**
      * Sign-in with a code typed on youtube.com/activate (from a phone or computer).
@@ -574,6 +802,18 @@ object YouTube {
             })
 
     fun signOut() {
+        val write = accountLock.writeLock()
+        write.lock()
+        try {
+            signOutLocked()
+        } finally {
+            write.unlock()
+        }
+    }
+
+    private fun signOutLocked() {
+        // A Lumen launch playing as another account: back to LumenTube's first, it's the one signed out.
+        endPlayAsLocked()
         runCatching {
             val signIn = service.signInService
             signIn.selectedAccount?.let { account ->

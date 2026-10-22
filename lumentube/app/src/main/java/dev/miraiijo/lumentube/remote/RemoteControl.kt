@@ -38,6 +38,23 @@ object RemoteControl {
     var uiAttached = false
     @Volatile
     var uiForeground = false
+        set(value) {
+            field = value
+            if (!value) backgroundSinceMs = android.os.SystemClock.elapsedRealtime()
+        }
+
+    /** When LumenTube last left the screen (elapsedRealtime; 0: never shown in this process). */
+    @Volatile
+    private var backgroundSinceMs = 0L
+
+    /**
+     * Lumen may switch the engine's account for one of its reads: LumenTube not on screen, and
+     * left for at least [SWITCH_GRACE_MS] (its requests still running when it left have finished).
+     */
+    val accountSwitchAllowed: Boolean
+        get() = !uiForeground && android.os.SystemClock.elapsedRealtime() - backgroundSinceMs >= SWITCH_GRACE_MS
+
+    private const val SWITCH_GRACE_MS = 10_000L
 
     private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 32)
     val events: SharedFlow<Event> = _events

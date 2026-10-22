@@ -10,6 +10,7 @@ import android.os.Bundle
 import com.liskovsoft.sharedutils.prefs.GlobalPreferences
 import dev.miraiijo.lumentube.BuildConfig
 import dev.miraiijo.lumentube.data.YouTube
+import dev.miraiijo.lumentube.remote.RemoteControl
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -20,6 +21,9 @@ import java.util.concurrent.TimeUnit
  *  - query /accounts: the accounts linked in LumenTube (opaque id, name, avatar, selected);
  *  - query /search?q=…: the first 20 videos YouTube finds (same columns as /continue);
  *  - call "select_account" (arg = account_id): switches account, its feed is refreshed.
+ * Contract v2 (contract=2&account=<account_id> on /continue, /subscriptions and /search): that
+ * account's data, whatever account LumenTube shows, without switching it; an unknown account (or
+ * an id longer than 128 characters) gets an empty list. Without account: LumenTube's account.
  * Only answers Lumen: the calling package must be dev.miraiijo.lumen, signed with Lumen's
  * certificate (SHA-256 in BuildConfig). Not a signature permission: the two apps have their own keys.
  * Each account has its own cache (FeedCache); older than 30 min and signed in: refreshed first, 8 s
@@ -51,10 +55,17 @@ class FeedProvider : ContentProvider() {
         val code = matcher.match(uri)
         if (code == UriMatcher.NO_MATCH) throw IllegalArgumentException("Unknown feed: $uri")
         ready(ctx)
+        // Contract v2: an account given (contract=2 is accepted but changes nothing else).
+        val asked = uri.getQueryParameter(PARAM_ACCOUNT)
+        val account = when {
+            asked == null -> YouTube.homeAccountId()
+            asked.length > MAX_ACCOUNT_ID || !YouTube.isKnownAccount(asked) -> null
+            else -> asked
+        }
         val cursor = when (code) {
             CODE_ACCOUNTS -> accounts()
-            CODE_SEARCH -> search(uri.getQueryParameter("q"))
-            else -> videos(if (code == CODE_CONTINUE) FeedCache.CONTINUE else FeedCache.SUBSCRIPTIONS)
+            CODE_SEARCH -> search(uri.getQueryParameter("q"), account, asked != null)
+            else -> videos(if (code == CODE_CONTINUE) FeedCache.CONTINUE else FeedCache.SUBSCRIPTIONS, account)
         }
         cursor.setNotificationUri(ctx.contentResolver, uri)
         return cursor
@@ -69,12 +80,15 @@ class FeedProvider : ContentProvider() {
         return cursor
     }
 
-    private fun videos(list: String): Cursor {
+    /** [accountId]: whose list (null: signed out, or an unknown account asked for: empty). */
+    private fun videos(list: String, accountId: String?): Cursor {
         val cursor = MatrixCursor(FeedCache.COLUMNS)
-        val accountId = YouTube.currentAccountId() ?: return cursor // signed out: empty
+        if (accountId == null) return cursor
         var (updatedMs, items) = FeedCache.load(list, accountId)
         if (System.currentTimeMillis() - updatedMs > MAX_AGE_MS) {
-            val refresh = worker.submit<Boolean> { YouTube.refreshFeed(list) }
+            // Fetched as that account (the engine switches back right after); LumenTube on screen:
+            // only if it's the engine's account, else the cache is served as it is.
+            val refresh = worker.submit<Boolean> { YouTube.asAccount(accountId, allowSwitch = RemoteControl.accountSwitchAllowed) { YouTube.refreshFeed(list) } ?: false }
             val refreshed = runCatching { refresh.get(REFRESH_TIMEOUT_S, TimeUnit.SECONDS) }.getOrDefault(false)
             // Timed out: the refresh goes on in the background and notifies when it's written.
             if (refreshed) items = FeedCache.load(list, accountId).second
@@ -87,12 +101,24 @@ class FeedProvider : ContentProvider() {
      * /search?q=…: YouTube's results for q (cut at 200 characters), videos only (no channel,
      * playlist or Short), 20 at most. Empty q, error, or no answer within 8 s: empty cursor.
      */
-    private fun search(q: String?): Cursor {
+    private fun search(q: String?, accountId: String?, accountAsked: Boolean): Cursor {
         val cursor = MatrixCursor(FeedCache.COLUMNS)
         // Longer than 200 characters: cut at 200 (nothing more is sent to YouTube).
         val text = q?.trim().orEmpty().take(MAX_QUERY).trim()
         if (text.isEmpty()) return cursor
-        val request = searches.submit<List<FeedCache.Item>> { FeedCache.itemsFrom(YouTube.searchItems(text), SEARCH) }
+        // An unknown account asked for: empty, never another account's results.
+        if (accountAsked && accountId == null) return cursor
+        val request = searches.submit<List<FeedCache.Item>> {
+            val items = if (accountId == null) {
+                YouTube.searchItems(text) // signed out
+            } else {
+                // As that account. LumenTube on screen on another account (no switch then): an account
+                // asked for gets nothing rather than another account's results; none asked: its own.
+                YouTube.asAccount(accountId, allowSwitch = RemoteControl.accountSwitchAllowed) { YouTube.searchItems(text) }
+                    ?: if (accountAsked || YouTube.playingAsOther) emptyList() else YouTube.searchItems(text)
+            }
+            FeedCache.itemsFrom(items, SEARCH)
+        }
         val items = runCatching { request.get(REFRESH_TIMEOUT_S, TimeUnit.SECONDS) }
             .onFailure { request.cancel(true) }
             .getOrDefault(emptyList())
@@ -115,8 +141,11 @@ class FeedProvider : ContentProvider() {
         if (selected) {
             FeedCache.markStale(arg!!)
             worker.execute {
-                YouTube.refreshFeed(FeedCache.CONTINUE)
-                YouTube.refreshFeed(FeedCache.SUBSCRIPTIONS)
+                // As that account (during a Lumen launch played as another one, the engine isn't on it).
+                YouTube.asAccount(arg, allowSwitch = RemoteControl.accountSwitchAllowed) {
+                    YouTube.refreshFeed(FeedCache.CONTINUE)
+                    YouTube.refreshFeed(FeedCache.SUBSCRIPTIONS)
+                }
             }
         }
         return Bundle().apply { putBoolean("ok", selected) }
@@ -127,6 +156,8 @@ class FeedProvider : ContentProvider() {
         GlobalPreferences.instance(ctx.applicationContext)
         FeedCache.attach(ctx)
         YouTube.watchAccountChanges()
+        // A Lumen launch cut short (process killed while playing as another account): back home.
+        YouTube.restoreHome()
     }
 
     /**
@@ -175,5 +206,7 @@ class FeedProvider : ContentProvider() {
         const val REFRESH_TIMEOUT_S = 8L
         const val LUMEN_PACKAGE = "dev.miraiijo.lumen"
         const val METHOD_SELECT_ACCOUNT = "select_account"
+        const val PARAM_ACCOUNT = "account"
+        const val MAX_ACCOUNT_ID = 128
     }
 }

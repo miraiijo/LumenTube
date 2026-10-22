@@ -80,7 +80,12 @@ class MainActivity : ComponentActivity() {
         val uri = intent?.data ?: return
         val id = uri.getQueryParameter("v") ?: uri.takeIf { it.host == "youtu.be" }?.lastPathSegment
         // Only a real video id (11 characters): the engine puts it as is in its signed-in requests.
-        if (id != null && VIDEO_ID.matches(id)) vm.playLink(id, startSeconds(uri.getQueryParameter("t")))
+        if (id == null || !VIDEO_ID.matches(id)) return
+        // Lumen's contract v2: the account to play as (this playback only) and no "Qui regarde ?".
+        val account = intent.getStringExtra(EXTRA_ACCOUNT_ID)?.takeIf { it.length in 1..MAX_ACCOUNT_ID }
+        // An account asked for (even invalid: then the selected one plays) never shows the picker.
+        val skipPicker = intent.getBooleanExtra(EXTRA_SKIP_PICKER, false) || intent.hasExtra(EXTRA_ACCOUNT_ID)
+        vm.playLink(id, startSeconds(uri.getQueryParameter("t")), account, skipPicker)
     }
 
     /** "90", "90s", "1m30s" or "1h2m3s" → seconds (0 when absent or unreadable). */
@@ -113,6 +118,9 @@ class MainActivity : ComponentActivity() {
             KeyEvent.KEYCODE_BUTTON_R2 to KeyEvent.KEYCODE_MEDIA_NEXT,
         )
         const val MAX_START_S = 24 * 3600L
+        const val EXTRA_ACCOUNT_ID = "dev.miraiijo.lumen.extra.ACCOUNT_ID"
+        const val EXTRA_SKIP_PICKER = "dev.miraiijo.lumen.extra.SKIP_PICKER"
+        const val MAX_ACCOUNT_ID = 128
         const val SONY_VENDOR = 0x054c
         /** Sony pads read right (hid-playstation driver, Android 12+ key layouts) from this version. */
         const val SONY_DRIVER_SDK = 31

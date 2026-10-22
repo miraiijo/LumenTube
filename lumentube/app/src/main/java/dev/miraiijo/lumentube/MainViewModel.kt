@@ -13,6 +13,7 @@ import dev.miraiijo.lumentube.player.PlayerPrefs
 import dev.miraiijo.lumentube.remote.RemoteControl
 import dev.miraiijo.lumentube.ui.UI_SCALE_DEFAULT
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.withLock
 import io.reactivex.disposables.Disposable
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -137,6 +138,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(UiState(settings = prefs.settings()))
     val state: StateFlow<UiState> = _state.asStateFlow()
     private val loads = mutableMapOf<Section, Job>()
+
+    /** Lumen asked to skip "Qui regarde ?" (contract v2): the start doesn't show it. */
+    private var skipPicker = false
+
+    /** The video plays as another account than LumenTube's (a Lumen launch): undone when it stops. */
+    private var playingAs = false
     private var signIn: Disposable? = null
     /** Rows whose next page is being fetched (one request at a time per row). */
     private val loadingMore = mutableSetOf<String>()
@@ -160,9 +167,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch { RemoteControl.events.collect(::onRemote) }
         viewModelScope.launch {
+            // A Lumen launch cut short (process killed while playing as another account): back home.
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { YouTube.restoreHome() } }
             val accounts = YouTube.accounts()
-            // Several accounts: "Qui regarde ?" first, Accueil loads for the one picked.
-            if (accounts.size >= 2) {
+            // Several accounts: "Qui regarde ?" first, Accueil loads for the one picked (not when
+            // Lumen launched a video and asked to skip it).
+            if (accounts.size >= 2 && !skipPicker) {
                 _state.update { it.copy(accounts = accounts, choosingAccount = true) }
             } else {
                 _state.update { it.copy(accounts = accounts) }
@@ -498,6 +508,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // The video already playing: only its position (the player handles the Seek).
                 if (current == event.videoId) {
                     if (s.minimized) restore()
+                } else if (playingAs) {
+                    // A Lumen launch was playing as another account: the phone's video plays with LumenTube's.
+                    playLink(event.videoId, (event.startMs / 1000).toInt())
                 } else {
                     closeDialogs()
                     _state.update { it.copy(playing = null, playingId = event.videoId, playingStart = (event.startMs / 1000).toInt(), minimized = false, cardMenu = null) }
@@ -519,9 +532,75 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeOpened() = _state.update { it.copy(opened = null) }
 
-    fun playLink(videoId: String, startSeconds: Int = 0) {
+    /**
+     * [accountId] (Lumen, contract v2): play as that account, for this playback only (history and
+     * position go to it); LumenTube's own account comes back when the video stops. Unknown or the
+     * same: the selected account. [skipPickerAsked]: no "Qui regarde ?".
+     */
+    fun playLink(videoId: String, startSeconds: Int = 0, accountId: String? = null, skipPickerAsked: Boolean = false) {
+        // A launch for an account plays at once: "Qui regarde ?" never covers it.
+        if (skipPickerAsked || accountId != null) {
+            skipPicker = true
+            if (_state.value.choosingAccount) skipAccountChoice()
+        }
         closeDialogs()
-        _state.update { it.copy(playing = null, playingId = videoId, playingStart = startSeconds, minimized = false) }
+        // No account and nothing played as another one: as before, at once.
+        if (accountId == null && !playingAs) {
+            _state.update { it.copy(playing = null, playingId = videoId, playingStart = startSeconds, minimized = false) }
+            return
+        }
+        viewModelScope.launch {
+            // The video playing goes first: its last position is saved to its own account.
+            val hadVideo = _state.value.let { it.playing != null || it.playingId != null }
+            if (hadVideo) _state.update { it.copy(playing = null, playingId = null) }
+            // One account change at a time, in order (a stop then a new launch never cross).
+            playAsMutex.withLock {
+                val was = playingAs
+                if (was || hadVideo) awaitHistoryWrites()
+                // An account given: play as it; none (or unknown, or LumenTube's own): back to LumenTube's.
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { YouTube.beginPlayAs(accountId) } }
+                playingAs = YouTube.playingAsOther
+                if (was && !playingAs) reloadHome()
+            }
+            _state.update { it.copy(playing = null, playingId = videoId, playingStart = startSeconds, minimized = false) }
+        }
+    }
+
+    /** One account change at a time (begin / end of a play-as). */
+    private val playAsMutex = kotlinx.coroutines.sync.Mutex()
+
+    /** The last position save goes to the account played: waits for it (dispose, then the write). */
+    private suspend fun awaitHistoryWrites() {
+        delay(HISTORY_SETTLE_MS)
+        var waited = 0L
+        while (YouTube.historyWrites.get() > 0 && waited < HISTORY_WAIT_MS) {
+            delay(100)
+            waited += 100
+        }
+    }
+
+    /** After a Lumen launch played as another account: LumenTube's own account and pages again. */
+    private fun endPlayingAs() {
+        if (!playingAs) return
+        viewModelScope.launch {
+            playAsMutex.withLock {
+                if (!playingAs) return@withLock
+                awaitHistoryWrites()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { YouTube.endPlayAs() } }
+                playingAs = false
+                reloadHome()
+                // "Reprendre" of LumenTube's account (not the one just played as).
+                loadResume()
+            }
+        }
+    }
+
+    /** Pages loaded meanwhile may be the other account's: reloaded for LumenTube's own. */
+    private fun reloadHome() {
+        loads.values.forEach { it.cancel() }
+        _state.update { it.copy(pages = emptyMap(), resume = null, search = null, opened = null) }
+        refreshAccount()
+        show(_state.value.section.takeIf { it != Section.SEARCH } ?: Section.HOME)
     }
 
     /**
@@ -543,6 +622,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopPlaying() {
         _state.update { it.copy(playing = null, playingId = null, minimized = false) }
+        // A Lumen launch played as another account: its end reloads LumenTube's (Reprendre included).
+        if (playingAs) {
+            endPlayingAs()
+            return
+        }
         // "Reprendre" follows what was just watched (YouTube needs a moment to record the position).
         if (_state.value.signedIn) {
             viewModelScope.launch {
@@ -607,6 +691,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun chooseAccount(account: Account) {
         viewModelScope.launch {
             if (!account.selected) YouTube.selectAccount(account)
+            // Playing as another account for Lumen: the new home loads when that video stops.
+            if (playingAs) {
+                _state.update { it.copy(choosingAccount = false, accountsOpen = false, settingsOpen = false) }
+                refreshAccount()
+                return@launch
+            }
             loads.values.forEach { it.cancel() }
             _state.update { it.copy(choosingAccount = false, accountsOpen = false, settingsOpen = false, pages = emptyMap(), resume = null, search = null, section = Section.HOME, opened = null) }
             refreshAccount()
@@ -655,10 +745,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val RESUME_REFRESH_DELAY_MS = 1_500L
         const val SUGGEST_DELAY_MS = 300L
         const val NOTICE_MS = 3_000L
+        /** After a play-as video stops: the player's last position save starts (dispose)… */
+        const val HISTORY_SETTLE_MS = 400L
+        /** …and is waited for, at most this long, before LumenTube's account comes back. */
+        const val HISTORY_WAIT_MS = 5_000L
     }
 
     override fun onCleared() {
         RemoteControl.uiAttached = false
+        // Leaving while a Lumen launch played as another account: LumenTube's own one again.
+        if (playingAs) {
+            AppScope.launch {
+                delay(HISTORY_SETTLE_MS)
+                var waited = 0L
+                while (YouTube.historyWrites.get() > 0 && waited < HISTORY_WAIT_MS) {
+                    delay(100)
+                    waited += 100
+                }
+                runCatching { YouTube.endPlayAs() }
+            }
+        }
         accountListener?.let(YouTube::removeAccountListener)
         signIn?.dispose()
     }
