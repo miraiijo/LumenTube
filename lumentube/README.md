@@ -36,6 +36,14 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.12.6
+- **DualSense sans pilote Sony** (Freebox Android 10) : ses boutons arrivaient en BUTTON_1…16 génériques et ne faisaient rien. Ils sont traduits (manettes Sony uniquement, constructeur 054c) : Croix = OK, Rond = Retour, Triangle / Options = Menu, Carré = lecture / pause, L1 / R1 = −10 / +10 s, L2 / R2 = chapitre précédent / suivant, Create = Rechercher.
+- **Micro de la télécommande** : ouvre Rechercher et lance la dictée directement (le clavier s'il n'y a pas de reconnaissance vocale sur la box).
+- **Clavier de la recherche** : demandé une deuxième fois après la mise au point du champ, aussi par Android, car la première demande pouvait être ignorée par la box.
+
+### 0.12.5
+- **Rangées stables** : défiler une rangée de côté ne fait plus monter ou descendre les autres. Chaque carte réserve toujours 2 lignes de titre et la ligne de la chaîne, donc la rangée garde la même hauteur quelles que soient les cartes à l'écran.
+
 ### 0.12.3 – 0.12.4
 - **Onglets de l'en-tête** : « Pour toi » prenait toute la largeur et cachait les autres sections (Abonnements, Historique…), elles sont de nouveau visibles.
 - **Anneau de focus** : il entoure de nouveau les cartes, les avatars de « Qui regarde ? » et les boutons ronds (il était dessiné à l'intérieur de l'image).

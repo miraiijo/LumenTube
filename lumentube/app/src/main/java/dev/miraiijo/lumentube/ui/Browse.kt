@@ -284,14 +284,15 @@ fun VideoCard(
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
             color = if (isFocused) Palette.TextPrimary else Palette.TextPrimary.copy(alpha = 0.88f),
+            // Always 2 lines and the channel line, even empty: every card of a row has the same height,
+            // so a row never grows or shrinks as it scrolls sideways (the rows around stay put).
+            minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             lineHeight = 18.sp,
             modifier = Modifier.padding(top = 10.dp),
         )
-        if (video.channel.isNotBlank()) {
-            Text(video.channel, fontSize = 13.sp, color = Palette.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
-        }
+        Text(video.channel, fontSize = 13.sp, lineHeight = 16.sp, color = Palette.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
     }
 }
 
@@ -385,6 +386,7 @@ private fun ChannelCard(video: Video, modifier: Modifier, onFocus: () -> Unit, o
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
             color = if (isFocused) Palette.TextPrimary else Palette.TextPrimary.copy(alpha = 0.85f),
+            minLines = 2,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,

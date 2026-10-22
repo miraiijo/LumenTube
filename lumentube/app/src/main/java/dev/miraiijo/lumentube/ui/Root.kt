@@ -49,6 +49,8 @@ fun Root(vm: MainViewModel) {
     // Incremented when a page should take the focus (section opened from the menu, channel opened).
     // Starts at 1: at launch, Accueil takes the focus as soon as its rows arrive.
     var pageFocusTick by remember { mutableIntStateOf(1) }
+    /** The remote's mic / search key: Rechercher opens and starts the dictation (once). */
+    var dictate by remember { androidx.compose.runtime.mutableStateOf(false) }
     // Incremented when the player closes: the focus goes back to the card that was played.
     var returnFocusTick by remember { mutableIntStateOf(0) }
 
@@ -114,8 +116,13 @@ fun Root(vm: MainViewModel) {
                 val native = event.nativeKeyEvent
                 if (native.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
                 // Search key (gamepad Select): straight to Rechercher, from any page (not over the video).
-                if (native.keyCode == android.view.KeyEvent.KEYCODE_SEARCH && !fullScreenPlayer) {
-                    if (native.repeatCount == 0) showSection(Search)
+                // The remote's mic (SEARCH or VOICE_ASSIST): Rechercher, and the dictation right away.
+                val voice = native.keyCode == android.view.KeyEvent.KEYCODE_VOICE_ASSIST
+                if ((native.keyCode == android.view.KeyEvent.KEYCODE_SEARCH || voice) && !fullScreenPlayer) {
+                    if (native.repeatCount == 0) {
+                        if (state.section != Search || state.opened != null) showSection(Search)
+                        if (voice || !native.isFromSource(android.view.InputDevice.SOURCE_GAMEPAD)) dictate = true
+                    }
                     return@onPreviewKeyEvent true
                 }
                 if (!state.minimized) return@onPreviewKeyEvent false
@@ -177,6 +184,8 @@ fun Root(vm: MainViewModel) {
                         options = state.searchOptions,
                         onOptions = vm::setSearchOptions,
                         onLongPress = vm::openCardMenu,
+                        dictate = dictate,
+                        onDictated = { dictate = false },
                     )
                 } else {
                     BrowsePage(

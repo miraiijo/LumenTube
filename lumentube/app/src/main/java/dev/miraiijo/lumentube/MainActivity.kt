@@ -49,8 +49,11 @@ class MainActivity : ComponentActivity() {
      *  L1 / R1 = −10 s / +10 s · L2 / R2 = previous / next chapter (±60 s without chapters).
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        val mapped = GAMEPAD_KEYS[event.keyCode]
-        if (mapped == null || !event.isFromSource(InputDevice.SOURCE_GAMEPAD)) return super.dispatchKeyEvent(event)
+        // A Sony pad (DualSense, DualShock 4) on a box without the PlayStation driver (Android 10's
+        // Generic.kl): its buttons come as BUTTON_1…16; read them as the gamepad buttons they are.
+        val sony = if (event.device?.vendorId == SONY_VENDOR) SONY_BUTTONS[event.keyCode] else null
+        val mapped = GAMEPAD_KEYS[sony ?: event.keyCode]
+        if (mapped == null || (sony == null && !event.isFromSource(InputDevice.SOURCE_GAMEPAD))) return super.dispatchKeyEvent(event)
         val copy = KeyEvent(
             event.downTime, event.eventTime, event.action, mapped, event.repeatCount, event.metaState,
             event.deviceId, event.scanCode, event.flags, event.source,
@@ -104,5 +107,19 @@ class MainActivity : ComponentActivity() {
             KeyEvent.KEYCODE_BUTTON_R2 to KeyEvent.KEYCODE_MEDIA_NEXT,
         )
         const val MAX_START_S = 24 * 3600L
+        const val SONY_VENDOR = 0x054c
+        /** Generic HID order of Sony pads: Square, Cross, Circle, Triangle, L1, R1, L2, R2, Create, Options (PS left to the system). */
+        val SONY_BUTTONS = mapOf(
+            KeyEvent.KEYCODE_BUTTON_1 to KeyEvent.KEYCODE_BUTTON_X,
+            KeyEvent.KEYCODE_BUTTON_2 to KeyEvent.KEYCODE_BUTTON_A,
+            KeyEvent.KEYCODE_BUTTON_3 to KeyEvent.KEYCODE_BUTTON_B,
+            KeyEvent.KEYCODE_BUTTON_4 to KeyEvent.KEYCODE_BUTTON_Y,
+            KeyEvent.KEYCODE_BUTTON_5 to KeyEvent.KEYCODE_BUTTON_L1,
+            KeyEvent.KEYCODE_BUTTON_6 to KeyEvent.KEYCODE_BUTTON_R1,
+            KeyEvent.KEYCODE_BUTTON_7 to KeyEvent.KEYCODE_BUTTON_L2,
+            KeyEvent.KEYCODE_BUTTON_8 to KeyEvent.KEYCODE_BUTTON_R2,
+            KeyEvent.KEYCODE_BUTTON_9 to KeyEvent.KEYCODE_BUTTON_SELECT,
+            KeyEvent.KEYCODE_BUTTON_10 to KeyEvent.KEYCODE_BUTTON_START,
+        )
     }
 }

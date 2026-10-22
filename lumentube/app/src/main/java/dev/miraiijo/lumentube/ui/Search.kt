@@ -4,6 +4,7 @@ package dev.miraiijo.lumentube.ui
 
 import android.content.Intent
 import android.speech.RecognizerIntent
+import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +37,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,6 +48,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import dev.miraiijo.lumentube.Page
+import kotlinx.coroutines.delay
 import dev.miraiijo.lumentube.data.Video
 import dev.miraiijo.lumentube.data.VideoRow
 import java.util.Locale
@@ -72,6 +75,9 @@ fun SearchPage(
     options: Int = 0,
     onOptions: (Int) -> Unit = {},
     onLongPress: (Video) -> Unit = {},
+    /** The remote's mic key: start the dictation (or the keyboard without one), then [onDictated]. */
+    dictate: Boolean = false,
+    onDictated: () -> Unit = {},
 ) {
     val bar = remember { FocusRequester() }
     /** The chips under the bar (suggestions or filters); the first one is where Down from the bar goes. */
@@ -102,7 +108,7 @@ fun SearchPage(
         bar.tryRequestFocus()
     }
     Column(Modifier.fillMaxSize()) {
-        SearchBar(query, bar, belowBar, ::search, onTyping, Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 32.dp), chipFocused = { chipsHaveFocus })
+        SearchBar(query, bar, belowBar, ::search, onTyping, Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 32.dp), chipFocused = { chipsHaveFocus }, dictate = dictate, onDictated = onDictated)
         // One line under the bar: the suggestions while typing, else the filters.
         Row(
             Modifier.fillMaxWidth().onFocusChanged { chipsHaveFocus = it.hasFocus }.horizontalScroll(rememberScrollState()).padding(horizontal = Dimens.Gutter, vertical = 12.dp),
@@ -168,8 +174,11 @@ private fun SearchBar(
     modifier: Modifier,
     /** A chip under the bar has the focus (then a cancelled typing leaves it there). */
     chipFocused: () -> Boolean = { false },
+    dictate: Boolean = false,
+    onDictated: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     val keyboard = LocalSoftwareKeyboardController.current
     var text by remember(query) { mutableStateOf(query) }
     var editing by remember { mutableStateOf(false) }
@@ -251,7 +260,11 @@ private fun SearchBar(
                     LaunchedEffect(Unit) {
                         withFrameNanos { }
                         field.tryRequestFocus()
+                        // The input connection opens a moment after the focus: asking at once was
+                        // ignored on the box. Ask again after it, through the platform as well.
+                        delay(KEYBOARD_DELAY_MS)
                         keyboard?.show()
+                        context.getSystemService(InputMethodManager::class.java)?.showSoftInput(view, 0)
                     }
                 } else {
                     Text(
@@ -270,6 +283,15 @@ private fun SearchBar(
                 runCatching { dictation.launch(voiceIntent) }
             }
         }
+    }
+    LaunchedEffect(dictate) {
+        if (!dictate) return@LaunchedEffect
+        withFrameNanos { }
+        requester.tryRequestFocus()
+        // No speech recognizer on the box: the keyboard instead.
+        if (!canDictate || runCatching { dictation.launch(voiceIntent) }.isFailure) editing = true
+        // Last: clearing the flag restarts (cancels) this effect.
+        onDictated()
     }
     LaunchedEffect(refocus) {
         if (refocus == 0) return@LaunchedEffect
@@ -327,3 +349,4 @@ private val SEARCH_FILTERS = listOf(
 
 /** Suggestions shown at most (YouTube's, see YouTube.suggestions) and filters: chips with a requester. */
 private const val MAX_CHIPS = 8
+private const val KEYBOARD_DELAY_MS = 150L
