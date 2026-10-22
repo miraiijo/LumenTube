@@ -63,9 +63,14 @@ class PlayerPrefs(context: Context) {
             else if (prefs.getBoolean(KEY_LARGE_UI, false)) 100 else UI_SCALE_DEFAULT
         set(value) = prefs.edit().putInt(KEY_UI_SCALE, value).remove(KEY_LARGE_UI).apply()
 
+    /** "Recevoir même LumenTube fermé" (off by default: ~50–80 MB kept in memory). */
+    var backgroundCast: Boolean
+        get() = prefs.getBoolean(KEY_BACKGROUND_CAST, false)
+        set(value) = prefs.edit().putBoolean(KEY_BACKGROUND_CAST, value).apply()
+
     fun settings() = Settings(
         sponsorBlock = sponsorBlock, autoplay = autoplay, stableVolume = stableVolume, deArrow = deArrow,
-        remote = remote, appearance = appearance, uiScale = uiScale,
+        remote = remote, appearance = appearance, uiScale = uiScale, backgroundCast = backgroundCast,
     )
 
     private companion object {
@@ -81,5 +86,6 @@ class PlayerPrefs(context: Context) {
         const val KEY_APPEARANCE = "appearance"
         const val KEY_LARGE_UI = "large_ui"
         const val KEY_UI_SCALE = "ui_scale"
+        const val KEY_BACKGROUND_CAST = "background_cast"
     }
 }

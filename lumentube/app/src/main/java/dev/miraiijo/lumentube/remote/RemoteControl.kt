@@ -33,6 +33,12 @@ object RemoteControl {
         data object Disconnected : Event
     }
 
+    /** LumenTube's screen exists (its view model handles the events) / is on screen. */
+    @Volatile
+    var uiAttached = false
+    @Volatile
+    var uiForeground = false
+
     private val _events = MutableSharedFlow<Event>(extraBufferCapacity = 32)
     val events: SharedFlow<Event> = _events
 

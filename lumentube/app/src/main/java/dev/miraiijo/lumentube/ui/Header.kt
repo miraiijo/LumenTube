@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,10 +66,17 @@ fun TopHeader(
     onAccount: () -> Unit,
     onSettings: () -> Unit,
     onRestorePlayer: () -> Unit,
+    /** Incremented when a section is shown from the tabs: the focus goes (stays) on its tab. */
+    tabFocusTick: Int = 0,
 ) {
     val sections = Section.entries.filter { it != Section.SEARCH && (!it.account || signedIn) }
     val requesters = remember { Section.entries.associateWith { FocusRequester() } }
     val playerButton = remember { FocusRequester() }
+    LaunchedEffect(tabFocusTick) {
+        if (tabFocusTick == 0) return@LaunchedEffect
+        withFrameNanos { }
+        if (section in sections) requesters.getValue(section).tryRequestFocus()
+    }
     Row(
         modifier
             .fillMaxWidth()

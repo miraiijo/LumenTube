@@ -54,6 +54,8 @@ data class Settings(
     val appearance: Int = 0,
     /** "Taille de l'interface", in % (ui.UI_SCALE_MIN..UI_SCALE_MAX). */
     val uiScale: Int = UI_SCALE_DEFAULT,
+    /** "Recevoir même LumenTube fermé": the phone link listens in the background (remote.CastService). */
+    val backgroundCast: Boolean = false,
 )
 
 /** "Lier un téléphone": the TV code to type in the phone's YouTube app (null while it's requested). */
@@ -142,6 +144,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var accountListener: (() -> Unit)? = null
 
     init {
+        RemoteControl.uiAttached = true
+        dev.miraiijo.lumentube.remote.CastService.sync(getApplication(), _state.value.settings)
         // Account switched from Lumen (or anywhere else): the pages reload for the new account.
         accountListener = YouTube.onAccountChanged {
             viewModelScope.launch {
@@ -462,7 +466,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** The activity is on screen (or not): commands are listened to only then, when it's enabled. */
     fun onForeground(on: Boolean) {
         foreground = on
-        if (on && _state.value.settings.remote) RemoteControl.start(getApplication()) else RemoteControl.stop()
+        RemoteControl.uiForeground = on
+        // Off screen, the background service (when enabled) keeps listening.
+        if (on && _state.value.settings.remote) RemoteControl.start(getApplication())
+        else if (!dev.miraiijo.lumentube.remote.CastService.running) RemoteControl.stop()
     }
 
     /** "Lier un téléphone": the TV code; listening starts so the phone finds the TV right away. */
@@ -566,12 +573,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.remote = settings.remote
         prefs.appearance = settings.appearance
         prefs.uiScale = settings.uiScale
+        prefs.backgroundCast = settings.backgroundCast
         if (settings.remote != _state.value.settings.remote) {
             if (settings.remote && foreground) RemoteControl.start(getApplication()) else if (!settings.remote) RemoteControl.stop()
         }
         val deArrowTurnedOn = settings.deArrow && !_state.value.settings.deArrow
         if (!settings.deArrow) deArrowAsked.clear()
         _state.update { it.copy(settings = settings, deArrow = if (settings.deArrow) it.deArrow else emptyMap()) }
+        dev.miraiijo.lumentube.remote.CastService.sync(getApplication(), settings)
         if (deArrowTurnedOn) {
             val s = _state.value
             fetchDeArrow(listOfNotNull(s.resume) + s.pages.values.flatMap { it.rows } + s.search?.rows.orEmpty())
@@ -649,6 +658,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
+        RemoteControl.uiAttached = false
         accountListener?.let(YouTube::removeAccountListener)
         signIn?.dispose()
     }

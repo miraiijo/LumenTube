@@ -85,12 +85,18 @@ fun Root(vm: MainViewModel) {
     var beforeSearch by remember { androidx.compose.runtime.mutableStateOf(Home) }
     /** The focus is in the header (tabs, round buttons). */
     var inHeader by remember { androidx.compose.runtime.mutableStateOf(false) }
-    fun showSection(section: dev.miraiijo.lumentube.data.Section) {
-        // The page takes the focus (the header may not even be there: Rechercher).
-        inHeader = false
+    /** OK on a tab (or Back to Accueil from the tabs): the focus stays in the tabs (one can still change one's mind). */
+    var tabFocusTick by remember { mutableIntStateOf(0) }
+    fun showSection(section: dev.miraiijo.lumentube.data.Section, focusPage: Boolean = true) {
         if (section == Search && state.section != Search) beforeSearch = state.section
         vm.show(section)
-        pageFocusTick++
+        if (focusPage) {
+            // The page takes the focus (the header may not even be there: Rechercher).
+            inHeader = false
+            pageFocusTick++
+        } else {
+            tabFocusTick++
+        }
     }
     // The header (tabs) is shown on the sections' pages, not on Rechercher nor an opened channel.
     val showHeader = state.opened == null && state.section != Search
@@ -111,7 +117,7 @@ fun Root(vm: MainViewModel) {
                 showSection(beforeSearch)
             }
             !inHeader -> header.tryRequestFocus()
-            state.section != Home -> showSection(Home)
+            state.section != Home -> showSection(Home, focusPage = false)
             else -> vm.stopPlaying()
         }
     }
@@ -157,7 +163,9 @@ fun Root(vm: MainViewModel) {
                 minimized = state.minimized,
                 modifier = Modifier.focusRequester(header),
                 onFocusChange = { inHeader = it },
-                onSection = ::showSection,
+                // A tab: the focus stays on the tabs (Down goes to the videos); the search button: Rechercher.
+                onSection = { showSection(it, focusPage = it == Search) },
+                tabFocusTick = tabFocusTick,
                 onAccount = vm::openAccounts,
                 onSettings = vm::openSettings,
                 onRestorePlayer = vm::restore,

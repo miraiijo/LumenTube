@@ -399,6 +399,20 @@ fun SettingsDialog(
                                 Choice("Désactivé", !settings.remote) { onSettings(settings.copy(remote = false)) }
                                 LumenButton("Lier un téléphone", modifier = Modifier.focusRequester(pair), icon = LumenIcon.PLUS, onClick = onPair)
                             }
+                            // Opening LumenTube from the background needs the overlay permission (adb, once).
+                            val context = androidx.compose.ui.platform.LocalContext.current
+                            val canOpen = remember(settings.backgroundCast) { android.provider.Settings.canDrawOverlays(context) }
+                            SettingCard(
+                                "Recevoir même LumenTube fermé",
+                                if (settings.backgroundCast && !canOpen) {
+                                    "Autorisation à donner une fois depuis l’ordinateur : adb shell appops set dev.miraiijo.lumentube SYSTEM_ALERT_WINDOW allow"
+                                } else {
+                                    "LumenTube reste prêt en arrière-plan et s’ouvre quand le téléphone envoie une vidéo. Garde environ 50 à 80 Mo de mémoire."
+                                },
+                            ) {
+                                Choice("Activé", settings.backgroundCast) { onSettings(settings.copy(backgroundCast = true, remote = true)) }
+                                Choice("Désactivé", !settings.backgroundCast) { onSettings(settings.copy(backgroundCast = false)) }
+                            }
                         }
                         SettingsPage.ACCOUNT -> {
                             SettingCard("Compte YouTube", "Les autres comptes liés restent sur la box (« Qui regarde ? »).") {

@@ -8,6 +8,13 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Keeps the screen on during playback (window flag, no wake lock needed otherwise). -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- "Recevoir même LumenTube fermé" (off by default): a foreground service keeps the phone link,
+         restarted after a reboot, and opens LumenTube when a video arrives (the overlay permission
+         lets an app start its screen from the background; granted once with adb). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- Lumen's feed (continue / subscriptions). Lumen declares this permission; LumenTube and Lumen
          are signed with different keys, so it can't be a signature permission: FeedProvider itself
@@ -64,6 +71,22 @@
                 <data android:scheme="https" android:host="youtu.be" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".remote.CastService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Receives videos cast from the user's phone (YouTube Lounge) while the app is closed." />
+        </service>
+        <receiver
+            android:name=".remote.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Read-only feed for the Lumen launcher (FeedProvider): the caller's package and signing
              certificate are checked on every query. -->

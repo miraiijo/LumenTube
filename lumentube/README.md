@@ -36,6 +36,10 @@ git push
 Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTube (commande ci-dessus).
 
 ## Nouveautés
+### 0.14.0
+- **Recevoir même LumenTube fermé** (Réglages › Téléphone, désactivé par défaut) : un service garde le lien avec le téléphone en arrière-plan, redémarre avec la box, et ouvre LumenTube quand le téléphone envoie une vidéo. Coût : environ 50 à 80 Mo de mémoire en permanence.
+  - Autorisation à donner une fois (Android TV n'a pas d'écran pour ça) : `adb shell appops set dev.miraiijo.lumentube SYSTEM_ALERT_WINDOW allow`. Sans elle, le téléphone voit la TV mais LumenTube ne s'ouvre pas tout seul.
+
 ### 0.13.5
 - **Lier un téléphone par QR code** : Réglages › Téléphone › Lier un téléphone affiche un QR code à côté du code TV. Scanné avec le téléphone, il ouvre la page d'appairage de YouTube avec le code déjà rempli. Le QR est dessiné sur la box (aucun service web), et le code à taper reste affiché.
 
