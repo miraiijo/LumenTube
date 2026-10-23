@@ -70,15 +70,21 @@ val NightColors = LumenColors(
     glass = Color.White.copy(alpha = 0.08f), glassBorder = Color.White.copy(alpha = 0.10f), shadow = Color.Black.copy(alpha = 0.55f),
 )
 
+/**
+ * Jour's lightest color: the logo's "blanc lune", not pure white, which dazzles on a TV in a dark
+ * room. Backgrounds are a shade under it (the same warm greys as Lumen), panels and the focused card are it.
+ */
+private val MOONLIGHT = Color(0xFFF3EEE1)
+
 val DayColors = LumenColors(
-    background = Color(0xFFEDEFF3), panel = Color(0xFFFFFFFF), tile = Color(0xFFE2E4EA), tileFocused = Color(0xFFFFFFFF),
-    textPrimary = Color(0xFF16171A), textSecondary = Color(0xFF62656D),
-    controlIdle = Color.Black.copy(alpha = 0.06f), selected = Color.White.copy(alpha = 0.90f), outline = Color.Black.copy(alpha = 0.16f),
+    background = Color(0xFFE4E1D9), panel = MOONLIGHT, tile = Color(0xFFD9D5CB), tileFocused = MOONLIGHT,
+    textPrimary = Color(0xFF16171A), textSecondary = Color(0xFF505257),
+    controlIdle = Color.Black.copy(alpha = 0.06f), selected = MOONLIGHT.copy(alpha = 0.90f), outline = Color.Black.copy(alpha = 0.16f),
     track = Color.Black.copy(alpha = 0.14f), divider = Color.Black.copy(alpha = 0.08f),
-    focus = Color(0xFF16171A), onFocus = Color(0xFFFFFFFF), focusRing = Color(0xFF16171A),
-    glowWarm = Color(0x4DC8A46A), glowCool = Color(0x2E5A8CFF), isLight = true,
-    backgroundMid = Color(0xFFE8EAF0), backgroundEnd = Color(0xFFE3E6ED),
-    glass = Color.White.copy(alpha = 0.66f), glassBorder = Color.White.copy(alpha = 0.92f), shadow = Color(0xFF141928).copy(alpha = 0.22f),
+    focus = Color(0xFF16171A), onFocus = MOONLIGHT, focusRing = Color(0xFF16171A),
+    glowWarm = Color(0x4DC8A46A), glowCool = Color(0x1F5A8CFF), isLight = true,
+    backgroundMid = Color(0xFFDFDBD2), backgroundEnd = Color(0xFFDAD6CC),
+    glass = MOONLIGHT.copy(alpha = 0.62f), glassBorder = MOONLIGHT.copy(alpha = 0.90f), shadow = Color(0xFF2A2418).copy(alpha = 0.20f),
 )
 
 object Palette {
