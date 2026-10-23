@@ -1123,7 +1123,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
                         busy = false,
                         found = result.getOrNull(),
                         message = result.fold(
-                            { found -> if (found == null) "Halune Tube est à jour." else "Nouvelle version : ${found.versionName}." },
+                            { found -> if (found == null) "Mirazuki Tube est à jour." else "Nouvelle version : ${found.versionName}." },
                             { e -> e.message ?: "Vérification impossible." },
                         ),
                     ),
@@ -1140,9 +1140,9 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         if (!runCatching { Updater.canInstall(app) }.getOrDefault(false)) {
             val opened = Updater.openInstallPermissionSettings(app)
             val msg = if (opened) {
-                "Autorise Halune Tube à installer des applis, puis relance l’installation."
+                "Autorise Mirazuki Tube à installer des applis, puis relance l’installation."
             } else {
-                "Autorise l'installation d'applis pour Halune Tube dans Paramètres Android › Sécurité"
+                "Autorise l'installation d'applis pour Mirazuki Tube dans Paramètres Android › Sécurité"
             }
             _state.update { it.copy(update = it.update.copy(message = msg)) }
             return
@@ -1182,7 +1182,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         val s = _state.value
         when {
             // Lumen's kids profile: the way out is in Lumen, behind its own parental code.
-            s.kidsLocked -> showNotice("Profil enfant de Halune : change de profil dans Halune.")
+            s.kidsLocked -> showNotice("Profil enfant de Mirazuki : change de profil dans Mirazuki.")
             // LumenTube's kids profile: the parental code first.
             s.kids -> _state.update { it.copy(pin = PinPrompt(PinStep.UNLOCK)) }
             else -> {

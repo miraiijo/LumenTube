@@ -263,14 +263,14 @@ fun formatDuration(ms: Long): String {
     return if (h > 0) "$h:${two(m)}:${two(s)}" else "$m:${two(s)}"
 }
 
-/** The Halune Tube logo (mark + wordmark), in the version drawn for the current appearance. */
+/** The Mirazuki Tube logo (mark + wordmark), in the version drawn for the current appearance. */
 @Composable
-fun HaluneLogo(modifier: Modifier = Modifier) {
+fun BrandLogo(modifier: Modifier = Modifier) {
     androidx.compose.foundation.Image(
         androidx.compose.ui.res.painterResource(
-            if (Palette.colors.isLight) dev.miraiijo.lumentube.R.drawable.halune_logo_light else dev.miraiijo.lumentube.R.drawable.halune_logo_dark,
+            if (Palette.colors.isLight) dev.miraiijo.lumentube.R.drawable.brand_logo_light else dev.miraiijo.lumentube.R.drawable.brand_logo_dark,
         ),
-        contentDescription = "Halune Tube",
+        contentDescription = "Mirazuki Tube",
         modifier = modifier,
     )
 }

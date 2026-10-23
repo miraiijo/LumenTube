@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity() {
         // Its buttons are read from their raw code instead, the same whatever the key layout.
         val sony = if (event.device?.vendorId == SONY_VENDOR && android.os.Build.VERSION.SDK_INT < SONY_DRIVER_SDK) SONY_SCANCODES[event.scanCode] else null
         if (event.device?.vendorId == SONY_VENDOR && event.action == KeyEvent.ACTION_DOWN) {
-            android.util.Log.d("HaluneTube.Pad", "key=${KeyEvent.keyCodeToString(event.keyCode)} scan=0x${Integer.toHexString(event.scanCode)} → ${sony?.let(KeyEvent::keyCodeToString)}")
+            android.util.Log.d("MirazukiTube.Pad", "key=${KeyEvent.keyCodeToString(event.keyCode)} scan=0x${Integer.toHexString(event.scanCode)} → ${sony?.let(KeyEvent::keyCodeToString)}")
         }
         // L3 / R3: nothing (they used to come as Select / Start).
         if (sony == IGNORED) return true
@@ -108,7 +108,7 @@ class MainActivity : ComponentActivity() {
             // An account asked for (even invalid: then the selected one plays) never shows the picker.
             val skipPicker = lumen && (intent.getBooleanExtra(EXTRA_SKIP_PICKER, false) || intent.hasExtra(EXTRA_ACCOUNT_ID))
             vm.playLink(id, startSeconds(uri.getQueryParameter("t")), account, skipPicker)
-        }.onFailure { android.util.Log.w("HaluneTube", "link ignored: ${it.javaClass.simpleName}") }
+        }.onFailure { android.util.Log.w("MirazukiTube", "link ignored: ${it.javaClass.simpleName}") }
     }
 
     /**

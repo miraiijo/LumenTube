@@ -71,7 +71,7 @@ class FeedProvider : ContentProvider() {
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor {
         val ctx = context ?: throw SecurityException("Not ready")
         // Who asks comes first: anything else is refused before the URI is even looked at.
-        if (!isLumen(ctx)) throw SecurityException("This feed is only readable by the Halune launcher")
+        if (!isLumen(ctx)) throw SecurityException("This feed is only readable by the Mirazuki launcher")
         val code = matcher.match(uri)
         if (code == UriMatcher.NO_MATCH) throw IllegalArgumentException("Unknown feed: $uri")
         ready(ctx)
@@ -182,7 +182,7 @@ class FeedProvider : ContentProvider() {
      */
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
         val ctx = context ?: throw SecurityException("Not ready")
-        if (!isLumen(ctx)) throw SecurityException("This feed is only readable by the Halune launcher")
+        if (!isLumen(ctx)) throw SecurityException("This feed is only readable by the Mirazuki launcher")
         if (method != METHOD_SELECT_ACCOUNT) return null
         ready(ctx)
         val selected = arg != null && YouTube.selectFeedAccount(arg)
