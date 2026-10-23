@@ -76,8 +76,6 @@ private val ROW_TITLE_LINE = 20.sp
 /** Default card width; on a page it follows the screen (as many cards as fit at ~[CARD_SLOT] fill the width). */
 private val CARD_WIDTH = 204.dp
 /** Width per card used to count the cards of a row: 4 at 100 %, 5 at 80 %, 6 at 60 %, 3 at 120 %. */
-/** Below a focused card's caption when the rows scroll: the row's bottom padding (12) + air (16). */
-private val ROW_BOTTOM_AIR = 28.dp
 private val CARD_SLOT = 232.dp
 
 /**
@@ -132,10 +130,10 @@ fun BrowsePage(
     }
     // Room kept above / below a focused card when the rows scroll, from the text lines (they follow
     // the system's font scale): the row title (8 + line + 4) with the row's top padding (12), and
-    // the card's title (10 + 2 lines) and channel (2 + line), then the row's bottom padding (12) and
-    // some air (16): the last row's caption never touches the screen's bottom edge.
+    // the card's title (10 + 2 lines) and channel (2 + line), then the TV's safe zone (48 system
+    // dp): the last row's caption never goes under the screen's bottom edge (overscan).
     val rowTitle = 24.dp + lines(ROW_TITLE_LINE, 1)
-    val cardCaption = 12.dp + lines(TITLE_LINE, 2) + lines(CHANNEL_LINE, 1) + ROW_BOTTOM_AIR
+    val cardCaption = 12.dp + lines(TITLE_LINE, 2) + lines(CHANNEL_LINE, 1) + SafeArea.bottom
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     // A row inserted on top (Reprendre arriving after the feed) while the page was at its top: back
     // to the top, the list kept the old first row in place and hid the new one above the screen.
@@ -184,7 +182,7 @@ fun BrowsePage(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 64.dp),
+                        contentPadding = PaddingValues(bottom = SafeArea.bottom + 16.dp),
                     ) {
                         itemsIndexed(page.rows, key = { _, row -> row.key }, contentType = { _, _ -> 0 }) { index, row ->
                             VideoRowView(
@@ -299,7 +297,7 @@ fun VideoCard(
                 if (badge != null) {
                     Text(
                         badge,
-                        fontSize = 12.sp,
+                        fontSize = Dimens.TextMin,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White,
                         modifier = Modifier
@@ -410,7 +408,7 @@ private fun ChannelSheet(channel: ChannelHeader, signedIn: Boolean, onSubscribe:
             // No picture: the initial, white on a colored gradient (as for accounts).
             AvatarPicture(channel.avatar, channel.name, 66.dp, 28.sp)
             Column {
-                Text("CHAÎNE", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.08.em, color = Palette.TextSecondary)
+                Text("CHAÎNE", fontSize = Dimens.TextMin, fontWeight = FontWeight.Bold, letterSpacing = 0.08.em, color = Palette.TextSecondary)
                 Text(channel.name, fontSize = 48.sp, lineHeight = 52.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, letterSpacing = (-0.035).em)
             }
         }

@@ -143,26 +143,24 @@ fun PlayerMenuPanel(
     }
     val first = remember(menu) { FocusRequester() }
 
-    Column(
+    // To the screen's edges, its content in the safe zone (the last line above the bottom inset).
+    SafeSidePanel(
+        400.dp,
         modifier
-            .width(400.dp)
-            .fillMaxHeight()
-            .background(Palette.Panel.copy(alpha = 0.97f))
             // The focus stays in the panel until Back closes it.
             .focusProperties { exit = { FocusRequester.Cancel } }
-            .focusGroup()
-            .padding(horizontal = 20.dp, vertical = 32.dp),
-    ) {
+            .focusGroup(),
+    ) { bottom ->
         Text(title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 12.dp, bottom = 12.dp))
         if (menu == PlayerMenu.INFO) {
-            InfoText(actions.details, Modifier.weight(1f).focusRequester(first))
+            InfoText(actions.details, Modifier.weight(1f).focusRequester(first), bottom)
         } else Column(
-            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             entries.forEachIndexed { index, entry ->
                 if (entry.header) {
-                    Text(entry.label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary, modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 2.dp))
+                    Text(entry.label, fontSize = Dimens.TextMin, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary, modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 2.dp))
                 } else {
                     MenuRow(entry, if (index == focusIndex) Modifier.focusRequester(first) else Modifier)
                 }
@@ -293,7 +291,7 @@ private fun buildEntries(
 
 /** Description and figures; Up / Down scroll it (it takes the focus, the panel has nothing else). */
 @Composable
-private fun InfoText(details: Details?, modifier: Modifier) {
+private fun InfoText(details: Details?, modifier: Modifier, bottom: androidx.compose.foundation.layout.PaddingValues) {
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
     val step = with(LocalDensity.current) { 160.dp.toPx() }
@@ -311,6 +309,7 @@ private fun InfoText(details: Details?, modifier: Modifier) {
             }
             .focusable()
             .verticalScroll(scroll)
+            .padding(bottom)
             .padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

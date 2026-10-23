@@ -71,8 +71,9 @@ tr:last-child td{border-bottom:none}
 td kbd{min-width:26px;height:24px;font-size:11px}
 
 /* ===================== TV canvas (1080 × 608) =====================
-   The stage is the TV screen. LumenTube's layout is drawn in its own dp (a 1080p TV is 960 × 540 dp;
-   at the default « Taille de l'interface » of 80 % the app lays out 1200 × 675 dp), zoomed to fit. */
+   The stage is the TV screen. LumenTube's layout is drawn in its own dp (a 1080p TV is 960 × 540 dp,
+   which the app lays out at the default « Taille de l'interface » of 100 %), zoomed to fit (×1.125).
+   Safe zone (Theme.kt Safe, system dp): 48 on the sides, 32 at the top, 48 at the bottom. */
 @property --h{syntax:"<number>";inherits:true;initial-value:210}
 .stage{position:absolute;left:0;top:0;width:1080px;height:608px;transform-origin:0 0;overflow:hidden;font-family:var(--f-ui);letter-spacing:-.011em;
   background:radial-gradient(circle 788px at 100% 0%,var(--g1),transparent),radial-gradient(circle 675px at 0% 100%,var(--g2),transparent),linear-gradient(to bottom right,var(--a0) 0%,var(--a1) 55%,var(--a2) 100%);
@@ -82,46 +83,55 @@ td kbd{min-width:26px;height:24px;font-size:11px}
   --glass:rgba(255,255,255,.08);--gb:rgba(255,255,255,.10);--tile:#1C1C1E;--tilef:#2C2C2E;--panel:#161618;--shadow:rgba(0,0,0,.55);--div:rgba(255,255,255,.08);--track:rgba(255,255,255,.22);--chip:#E4E5E9;--help:#A3A5AD;--addt:rgba(255,255,255,.10)}
 .stage.jour{--tp:#16171A;--ts:#62656D;--sel:rgba(255,255,255,.90);--ctl:rgba(0,0,0,.06);--focus:#16171A;--onf:#FFFFFF;--fring:rgba(22,23,26,.35);--ring:#16171A;
   --glass:rgba(255,255,255,.66);--gb:rgba(255,255,255,.92);--tile:#E2E4EA;--tilef:#FFFFFF;--panel:#FFFFFF;--shadow:rgba(20,25,40,.22);--div:rgba(0,0,0,.08);--track:rgba(0,0,0,.14);--chip:#2A2C33;--help:#62656D;--addt:#FFFFFF}
-.layer{position:absolute;left:0;top:0;width:1200px;height:676px;zoom:.9;overflow:hidden;animation:lin .45s ease both}
+.layer{position:absolute;left:0;top:0;width:960px;height:540px;zoom:1.125;overflow:hidden;animation:lin .45s ease both}
 .layer.out{animation:lout .4s ease both}
 @keyframes lin{from{opacity:0;transform:scale(1.015)}to{opacity:1;transform:none}}
 @keyframes lout{to{opacity:0}}
 .page{position:absolute;inset:0;transition:opacity .22s}
 .tab,.rb,.btn,.card,.chr,.sitem,.drow,.mr,.cb,.pt .pring,.cmr,.sbar{transition:transform .22s ease,background-color .22s,color .22s,box-shadow .22s,opacity .3s,border-color .22s}
 svg{display:block}
+/* « Zone sûre » toggle: the TV safe zone (48 / 32 / 48 dp, ×1.125 on the stage) */
+.stage.safe::after{content:"";position:absolute;left:54px;right:54px;top:36px;bottom:54px;border:1.5px dashed rgba(229,56,59,.85);border-radius:4px;pointer-events:none;z-index:60}
 
-/* header (Header.kt): tabs as text, round glass buttons, clock */
-.hdr{position:absolute;top:22px;left:48px;right:48px;height:38px;display:flex;align-items:center}
-.tabs{flex:1;min-width:0;display:flex;gap:28px;overflow:hidden}
+/* header (Header.kt, Lumen's bar): tabs as text, Recherche right after them; on the right the account,
+   Jour / Nuit / Auto, Réglages (red dot: update) and the time. 30 dp round glass buttons, 14 dp icons, 10 dp gaps */
+.hdr{position:absolute;top:32px;left:48px;right:48px;height:34px;display:flex;align-items:center;justify-content:space-between}
+.lft{flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:28px}
+.tabs{flex:0 1 auto;min-width:0;overflow:hidden}
+.tin{display:flex;gap:28px;transition:transform .45s cubic-bezier(.2,.8,.2,1)}
 .tab{padding-top:8px;font-size:15px;line-height:18px;font-weight:500;color:var(--ts);white-space:nowrap;display:flex;flex-direction:column;flex:none}
 .tab::after{content:"";margin-top:5px;height:3px;border-radius:2px;background:transparent;transition:background-color .22s}
 .tab.sel{color:var(--tp);font-weight:700}
 .tab.sel::after{background:color-mix(in srgb,var(--tp) 25%,transparent)}
 .tab.f{color:var(--tp)}
 .tab.f::after{background:var(--focus)}
-.right{display:flex;gap:12px;align-items:center;margin-left:24px;flex:none}
-.rb{width:38px;height:38px;border-radius:50%;background:var(--glass);border:1px solid var(--gb);box-sizing:border-box;display:grid;place-items:center;color:var(--tp);flex:none}
-.rb svg{width:16px;height:16px}
+.right{display:flex;gap:10px;align-items:center;margin-left:24px;flex:none}
+.rb{position:relative;width:30px;height:30px;border-radius:50%;background:var(--glass);border:1px solid var(--gb);box-sizing:border-box;display:grid;place-items:center;color:var(--tp);flex:none}
+.rb svg{width:14px;height:14px}
+.rb .apa{font-size:13px;line-height:16px;font-weight:600}
+.rb .api{display:none}
+.udot{position:absolute;right:0;top:0;width:7px;height:7px;border-radius:50%;background:#E5383B;opacity:0;transition:opacity .3s}
+.udot.on{opacity:1}
 .rb.f{background:var(--focus);color:var(--onf);border-color:transparent;transform:scale(1.1);box-shadow:0 10px 24px var(--shadow)}
 .rb.av{background:none;border:none}
 .rb.av.f{background:none;box-shadow:0 0 0 3px var(--a0),0 0 0 6px var(--focus)}
-.clock{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;padding-left:2px}
+.clock{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums;padding-left:2px}
 .avp{border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;flex:none;letter-spacing:0}
 
-/* rows and cards (Browse.kt): 5 cards of 208 dp at 80 %, 16 dp gap, rows 237 dp apart */
-.rows{position:absolute;left:0;right:0;top:74px;bottom:0;overflow:hidden;transition:opacity .22s}
+/* rows and cards (Browse.kt): 4 cards of 204 dp at 100 %, 16 dp gap, rows 235 dp apart */
+.rows{position:absolute;left:0;right:0;top:80px;bottom:0;overflow:hidden;transition:opacity .22s}
 .rin{position:absolute;left:0;right:0;top:0;transition:transform .45s cubic-bezier(.2,.8,.2,1)}
 .vrow{position:absolute;left:0;right:0;height:237px}
 .rt{position:absolute;left:48px;top:8px;font-size:16px;line-height:20px;font-weight:700;white-space:nowrap}
 .rc{position:absolute;left:48px;top:44px;display:flex;gap:16px;transition:transform .45s cubic-bezier(.2,.8,.2,1)}
-.cw{width:208px;flex:none;transition:width .35s,opacity .3s,margin .35s}
-.card{position:relative;height:117px;border-radius:13px;overflow:hidden;background:var(--tile);isolation:isolate}
+.cw{width:204px;flex:none;transition:width .35s,opacity .3s,margin .35s}
+.card{position:relative;height:115px;border-radius:13px;overflow:hidden;background:var(--tile);isolation:isolate}
 .card.f{transform:scale(1.05);box-shadow:0 0 0 3px var(--fring),0 18px 40px var(--shadow);z-index:2}
 .card.f::after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.16) 50%,transparent 65%);background-size:300% 100%;animation:shine .6s ease both;pointer-events:none}
 @keyframes shine{from{background-position:110% 0}to{background-position:-10% 0}}
 .ct{font-size:14px;line-height:18px;font-weight:600;height:36px;margin-top:10px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .cs{font-size:13px;line-height:16px;height:16px;margin-top:2px;color:var(--ts);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bdg{position:absolute;right:8px;bottom:8px;font-size:12px;line-height:15px;font-weight:600;color:#fff;background:rgba(0,0,0,.72);border-radius:6px;padding:2px 6px;z-index:1}
+.bdg{position:absolute;right:8px;bottom:8px;font-size:13px;line-height:16px;font-weight:600;color:#fff;background:rgba(0,0,0,.72);border-radius:6px;padding:2px 6px;z-index:1}
 .bdg.w{bottom:14px}
 .bdg.live{background:#E5383B}
 .lane{position:absolute;left:9px;right:9px;bottom:6px;height:3px;border-radius:2px;background:rgba(255,255,255,.3);overflow:hidden;z-index:1}
@@ -158,27 +168,27 @@ svg{display:block}
 .gp{display:contents}
 
 /* dialogs (LumenDialog: Panel, 24 dp corners, window dim) */
-.dim{position:absolute;inset:0;background:rgba(0,0,0,.6);display:grid;place-items:center}
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.6);display:grid;place-items:center;padding:32px 48px 48px;box-sizing:border-box}
 .dlg{background:var(--panel);border-radius:24px;color:var(--tp);box-sizing:border-box}
 .drow{height:52px;border-radius:14px;padding:0 12px;display:flex;align-items:center;gap:12px;font-size:15px;font-weight:500}
 .drow svg{width:20px;height:20px;flex:none}
 .drow.f{background:var(--focus);color:var(--onf)}
-.codedlg{width:760px;padding:32px;display:flex;gap:32px;align-items:center}
+.codedlg{width:760px;max-width:100%;padding:32px;display:flex;gap:32px;align-items:center}
 .codedlg .l{flex:1;display:flex;flex-direction:column;gap:14px}
 .codedlg h4{margin:0;font-size:22px;font-weight:600}
 .codedlg .p{font-size:15px;line-height:21px;color:var(--ts)}
 .codedlg .slot{height:52px;display:flex;align-items:center}
-.codedlg .code{font-size:40px;line-height:48px;font-weight:700;letter-spacing:4px}
+.codedlg .code{font-size:40px;line-height:48px;font-weight:700;letter-spacing:4px;white-space:nowrap}
 .codedlg .wait{font-size:28px;line-height:34px;color:var(--ts)}
 .codedlg .s{font-size:13px;line-height:18px;color:var(--ts)}
 .qr{width:220px;height:220px;border-radius:14px;background:#fff;flex:none;display:grid;place-items:center}
 .qr svg{width:192px;height:192px;transition:opacity .3s}
-.notice{position:absolute;left:0;right:0;bottom:40px;display:flex;justify-content:center}
+.notice{position:absolute;left:0;right:0;bottom:48px;display:flex;justify-content:center}
 .notice span{font-size:15px;font-weight:500;color:#fff;background:rgba(0,0,0,.85);border-radius:14px;padding:10px 18px;white-space:nowrap}
 .notice.lft{justify-content:flex-start;left:48px}
 
 /* full-screen dialogs: « Qui regarde ? », Réglages */
-.who{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.who{position:absolute;inset:0;padding:32px 48px 48px;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .who h3{margin:0;font-size:44px;line-height:52px;font-weight:700;letter-spacing:-.03em}
 .ptiles{display:flex;gap:40px;margin-top:40px}
 .pt{width:140px;display:flex;flex-direction:column;align-items:center}
@@ -188,10 +198,10 @@ svg{display:block}
 .padd svg{width:34px;height:34px}
 .pn{font-size:16px;font-weight:500;color:var(--ts);margin-top:7px}
 .pt.f .pn{font-weight:700;color:var(--tp)}
-.pc{font-size:12px;color:var(--ts);height:16px;margin-top:2px}
-.wfoot{font-size:12px;color:var(--ts);margin-top:36px}
+.pc{font-size:13px;color:var(--ts);height:18px;margin-top:2px}
+.wfoot{font-size:13px;color:var(--ts);margin-top:36px}
 .stitle{position:absolute;left:48px;top:32px;font-size:44px;line-height:50px;font-weight:700;letter-spacing:-.03em}
-.snav{position:absolute;left:48px;top:104px;bottom:32px;width:230px;box-sizing:border-box;background:var(--glass);border-radius:18px;padding:11px;display:flex;flex-direction:column;gap:4px}
+.snav{position:absolute;left:48px;top:104px;bottom:48px;width:230px;box-sizing:border-box;background:var(--glass);border-radius:18px;padding:11px;display:flex;flex-direction:column;gap:4px}
 .sitem{height:40px;flex:none;border-radius:12px;padding:0 14px;display:flex;align-items:center;font-size:15px;font-weight:600;color:var(--tp)}
 .sitem.sel{background:var(--sel)}
 .sitem.f{background:var(--focus);color:var(--onf)}
@@ -199,7 +209,7 @@ svg{display:block}
 .scard{background:var(--glass);border-radius:16px;padding:16px 18px;overflow:hidden;transition:max-height .45s,opacity .45s,padding .45s}
 .scard h5{margin:0;font-size:15px;line-height:19px;font-weight:700}
 .scard .chs{display:flex;gap:6px;margin-top:10px;align-items:center}
-.scard .hp{font-size:11px;line-height:15px;color:var(--help);margin-top:8px}
+.scard .hp{font-size:13px;line-height:17px;color:var(--help);margin-top:8px}
 .scard.hide{max-height:0;opacity:0;padding-top:0;padding-bottom:0;margin-bottom:-11px}
 
 /* search (Search.kt): 56 dp pill, 22 sp */
@@ -217,13 +227,13 @@ svg{display:block}
 .full{position:absolute;inset:0}
 .ptop{position:absolute;left:0;right:0;top:0;height:150px;background:linear-gradient(rgba(0,0,0,.7),transparent)}
 .pbot{position:absolute;left:0;right:0;bottom:0;height:220px;background:linear-gradient(transparent,rgba(0,0,0,.85))}
-.ptitle{position:absolute;left:48px;top:26px;right:130px;transition:right .3s}
+.ptitle{position:absolute;left:48px;top:32px;right:130px;transition:right .3s}
 .ptitle b{display:block;font-size:18px;line-height:23px;font-weight:600}
 .pmeta{display:flex;gap:14px;align-items:center;margin-top:4px;font-size:13px;line-height:16px;color:rgba(255,255,255,.85)}
 .cnt{display:flex;align-items:center;gap:5px;color:rgba(255,255,255,.72)}
 .cnt svg{width:13px;height:13px}
-.pclock{position:absolute;top:26px;right:48px;height:23px;display:flex;align-items:center;font-size:15px;font-weight:500;color:rgba(255,255,255,.92);transition:opacity .3s}
-.pctl{position:absolute;left:48px;right:48px;bottom:28px}
+.pclock{position:absolute;top:32px;right:48px;height:23px;display:flex;align-items:center;font-size:15px;font-weight:500;color:rgba(255,255,255,.92);transition:opacity .3s}
+.pctl{position:absolute;left:48px;right:48px;bottom:48px}
 .pbar{position:relative;height:20px;display:flex;align-items:center}
 .trk{position:relative;width:100%;height:4px;border-radius:4px;background:rgba(255,255,255,.22);overflow:hidden;transition:height .15s}
 .pbar.f .trk{height:7px}
@@ -252,7 +262,7 @@ svg{display:block}
 .sbp{position:absolute;bottom:86px;width:256px;display:flex;flex-direction:column;align-items:center;transition:left .35s}
 .sbp .fr{width:256px;height:144px;border-radius:14px;overflow:hidden}
 .sbp span{font-size:14px;font-weight:500;margin-top:6px}
-.sline{position:absolute;left:0;right:0;bottom:0;padding:0 48px 28px;background:linear-gradient(transparent,rgba(0,0,0,.7))}
+.sline{position:absolute;left:0;right:0;bottom:0;padding:0 48px 48px;background:linear-gradient(transparent,rgba(0,0,0,.7))}
 .sline .trk{height:4px;background:rgba(255,255,255,.3)}
 .sline .t{text-align:right;margin-top:7px;font-size:15px;color:rgba(255,255,255,.9);font-variant-numeric:tabular-nums}
 .loadv{position:absolute;inset:0}
@@ -261,10 +271,10 @@ svg{display:block}
 .ldots i{width:10px;height:10px;border-radius:50%;background:#fff;opacity:.35;animation:dot 0.9s steps(1) infinite}
 .ldots i:nth-child(2){animation-delay:.3s}.ldots i:nth-child(3){animation-delay:.6s}
 @keyframes dot{0%{opacity:1}33%{opacity:.35}}
-.skipn{position:absolute;left:48px;bottom:28px;font-size:15px;font-weight:500;color:#fff;background:rgba(0,0,0,.7);border-radius:14px;padding:8px 14px}
-.pmenu{position:absolute;right:0;top:0;bottom:0;width:400px;box-sizing:border-box;background:color-mix(in srgb,var(--panel) 97%,transparent);padding:32px 20px;color:var(--tp);overflow:hidden}
+.skipn{position:absolute;left:48px;bottom:48px;font-size:15px;font-weight:500;color:#fff;background:rgba(0,0,0,.7);border-radius:14px;padding:8px 14px}
+.pmenu{position:absolute;right:0;top:0;bottom:0;width:400px;box-sizing:border-box;background:color-mix(in srgb,var(--panel) 97%,transparent);padding:32px 48px 48px 20px;color:var(--tp);overflow:hidden}
 .pmenu h4{margin:0 0 12px 12px;font-size:20px;line-height:24px;font-weight:600}
-.mhd{font-size:12px;font-weight:600;color:var(--ts);padding:12px 12px 2px}
+.mhd{font-size:13px;font-weight:600;color:var(--ts);padding:12px 12px 2px}
 .mr{height:48px;border-radius:14px;padding:0 12px;display:flex;align-items:center;margin-bottom:4px;font-size:15px;font-weight:500}
 .mr .lb{flex:none;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mr .lb.w{flex:1;max-width:none}
@@ -278,7 +288,7 @@ svg{display:block}
 .pinfo .fg{color:var(--ts);margin-bottom:12px}
 .pinfo p{margin:0 0 12px;color:color-mix(in srgb,var(--tp) 90%,transparent)}
 .pinfo.f{outline:none}
-.cmts{position:absolute;right:0;top:0;bottom:0;width:384px;box-sizing:border-box;background:color-mix(in srgb,var(--panel) 97%,transparent);padding:32px 20px 0;color:var(--tp);overflow:hidden}
+.cmts{position:absolute;right:0;top:0;bottom:0;width:384px;box-sizing:border-box;background:color-mix(in srgb,var(--panel) 97%,transparent);padding:32px 48px 0 20px;color:var(--tp);overflow:hidden}
 .cmts h4{margin:0 0 12px 12px;font-size:20px;line-height:24px;font-weight:600}
 .cmr{display:flex;gap:12px;padding:12px;border-radius:14px;margin-bottom:4px}
 .cmr.rp{margin-left:40px}
@@ -291,20 +301,20 @@ svg{display:block}
 .cmr.f .hd,.cmr.f .ft{color:inherit;opacity:.7}
 .reps{overflow:hidden;max-height:0;transition:max-height .45s}
 .reps.on{max-height:300px}
-.stats{position:absolute;top:28px;left:48px;max-width:340px;background:rgba(0,0,0,.72);border-radius:14px;padding:10px 14px;display:flex;flex-direction:column;gap:2px;color:#fff}
-.stats div{display:flex;font-size:12px;line-height:16px}
+.stats{position:absolute;top:32px;left:48px;max-width:340px;background:rgba(0,0,0,.72);border-radius:14px;padding:10px 14px;display:flex;flex-direction:column;gap:2px;color:#fff}
+.stats div{display:flex;font-size:13px;line-height:17px}
 .stats div span{width:120px;flex:none;color:rgba(255,255,255,.65)}
 .stats div b{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.upn{position:absolute;right:32px;bottom:32px;background:color-mix(in srgb,var(--panel) 95%,transparent);border-radius:24px;padding:12px;display:flex;gap:14px;align-items:center;color:var(--tp)}
+.upn{position:absolute;right:48px;bottom:48px;background:color-mix(in srgb,var(--panel) 95%,transparent);border-radius:24px;padding:12px;display:flex;gap:14px;align-items:center;color:var(--tp)}
 .upn .th{width:144px;height:81px;border-radius:14px;flex:none}
 .upn .cl{width:198px;display:flex;flex-direction:column;gap:5px}
-.upn .cl small{font-size:12px;font-weight:600;color:var(--ts)}
+.upn .cl small{font-size:13px;font-weight:600;color:var(--ts)}
 .upn .cl b{font-size:14px;line-height:18px;font-weight:600}
 .perr{position:absolute;inset:0;background:rgba(0,0,0,.5);display:grid;place-items:center}
 .perr .bx{max-width:560px;background:color-mix(in srgb,var(--panel) 95%,transparent);border-radius:24px;padding:28px;display:flex;flex-direction:column;align-items:center;gap:14px;color:var(--tp)}
 .perr h4{margin:0;font-size:20px;font-weight:600}
 .perr p{margin:0;font-size:15px;color:var(--ts);text-align:center}
-.miniw{position:absolute;right:32px;bottom:32px;width:396px;height:223px;box-shadow:0 24px 60px rgba(0,0,0,.6);z-index:5}
+.miniw{position:absolute;right:48px;bottom:48px;width:317px;height:178px;box-shadow:0 24px 60px rgba(0,0,0,.6);z-index:5}
 
 /* panels & overlays (engine toggles .on) */
 .tg.ovl{z-index:6;opacity:0;pointer-events:none;transition:opacity .3s,transform .4s cubic-bezier(.2,.8,.2,1)}
@@ -317,9 +327,9 @@ svg{display:block}
 </style>
 
 <div class="wrap">
-  <div class="eyebrow">Storyboard · LumenTube · 1.0 bêta 1</div>
+  <div class="eyebrow">Storyboard · LumenTube · 1.0 bêta 2</div>
   <h1>LumenTube</h1>
-  <p class="lead">Chaque écran est montré en Jour et en Nuit, sur un canevas de 1080 × 608 (une TV 1080p, l’interface à sa taille par défaut de 80 %). Les séquences se rejouent touche par touche : clique une étape, ou lance la lecture. Libellés, ordre, tailles et couleurs viennent du code actuel de LumenTube (thème Opale de Lumen, fond « Neutre »). Chaînes, vidéos et comptes sont des exemples inventés.</p>
+  <p class="lead">Chaque écran est montré en Jour et en Nuit, sur un canevas de 1080 × 608 (une TV 1080p de 960 × 540 dp, l’interface à sa taille par défaut de 100 %). « Zone sûre » trace la marge que les TV peuvent rogner (48 dp sur les côtés et en bas, 32 dp en haut) : rien d’important n’en sort. Les séquences se rejouent touche par touche : clique une étape, ou lance la lecture. Libellés, ordre, tailles et couleurs viennent du code actuel de LumenTube (thème Opale de Lumen, fond « Neutre »). Chaînes, vidéos et comptes sont des exemples inventés.</p>
   <p class="lead">LumenTube marche seul. Quand le launcher Lumen est installé et que son certificat correspond à celui attendu, LumenTube lui fournit en plus ses rangées YouTube (dernier écran).</p>
 
   <div class="toolbar" role="toolbar" aria-label="Réglages du storyboard">
@@ -330,6 +340,7 @@ svg{display:block}
       <button class="pill" data-speed="0.8" aria-pressed="false">Rapide</button>
     </div>
     <div class="tgroup"><button class="pill" id="auto" aria-pressed="false">Lecture auto à l'écran</button></div>
+    <div class="tgroup"><button class="pill" id="safe" aria-pressed="false">Zone sûre</button></div>
   </div>
   <nav class="toc" id="toc" aria-label="Écrans"></nav>
   <div id="screens"></div>
@@ -372,6 +383,8 @@ down:sv('<g transform="matrix(1 0 0 -1 0 24)">'+thumbO+'</g>'),downf:sv('<g tran
 comment:sv('<rect x="3.5" y="4" width="17" height="12" rx="3"/><path fill="currentColor" stroke="none" d="M7.5 15.5V20.5L12.5 15.5Z"/><path d="M7.5 8.5H16.5M7.5 11.5H13.5"/>'),
 info:sv('<circle cx="12" cy="12" r="9"/><path d="M12 11V17"/><circle cx="12" cy="7.8" r="1.3" fill="currentColor" stroke="none"/>'),
 check:sv('<path d="M5 12.5L10 17.5L19 7"/>'),
+sun:sv('<circle cx="12" cy="12" r="4"/>'+[0,1,2,3,4,5,6,7].map(i=>{const a=Math.PI*i/4,c=Math.cos(a),n=Math.sin(a);return `<path d="M${(12+6.8*c).toFixed(2)} ${(12+6.8*n).toFixed(2)}L${(12+9.2*c).toFixed(2)} ${(12+9.2*n).toFixed(2)}"/>`}).join('')),
+moon:sv('<path fill="currentColor" stroke="none" d="M16.58 20.46A9 9 0 1 1 16.58 3.54A7 7 0 1 0 16.58 20.46Z"/>'),
 plus:sv('<path d="M12 5V19M5 12H19"/>'),
 refresh:sv('<path d="M18.06 15.5A7 7 0 1 1 18.06 8.5"/><path fill="currentColor" stroke="none" d="M19.5 4V10H13.5Z"/>'),
 close:sv('<path d="M6 6L18 18M18 6L6 18"/>'),
@@ -424,14 +437,16 @@ const R_PLV=[['Le tour du lac Blanc','Rando Alpine','22:40',140],['Trois jours �
 
 /* ---------- building blocks ---------- */
 const TABS=[['home','Pour toi'],['subs','Abonnements'],['music','Musique'],['gaming','Gaming'],['news','Actus'],['sport','Sport'],['live','Direct'],['hist','Historique'],['pl','Playlists']];
+// Apparence: one round button showing the current look (« A » Auto, sun Jour, moon Nuit); OK: the next one.
+const apBtn=()=>`<div class="rb" data-id="btn-ap"><span class="apa" data-id="ap-a">A</span><span class="api" data-id="ap-d">${I.sun}</span><span class="api" data-id="ap-n">${I.moon}</span></div>`;
 function header(cur,o={}){
- return `<div class="hdr"><div class="tabs" data-grp="tb">${TABS.map(([id,l])=>`<div class="tab ${id===cur?'sel':''}" data-id="tab-${id}">${l}</div>`).join('')}</div>
- <div class="right">${o.mini?`<div class="btn glass" data-id="btn-now">${I.pip}Lecture en cours</div>`:''}<div class="rb" data-id="btn-search">${I.search}</div><div class="rb av" data-id="btn-acc">${av('Moi',38,17,'hav')}</div><div class="rb" data-id="btn-set">${I.gear}</div><div class="clock">20:45</div></div></div>`;
+ return `<div class="hdr"><div class="lft"><div class="tabs"><div class="tin" data-id="tin" data-grp="tb">${TABS.map(([id,l])=>`<div class="tab ${id===cur?'sel':''}" data-id="tab-${id}">${l}</div>`).join('')}</div></div><div class="rb" data-id="btn-search">${I.search}</div></div>
+ <div class="right">${o.mini?`<div class="btn glass" data-id="btn-now">${I.pip}Lecture en cours</div>`:''}<div class="rb av" data-id="btn-acc">${av('Moi',30,13,'hav')}</div>${apBtn()}<div class="rb" data-id="btn-set">${I.gear}<i class="tg udot" data-id="udot"></i></div><div class="clock">20:45</div></div></div>`;
 }
 const vcard=(v,id)=>{const [t,c,b,h,w,live]=v;const wt=w>0&&w<100;
  return `<div class="cw" data-id="${id}w"><div class="card scene" data-id="${id}" style="--h:${h}">${b?`<span class="bdg ${live?'live':''} ${wt?'w':''}">${b}</span>`:''}${wt?`<div class="lane"><i style="width:${w}%"></i></div>`:''}</div><div class="ct">${t}</div><div class="cs">${c}</div></div>`};
 const ccard=(name,id)=>`<div class="chw"><div class="chr" data-id="${id}">${av(name,96,36)}</div><div class="chn">${name}</div></div>`;
-const vrow=(title,items,pre,i,top=i*237)=>`<div class="vrow" style="top:${top}px"><div class="rt">${title}</div><div class="rc" data-id="${pre}${i}">${items}</div></div>`;
+const vrow=(title,items,pre,i,top=i*235)=>`<div class="vrow" style="top:${top}px"><div class="rt">${title}</div><div class="rc" data-id="${pre}${i}">${items}</div></div>`;
 const rowsOf=(defs,pre)=>defs.map(([title,list],i)=>vrow(title,list.map((v,k)=>vcard(v,`${pre}${i}-${k}`)).join(''),pre+'r',i)).join('');
 const notice=(id,t,lft)=>`<div class="ovl pop tg notice ${lft?'lft':''}" data-id="${id}"><span data-id="${id}-t">${t}</span></div>`;
 const cbtn=(id,icon,lbl,o={})=>`<div class="btn ${o.cls||''}" data-id="${id}">${icon?icon:''}${lbl}</div>`;
@@ -457,7 +472,7 @@ V.homemini=()=>`${header('home',{mini:true})}
 V.pls=()=>`${header('pl')}<div class="rows"><div class="rin">${rowsOf([['Playlists',R_PLS]],'p')}</div></div>`;
 V.plist=()=>`<div style="position:absolute;left:48px;top:20px;font-size:34px;line-height:40px;font-weight:700;letter-spacing:-.022em">Randos 2026</div>
  <div class="rows" style="top:66px"><div class="rin">${rowsOf([['Vidéos',R_PLV]],'v')}</div></div>`;
-V.chan=()=>`<div style="position:absolute;left:48px;top:36px;display:flex;gap:16px;align-items:center">${av('Cuisine du Dimanche',66,28)}<div><div style="font-size:11px;line-height:14px;font-weight:700;letter-spacing:.08em;color:var(--ts)">CHAÎNE</div><div style="font-size:48px;line-height:52px;font-weight:700;letter-spacing:-.035em;white-space:nowrap">Cuisine du Dimanche</div></div></div>
+V.chan=()=>`<div style="position:absolute;left:48px;top:36px;display:flex;gap:16px;align-items:center">${av('Cuisine du Dimanche',66,28)}<div><div style="font-size:13px;line-height:16px;font-weight:700;letter-spacing:.08em;color:var(--ts)">CHAÎNE</div><div style="font-size:48px;line-height:52px;font-weight:700;letter-spacing:-.035em;white-space:nowrap">Cuisine du Dimanche</div></div></div>
  <div class="pills" style="top:120px"><span class="gp" data-grp="sb"><div class="btn red" data-id="sub"><i class="off">${I.plus}</i><i class="on">${I.check}</i><span data-id="sub-l">S’abonner</span></div></span><span style="width:12px;flex:none"></span>
  <span class="gp" data-grp="srt">${['Accueil','Plus récentes','Populaires'].map((l,i)=>`<div class="btn c ${i===0?'sel':''}" data-id="srt-${i}"><i class="ck">${I.check}</i>${l}</div>`).join('')}</span></div>
  <div class="rows" data-id="cp-home" style="top:210px"><div class="rin">${rowsOf([['Vidéos',CHAN_V],['Diffusions en direct',CHAN_L]],'c')}</div></div>
@@ -528,7 +543,7 @@ V.set=()=>`<div class="stitle">Réglages</div>
   ${scard('Volume stable',choice('lc',['Activé','Désactivé'],1,'lc'),'Même niveau sonore d’une vidéo à l’autre.')}</div>
  <div class="spage" data-id="sp-1" style="opacity:0">
   ${scard('Apparence',choice('ap',['Jour','Nuit','Auto'],2,'ap'),'Auto : clair de 7 h 30 à 19 h 30, sombre le reste du temps.')}
-  ${scard('Taille de l’interface · 80 %',`<div class="btn c" data-id="sz-0">Plus petit</div><div class="btn c" data-id="sz-1">Plus grand</div>${choice('szd',['Par défaut'],0,'szd')}`,'De 60 à 120 % par pas de 5 %, appliqué tout de suite. Par défaut : 80 %, pensé pour les TV 4K.',{tid:'sz-t'})}
+  ${scard('Taille de l’interface · 100 %',`<div class="btn c" data-id="sz-0">Plus petit</div><div class="btn c" data-id="sz-1">Plus grand</div>${choice('szd',['Par défaut'],0,'szd')}`,'De 60 à 120 % par pas de 5 %, appliqué tout de suite. Par défaut : 100 %.',{tid:'sz-t'})}
   ${scard('DeArrow',choice('da',['Activé','Désactivé'],1,'da'),'Titres et miniatures de la communauté, sans racolage, quand il y en a.')}</div>
  <div class="spage" data-id="sp-2" style="opacity:0">
   ${scard('Regarder sur la TV',choice('rt',['Activé','Désactivé'],1,'rt')+`<div class="btn" data-id="pair-btn">${I.plus}Lier un téléphone</div>`,'L’app YouTube du téléphone, liée avec un code TV, envoie ses vidéos ici et sert de télécommande, quand LumenTube est ouvert.')}
@@ -536,11 +551,11 @@ V.set=()=>`<div class="stitle">Réglages</div>
  <div class="spage" data-id="sp-3" style="opacity:0">
   ${scard('Compte YouTube',`<div class="btn" data-id="so">${I.close}Se déconnecter de Moi</div>`,'Les autres comptes liés restent sur la box (« Qui regarde ? »).')}</div>
  <div class="spage" data-id="sp-4" style="opacity:0">
-  ${scard('Version installée · 1.0 bêta 1 (bêta)',`<div class="btn c" data-id="u-chk">${I.refresh}<span data-id="u-chk-l">Vérifier</span></div>`,'LumenTube vérifie une fois par jour, au démarrage.',{hid:'u-msg'})}
+  ${scard('Version installée · 1.0 bêta 2 (bêta)',`<div class="btn c" data-id="u-chk">${I.refresh}<span data-id="u-chk-l">Vérifier</span></div>`,'LumenTube vérifie une fois par jour, au démarrage.',{hid:'u-msg'})}
   ${scard('Recevoir les versions bêta',choice('ub',['Activé','Désactivé'],0,'ub'),HINT,{hid:'u-hint'})}
-  ${scard('BÊTA · 1.0 bêta 2',`<div class="btn c" data-id="u-inst"><span data-id="u-inst-l">Installer 1.0 bêta 2</span></div>`,'Lecteur : reprise plus rapide après une pause · corrections.',{cls:'hide',id:'u-found',tid:'u-ft',hid:'u-notes'})}</div>
+  ${scard('BÊTA · 1.0 bêta 3',`<div class="btn c" data-id="u-inst"><span data-id="u-inst-l">Installer 1.0 bêta 3</span></div>`,'Lecteur : reprise plus rapide après une pause · corrections.',{cls:'hide',id:'u-found',tid:'u-ft',hid:'u-notes'})}</div>
  ${codeDlg('pa','Lier un téléphone','Scanne le QR code avec le téléphone. Ou dans l’app YouTube : photo de profil › Paramètres › Regarder sur la TV › Saisir le code TV, puis tape ce code :','Ensuite, le bouton Caster du téléphone envoie les vidéos ici (quand LumenTube est ouvert) et le téléphone sert de télécommande.',cbtn('pa-1','','Fermer'),11)}`;
-V.lumen=()=>`<div class="hdr"><div class="tabs">${['Accueil','Bibliothèque','Ma liste','Jeux','Applications'].map((t,i)=>`<div class="tab ${i===0?'sel':''}" data-id="lt-${i}">${t}</div>`).join('')}</div><div class="right"><div class="rb">${I.search}</div><div class="rb av">${av('Moi',38,17)}</div><div class="rb">${I.gear}</div><div class="clock">20:45</div></div></div>
+V.lumen=()=>`<div class="hdr"><div class="lft"><div class="tabs"><div class="tin">${['Accueil','Bibliothèque','Ma liste','Jeux','Applications'].map((t,i)=>`<div class="tab ${i===0?'sel':''}" data-id="lt-${i}">${t}</div>`).join('')}</div></div><div class="rb">${I.search}</div></div><div class="right"><div class="rb av">${av('Moi',30,13)}</div><div class="rb">${I.gear}</div><div class="clock">20:45</div></div></div>
  <div class="rows"><div class="rin">${rowsOf([['À reprendre',R_RESUME],['Abonnements',R_SUBS]],'l')}</div></div>`;
 
 /* ---------- steps ---------- */
@@ -551,15 +566,15 @@ const SHOW={'max-height':'140px',opacity:'1','padding-top':'16px','padding-botto
 const HIDE={'max-height':'0px',opacity:'0','padding-top':'0px','padding-bottom':'0px','margin-bottom':'-11px'};
 const PANEL_ON={pclock:{opacity:'0'},ptitle:{right:'440px'}},PANEL_OFF={pclock:{opacity:'1'},ptitle:{right:'130px'}};
 const SCREENS=[
-{id:'accueil',title:'Accueil et sections',desc:'Une seule barre en haut : les sections en texte à gauche (« Pour toi » pour Accueil), à droite les boutons ronds en verre (Rechercher, compte, Réglages) et l’heure. Dessous, les rangées : « Reprendre », l’Accueil de YouTube, puis deux rangées de chaque fil (abonnements, Musique, Gaming, Actus, Sport, Direct).',
- notes:['Sections : Pour toi, Abonnements, Musique, Gaming, Actus, Sport, Direct, Historique, Playlists. Abonnements, Historique et Playlists seulement avec un compte connecté. Pas de « Tendances » (page retirée par YouTube).','Abonnements : une rangée par période (En direct, Bientôt, Aujourd’hui, Hier, Cette semaine, Ce mois-ci, Plus ancien). Historique : « À reprendre » puis « Déjà vues ». Les titres des autres rangées viennent de YouTube.','Cartes 16:9 de 208 dp à 80 % (5 par rangée ; 6 à 60 %, 4 à 100 %, 3 à 120 %), coins de 13 dp, titre sur 2 lignes et chaîne sur 1 à hauteur fixe : les rangées ne bougent jamais. Badge : durée, EN DIRECT (rouge) ou BIENTÔT ; trait blanc = déjà vu. Shorts exclus.','Page en erreur : message (« Pas de connexion à Internet. », « YouTube ne répond pas. Réessaie. ») et « Réessayer ». Les onglets défilent quand ils ne tiennent pas (grandes tailles, petite fenêtre).','Retour : rangées → onglets → Accueil (« Pour toi ») → ferme la petite fenêtre s’il y en a une → quitte.'],
+{id:'accueil',title:'Accueil et sections',desc:'Une seule barre en haut : les sections en texte à gauche (« Pour toi » pour Accueil), Rechercher juste après, et à droite les boutons ronds en verre de Lumen (compte, Apparence Jour / Nuit / Auto, Réglages) puis l’heure. Dessous, les rangées : « Reprendre », l’Accueil de YouTube, puis deux rangées de chaque fil (abonnements, Musique, Gaming, Actus, Sport, Direct).',
+ notes:['Sections : Pour toi, Abonnements, Musique, Gaming, Actus, Sport, Direct, Historique, Playlists. Abonnements, Historique et Playlists seulement avec un compte connecté. Pas de « Tendances » (page retirée par YouTube).','Abonnements : une rangée par période (En direct, Bientôt, Aujourd’hui, Hier, Cette semaine, Ce mois-ci, Plus ancien). Historique : « À reprendre » puis « Déjà vues ». Les titres des autres rangées viennent de YouTube.','Cartes 16:9 de 204 dp à 100 % (4 par rangée ; 6 à 60 %, 5 à 80 %, 3 à 120 %), coins de 13 dp, titre sur 2 lignes et chaîne sur 1 à hauteur fixe : les rangées ne bougent jamais. Badge : durée, EN DIRECT (rouge) ou BIENTÔT ; trait blanc = déjà vu. Shorts exclus.','Page en erreur : message (« Pas de connexion à Internet. », « YouTube ne répond pas. Réessaie. ») et « Réessayer ». Les onglets défilent quand ils ne tiennent pas (grandes tailles, petite fenêtre).','Retour : rangées → onglets → Accueil (« Pour toi ») → ferme la petite fenêtre s’il y en a une → quitte.'],
  steps:[
  {view:'home',f:null,on:['msg-load'],st:{'pg-home':{opacity:'0'}},k:'▶',t:'Lancement',n:'Un seul compte lié : pas de « Qui regarde ? ». « Chargement… » tant qu’aucune rangée n’est arrivée.'},
  {k:'⏱',t:'Rangées',f:'h0-0',on:[],st:{'pg-home':{opacity:'1'}},n:'Chaque partie de l’Accueil s’affiche dès qu’elle arrive. Focus sur la 1re carte ; « Pour toi » en gras avec une barre discrète (section en cours).'},
  {k:'▶',t:'Droite',f:'h0-1',n:'Carte prise : soulevée ×1,05, anneau doux sur le bord, ombre portée et un reflet qui la traverse.'},
- {k:'▼',t:'Bas',f:'h1-1',n:'La page ne défile pas tant que la carte visée reste entière à l’écran.'},
- {k:'▼',t:'Bas',f:'h2-1',st:{rin:{transform:'translateY(-126px)'}},n:'Défilement calme : juste assez pour la légende de la carte et 28 dp d’air sous elle.'},
- {k:'▶…',t:'Droite ×4',f:'h2-5',st:{hr2:{transform:'translateX(-224px)'}},n:'La rangée ne glisse que quand la carte sortirait de l’écran ; les autres rangées restent en place.'},
+ {k:'▼',t:'Bas',f:'h1-1',st:{rin:{transform:'translateY(-46px)'}},n:'Défilement calme : juste assez pour la légende de la carte, au-dessus de la zone sûre du bas (48 dp).'},
+ {k:'▼',t:'Bas',f:'h2-1',st:{rin:{transform:'translateY(-281px)'}},n:'Une rangée de plus : son titre reste visible sous l’en-tête, la légende de la carte au-dessus de la zone sûre.'},
+ {k:'▶…',t:'Droite ×4',f:'h2-5',st:{hr2:{transform:'translateX(-440px)'}},n:'La rangée ne glisse que quand la carte sortirait de l’écran ; les autres rangées restent en place.'},
  {k:'▲▲▲',t:'Haut ×3',f:'tab-home',st:{rin:{transform:'none'}},n:'Dans l’en-tête, on entre sur l’onglet de la section en cours : barre pleine sous le mot.'},
  {k:'▶▶▶',t:'Droite ×3',f:'tab-gaming',n:'La barre suit le focus ; « Pour toi » reste en gras, c’est la section affichée.'},
  {k:'OK',t:'Gaming',sel:{tb:'tab-gaming'},on:['msg-load'],st:{'pg-home':{opacity:'0'}},n:'OK charge Gaming mais laisse le focus sur l’onglet : on peut encore changer d’avis (Actus…).'},
@@ -567,6 +582,11 @@ const SCREENS=[
  {k:'▼',t:'Bas',f:'g0-0',n:'Bas descend sur la 1re vidéo ; la barre redevient discrète sous Gaming.'},
  {k:'B',t:'Retour',f:'tab-gaming',n:'Retour : des rangées vers les onglets.'},
  {k:'B',t:'Retour',f:'tab-home',sel:{tb:'tab-home'},st:{'pg-gaming':{opacity:'0'},'pg-home':{opacity:'1'}},n:'Retour depuis les onglets : Accueil, focus sur « Pour toi ». Retour encore : quitte l’appli.'},
+ {k:'▶…',t:'Droite ×9',f:'btn-search',st:{tin:{transform:'translateX(-121px)'}},n:'Rechercher suit directement les onglets (les onglets défilent quand ils manquent de place).'},
+ {k:'▶▶',t:'Droite ×2',f:'btn-ap',n:'Apparence : un seul bouton rond, qui montre l’actuelle (« A » : Auto).'},
+ {k:'OK',t:'Jour',st:{'ap-a':{display:'none'},'ap-d':{display:'block'}},n:'OK passe à la suivante, appliquée tout de suite : Jour → Nuit → Auto (comme Réglages › Affichage › Apparence).'},
+ {k:'OK',t:'Nuit',st:{'ap-a':{display:'none'},'ap-d':{display:'none'},'ap-n':{display:'block'}}},
+ {k:'OK',t:'Auto',st:{'ap-a':{display:'block'},'ap-d':{display:'none'},'ap-n':{display:'none'}},n:'Auto : clair de 7 h 30 à 19 h 30, sombre le reste du temps.'},
  ]},
 {id:'menu-carte',title:'Menu d’une carte',desc:'Appui long sur OK (ou touche Menu) sur une carte : ce que propose le menu « ⋮ » de YouTube. « À regarder plus tard » seulement connecté ; « Pas intéressé » et « Ne pas recommander cette chaîne » seulement sur les recommandations qui le permettent.',
  notes:['Après « Pas intéressé », la carte quitte toutes les rangées ; « Ne pas recommander cette chaîne » retire toutes les cartes de la chaîne (« Cette chaîne ne sera plus recommandée. »). Si YouTube refuse : « YouTube n’a pas pris en compte la demande. »'],
@@ -702,7 +722,7 @@ const SCREENS=[
 {id:'reglages',title:'Réglages',desc:'Bouton rond Réglages de l’en-tête. Plein écran : « Réglages » en grand, les catégories à gauche (celle qui a le focus montre sa page), une carte en verre par réglage à droite, les choix en pastilles (l’actuel coché). OK applique tout de suite.',
  notes:['Catégories : Lecture, Affichage, Téléphone, Compte (seulement connecté), Mises à jour.','Chaque page a son propre défilement.'],
  steps:[
- {view:'home',f:'btn-set',k:'▶',t:'En-tête'},
+ {view:'home',f:'btn-set',on:['udot'],k:'▶',t:'En-tête'},
  {k:'OK',t:'Réglages',view:'set',f:'sn-0',n:'Lecture : lecture automatique, SponsorBlock, volume stable.'},
  {k:'▶',t:'Droite',f:'la-0'},
  {k:'▼▶',t:'SponsorBlock',f:'lb-1'},
@@ -710,7 +730,7 @@ const SCREENS=[
  {k:'◀◀',t:'Gauche ×2',f:'sn-0',n:'Gauche revient sur la catégorie en cours.'},
  {k:'▼',t:'Affichage',f:'sn-1',sel:{sn:'sn-1'},st:{'sp-0':{opacity:'0'},'sp-1':{opacity:'1'}},n:'Apparence : Jour, Nuit ou Auto (les deux colonnes de ce storyboard). Taille de l’interface. DeArrow.'},
  {k:'▶▼▶',t:'Plus grand',f:'sz-1'},
- {k:'OK',t:'Valider',txt:{'sz-t':'Taille de l’interface · 85 %'},sel:{szd:''},n:'Appliqué tout de suite ; le pourcentage est dans le titre, les pastilles ne bougent pas sous le focus. (Ce storyboard reste dessiné à 80 %.)'},
+ {k:'OK',t:'Valider',txt:{'sz-t':'Taille de l’interface · 105 %'},sel:{szd:''},n:'Appliqué tout de suite ; le pourcentage est dans le titre, les pastilles ne bougent pas sous le focus. La zone sûre reste la même en dp de la TV : les marges suivent la taille. (Ce storyboard reste dessiné à 100 %.)'},
  {k:'◀▼▼',t:'Compte',f:'sn-3',sel:{sn:'sn-3'},st:{'sp-1':{opacity:'0'},'sp-3':{opacity:'1'}},n:'Compte : se déconnecter ; les autres comptes liés restent sur la box.'},
  {k:'B',t:'Retour',view:'home',f:'btn-set',n:'Retour ferme les Réglages.'},
  ]},
@@ -729,10 +749,10 @@ const SCREENS=[
 {id:'mises-a-jour',title:'Réglages › Mises à jour',desc:'Version installée, « Recevoir les versions bêta », et la version trouvée sur le canal public, marquée BÊTA ou STABLE. Seules les versions stables sont proposées par défaut ; une bêta installée active l’option.',
  notes:['Vérification silencieuse une fois par jour au démarrage ; si une version est trouvée, message en bas : « Mise à jour disponible : … (Réglages › Mises à jour). »','Installation refusée par Android : « Autorise LumenTube à installer des applis, puis relance l’installation. » (l’écran d’autorisation s’ouvre).','Les versions de travail s’appellent « 1.0 bêta N » ; une stable n’a pas le mot « bêta ». Android refuse toute mise à jour signée par une autre clé.'],
  steps:[
- {view:'set',f:'sn-4',sel:{sn:'sn-4'},st:{'sp-0':{opacity:'0'},'sp-4':{opacity:'1'}},k:'▶',t:'Mises à jour',n:'« Version installée · 1.0 bêta 1 (bêta) » : le nom de l’APK, suivi de « (bêta) » quand il contient « bêta ».'},
+ {view:'set',f:'sn-4',sel:{sn:'sn-4'},st:{'sp-0':{opacity:'0'},'sp-4':{opacity:'1'}},k:'▶',t:'Mises à jour',n:'« Version installée · 1.0 bêta 2 (bêta) » : le nom de l’APK, suivi de « (bêta) » quand il contient « bêta ».'},
  {k:'▶',t:'Droite',f:'u-chk'},
  {k:'OK',t:'Vérifier',txt:{'u-chk-l':'Vérification…'}},
- {k:'⏱',t:'Trouvée',txt:{'u-chk-l':'Vérifier','u-msg':'Nouvelle version : 1.0 bêta 2.'},st:{'u-found':SHOW},n:'Avec les bêtas : la plus récente des versions stable et bêta. Carte « BÊTA · 1.0 bêta 2 » avec ses notes.'},
+ {k:'⏱',t:'Trouvée',txt:{'u-chk-l':'Vérifier','u-msg':'Nouvelle version : 1.0 bêta 3.'},st:{'u-found':SHOW},n:'Avec les bêtas : la plus récente des versions stable et bêta. Carte « BÊTA · 1.0 bêta 3 » avec ses notes.'},
  {k:'▼▶',t:'Désactivé',f:'ub-1'},
  {k:'OK',t:'Valider',sel:{ub:'ub-1'},txt:{'u-chk-l':'Vérification…','u-msg':'LumenTube vérifie une fois par jour, au démarrage.','u-hint':HINT+' Tu restes sur cette bêta jusqu’à la prochaine version stable.'},st:{'u-found':HIDE},n:'Option coupée : la version trouvée disparaît et une vérification repart. L’aide précise qu’on reste sur la bêta installée.'},
  {k:'⏱',t:'À jour',txt:{'u-chk-l':'Vérifier','u-msg':'LumenTube est à jour.'},n:'Stables seulement : aucune stable plus récente.'},
@@ -829,6 +849,7 @@ document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>{speed=+b.dat
 // autoplay the section in view
 const io=new IntersectionObserver(es=>es.forEach(en=>{const p=players.find(x=>x.sec===en.target);p.visible=en.isIntersecting;if(auto)p.setPlay(p.visible)}),{threshold:.45});
 players.forEach(p=>io.observe(p.sec));
+document.getElementById('safe').onclick=e=>{const on=e.currentTarget.getAttribute('aria-pressed')!=='true';e.currentTarget.setAttribute('aria-pressed',on);stages.forEach(st=>st.classList.toggle('safe',on))};
 document.getElementById('auto').onclick=e=>{auto=!auto;e.currentTarget.setAttribute('aria-pressed',auto);players.forEach(p=>p.setPlay(auto&&p.visible))};
 // keyboard: arrows step the section nearest the top
 document.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key)||e.target.closest('input,textarea'))return;

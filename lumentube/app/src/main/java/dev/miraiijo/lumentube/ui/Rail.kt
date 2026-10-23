@@ -119,11 +119,8 @@ internal fun initialGradient(name: String): androidx.compose.ui.graphics.Brush {
 fun SignInDialog(code: String?, error: String?, onRetry: () -> Unit, onDismiss: () -> Unit) {
     LumenDialog(onDismissRequest = onDismiss) {
         val button = remember { FocusRequester() }
-        Row(
-            Modifier
-                .width(760.dp)
-                .background(Palette.Panel, DialogShape)
-                .padding(32.dp),
+        // 760 dp at most, narrower when the safe zone is (120 %): the text column gives way, not the QR code.
+        SafeDialog(SIGN_IN_WIDTH, Modifier.background(Palette.Panel, DialogShape).padding(32.dp)) { Row(
             horizontalArrangement = Arrangement.spacedBy(32.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -140,7 +137,7 @@ fun SignInDialog(code: String?, error: String?, onRetry: () -> Unit, onDismiss: 
                     when {
                         error != null -> Text(error, color = Palette.Danger, fontSize = 15.sp, lineHeight = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         code == null -> Text("Code en cours…", color = Palette.TextSecondary, fontSize = 28.sp, lineHeight = 34.sp)
-                        else -> Text(code, fontSize = 40.sp, lineHeight = 48.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp)
+                        else -> CodeText(code)
                     }
                 }
                 Text("LumenTube reste connecté ensuite. Tu peux lier plusieurs comptes et choisir lequel à l’ouverture.", color = Palette.TextSecondary, fontSize = 13.sp)
@@ -153,7 +150,7 @@ fun SignInDialog(code: String?, error: String?, onRetry: () -> Unit, onDismiss: 
                 // YouTube's activation link with the code in it: the phone lands on the confirmation.
                 if (code != null && error == null) QrCode(QR_SIGN_IN_URL + code.trim().replace(' ', '-'), Modifier.fillMaxSize().padding(14.dp))
             }
-        }
+        } }
         // At opening, and after "Réessayer" (it goes away with the error, focus and all): "Annuler".
         LaunchedEffect(error == null) {
             withFrameNanos { }
@@ -164,6 +161,32 @@ fun SignInDialog(code: String?, error: String?, onRetry: () -> Unit, onDismiss: 
 
 /** The code's line in the sign-in and pairing dialogs (the 40 sp code on a 48 sp line). */
 internal val CODE_SLOT = 52.dp
+
+/** The sign-in and pairing dialogs' widest (SafeDialog caps it to the safe zone). */
+internal val SIGN_IN_WIDTH = 760.dp
+
+/**
+ * A sign-in / pairing code, always on one line: 40 sp, a few sp smaller at a time (down to 24)
+ * while it doesn't fit its column (a narrow dialog at 120 %, a long code).
+ */
+@Composable
+internal fun CodeText(code: String) {
+    var size by remember(code) { mutableStateOf(CODE_SIZE) }
+    Text(
+        code,
+        fontSize = size,
+        lineHeight = size * 1.2f,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = size * 0.1f,
+        maxLines = 1,
+        softWrap = false,
+        overflow = TextOverflow.Clip,
+        onTextLayout = { if (it.hasVisualOverflow && size.value > CODE_MIN_SIZE.value) size = maxOf(size.value - 4f, CODE_MIN_SIZE.value).sp },
+    )
+}
+
+private val CODE_SIZE = 40.sp
+private val CODE_MIN_SIZE = 24.sp
 
 /** Same address as SmartTube's QR sign-in. */
 private const val QR_SIGN_IN_URL = "https://youtube.com/qr/activate/"
@@ -214,15 +237,15 @@ fun ProfileDialog(
             }
         }
         Column(
-            Modifier.fillMaxSize().lumenBackground(),
+            Modifier.fillMaxSize().lumenBackground().safePadding(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
             Text("Qui regarde ?", fontSize = 44.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.03).em, color = Palette.TextPrimary)
             Spacer(Modifier.height(40.dp))
             Row(
-                // Side margins: at 120 % (an ~800 dp wide screen) the tiles, ring and zoom stay off the edges.
-                Modifier.padding(horizontal = Dimens.Gutter).widthIn(max = 880.dp).horizontalScroll(rememberScrollState()),
+                // The safe zone (the column's padding) keeps the tiles, ring and zoom off the edges.
+                Modifier.widthIn(max = 880.dp).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(40.dp),
             ) {
                 // The current account first takes the focus.
@@ -245,7 +268,7 @@ fun ProfileDialog(
                 }
             }
             Spacer(Modifier.height(36.dp))
-            Text("Le compte change ton Accueil, tes abonnements, ton historique et le flux de Lumen.", fontSize = 12.sp, color = Palette.TextSecondary)
+            Text("Le compte change ton Accueil, tes abonnements, ton historique et le flux de Lumen.", fontSize = Dimens.TextMin, color = Palette.TextSecondary)
         }
         LaunchedEffect(Unit) {
             withFrameNanos { }
@@ -295,7 +318,7 @@ private fun ProfileTile(name: String, caption: String?, modifier: Modifier, onCl
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = 7.dp),
         )
-        Text(caption.orEmpty(), fontSize = 12.sp, color = Palette.TextSecondary, maxLines = 1, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 2.dp).height(16.dp))
+        Text(caption.orEmpty(), fontSize = Dimens.TextMin, color = Palette.TextSecondary, maxLines = 1, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 2.dp).height(18.dp))
     }
 }
 
@@ -337,7 +360,7 @@ fun SettingsDialog(
         }
         var page by remember { mutableStateOf(SettingsPage.PLAYBACK) }
         val pages = SettingsPage.entries.filter { it != SettingsPage.ACCOUNT || accountName != null }
-        Column(Modifier.fillMaxSize().lumenBackground().padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 32.dp, bottom = 32.dp)) {
+        Column(Modifier.fillMaxSize().lumenBackground().safePadding()) {
             Text("Réglages", fontSize = 44.sp, lineHeight = 50.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.03).em, color = Palette.TextPrimary)
             Row(Modifier.weight(1f).padding(top = 22.dp), horizontalArrangement = Arrangement.spacedBy(22.dp)) {
                 Column(
@@ -389,7 +412,7 @@ fun SettingsDialog(
                             }
                             // The size in the title: the pills never move under the focus as it changes.
                             val size = settings.uiScale
-                            SettingCard("Taille de l’interface · $size %", "De $UI_SCALE_MIN à $UI_SCALE_MAX % par pas de $UI_SCALE_STEP %, appliqué tout de suite. Par défaut : $UI_SCALE_DEFAULT %, pensé pour les TV 4K.") {
+                            SettingCard("Taille de l’interface · $size %", "De $UI_SCALE_MIN à $UI_SCALE_MAX % par pas de $UI_SCALE_STEP %, appliqué tout de suite. Par défaut : $UI_SCALE_DEFAULT %.") {
                                 LumenButton("Plus petit", contentColor = Palette.ChipText) { onSettings(settings.copy(uiScale = (size - UI_SCALE_STEP).coerceAtLeast(UI_SCALE_MIN))) }
                                 LumenButton("Plus grand", contentColor = Palette.ChipText) { onSettings(settings.copy(uiScale = (size + UI_SCALE_STEP).coerceAtMost(UI_SCALE_MAX))) }
                                 Choice("Par défaut", size == UI_SCALE_DEFAULT) { onSettings(settings.copy(uiScale = UI_SCALE_DEFAULT)) }
@@ -505,7 +528,7 @@ private fun SettingCard(title: String, help: String, choices: @Composable () -> 
     ) {
         Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Palette.TextPrimary)
         Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) { choices() }
-        Text(help, fontSize = 11.sp, color = if (Palette.colors.isLight) Palette.TextSecondary else SETTINGS_HELP_NIGHT, modifier = Modifier.padding(top = 8.dp))
+        Text(help, fontSize = Dimens.TextMin, color = if (Palette.colors.isLight) Palette.TextSecondary else SETTINGS_HELP_NIGHT, modifier = Modifier.padding(top = 8.dp))
     }
 }
 
@@ -519,7 +542,7 @@ private fun Choice(label: String, selected: Boolean, onClick: () -> Unit) =
 
 @Composable
 internal fun SectionLabel(text: String) {
-    Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary, modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 2.dp))
+    Text(text, fontSize = Dimens.TextMin, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary, modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = 2.dp))
 }
 
 private val PROFILE_AVATAR = 110.dp

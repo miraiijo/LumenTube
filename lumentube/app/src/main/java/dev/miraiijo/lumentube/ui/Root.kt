@@ -169,6 +169,13 @@ fun Root(vm: MainViewModel) {
                 onAccount = vm::openAccounts,
                 onSettings = vm::openSettings,
                 onRestorePlayer = vm::restore,
+                appearance = state.settings.appearance,
+                // Jour → Nuit → Auto → Jour (0 = Auto, 1 = Jour, 2 = Nuit).
+                onAppearance = {
+                    val next = when (state.settings.appearance) { 1 -> 2; 2 -> 0; else -> 1 }
+                    vm.updateSettings(state.settings.copy(appearance = next))
+                },
+                updateFound = state.update.found,
             )
         }
         Box(
@@ -324,8 +331,8 @@ fun Root(vm: MainViewModel) {
                 },
                 modifier = if (state.minimized) {
                     // A third of the screen's width, whatever the interface size (a fixed 400 dp
-                    // took half the screen at 120 %).
-                    Modifier.align(Alignment.BottomEnd).padding(end = 32.dp, bottom = 32.dp).fillMaxWidth(MINI_FRACTION).aspectRatio(16f / 9f).shadow(30.dp)
+                    // took half the screen at 120 %), inside the TV's safe zone.
+                    Modifier.align(Alignment.BottomEnd).padding(end = SafeArea.side, bottom = SafeArea.bottom).fillMaxWidth(MINI_FRACTION).aspectRatio(16f / 9f).shadow(30.dp)
                 } else {
                     Modifier.fillMaxSize()
                 },
@@ -333,9 +340,9 @@ fun Root(vm: MainViewModel) {
         }
         // With the small window in the bottom right corner, the notice moves to the bottom left.
         if (playingId != null && state.minimized) {
-            Notice(state.notice, Modifier.align(Alignment.BottomStart).padding(start = Dimens.Gutter, bottom = 40.dp))
+            Notice(state.notice, Modifier.align(Alignment.BottomStart).padding(start = SafeArea.side, bottom = SafeArea.bottom))
         } else {
-            Notice(state.notice, Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp))
+            Notice(state.notice, Modifier.align(Alignment.BottomCenter).padding(bottom = SafeArea.bottom))
         }
     }
     LaunchedEffect(returnFocusTick) {

@@ -108,7 +108,7 @@ fun SearchPage(
         bar.tryRequestFocus()
     }
     Column(Modifier.fillMaxSize()) {
-        SearchBar(query, bar, belowBar, ::search, onTyping, Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 32.dp), chipFocused = { chipsHaveFocus }, dictate = dictate, onDictated = onDictated)
+        SearchBar(query, bar, belowBar, ::search, onTyping, Modifier.padding(start = Dimens.Gutter, end = Dimens.Gutter, top = SafeArea.top), chipFocused = { chipsHaveFocus }, dictate = dictate, onDictated = onDictated)
         // One line under the bar: the suggestions while typing, else the filters. It scrolls only
         // when the focused pill would leave it (TV's default pivot moved it on every step).
         EdgeScroll(Dimens.Gutter) { Row(

@@ -109,6 +109,8 @@ private fun seekSpeed(repeatCount: Int) = when {
 private val BUTTON_GAP = 10.dp
 /** Room kept on the right of the title: the clock, or the open panel (settings: 400 dp). */
 private val PANEL_CLEARANCE = 440.dp
+/** The controls' bar and buttons above their bottom inset (the skip notice sits over them). */
+private val CONTROLS_HEIGHT = 108.dp
 private val CLOCK_CLEARANCE = 130.dp
 /** The progress bar's handle when focused, and its halo. */
 private val HANDLE = 14.dp
@@ -839,7 +841,8 @@ fun PlayerScreen(
             visible = skipNotice != null && !minimized && preview == null,
             enter = fadeIn(),
             exit = fadeOut(tween(400)),
-            modifier = Modifier.align(Alignment.BottomStart).padding(start = Dimens.Gutter, bottom = if (controls) 136.dp else if (seekLineShown) seekLineTop else 28.dp),
+            // Above the controls: their bottom inset (the safe zone) + bar and buttons (108 dp).
+            modifier = Modifier.align(Alignment.BottomStart).padding(start = SafeArea.side, bottom = if (controls) SafeArea.bottom + CONTROLS_HEIGHT else if (seekLineShown) seekLineTop else SafeArea.bottom),
         ) {
             Text(
                 skipNotice.orEmpty(),
@@ -912,7 +915,7 @@ fun PlayerScreen(
                 streamInfo = streamInfo,
                 formatsMs = formatsMs,
                 firstFrameMs = firstFrameMs,
-                modifier = Modifier.align(Alignment.TopStart).padding(top = 28.dp, start = Dimens.Gutter).widthIn(max = 340.dp),
+                modifier = Modifier.align(Alignment.TopStart).padding(top = SafeArea.top, start = SafeArea.side).widthIn(max = 340.dp),
             )
         }
 
@@ -921,7 +924,7 @@ fun PlayerScreen(
                 next,
                 onPlay = { onNext(next) },
                 onCancel = onExit,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 32.dp, bottom = 32.dp),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = SafeArea.side, bottom = SafeArea.bottom),
             )
         }
 
@@ -951,10 +954,12 @@ fun PlayerScreen(
         if (error != null && minimized) {
             Text("Lecture impossible", fontSize = 14.sp, color = Color.White, modifier = Modifier.align(Alignment.Center))
         } else if (error != null) {
-            // A veil over the video, the box on it (its width capped: a long message wraps).
+            // A veil over the video, the box on it (its width capped: a long message wraps; inside
+            // the safe zone, scrolling rather than overflowing at 120 %).
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)))
-            Column(
-                Modifier.align(Alignment.Center).widthIn(max = 560.dp).background(Palette.Panel.copy(alpha = 0.95f), DialogShape).padding(28.dp),
+            SafeDialog(
+                560.dp,
+                Modifier.background(Palette.Panel.copy(alpha = 0.95f), DialogShape).padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
@@ -1047,7 +1052,7 @@ private fun Controls(
             Box(
                 Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 26.dp, end = Dimens.Gutter)
+                    .padding(top = SafeArea.top, end = SafeArea.side)
                     .height(with(androidx.compose.ui.platform.LocalDensity.current) { 23.sp.toDp() }),
                 contentAlignment = Alignment.CenterEnd,
             ) { Clock() }
@@ -1059,7 +1064,7 @@ private fun Controls(
             Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopStart)
-                .padding(start = Dimens.Gutter, top = 26.dp, end = if (panelOpen) PANEL_CLEARANCE else CLOCK_CLEARANCE),
+                .padding(start = SafeArea.side, top = SafeArea.top, end = if (panelOpen) PANEL_CLEARANCE else CLOCK_CLEARANCE),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(title, fontSize = 18.sp, lineHeight = 23.sp, fontWeight = FontWeight.SemiBold, color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -1070,7 +1075,7 @@ private fun Controls(
                 if (live) {
                     Text(
                         "EN DIRECT",
-                        fontSize = 11.sp,
+                        fontSize = Dimens.TextMin,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         modifier = Modifier.background(Palette.Live, RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 2.dp),
@@ -1095,7 +1100,7 @@ private fun Controls(
 
         // Bottom: the progress bar, the buttons and the time, nothing else.
         Column(
-            Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(horizontal = Dimens.Gutter, vertical = 28.dp),
+            Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(start = SafeArea.side, end = SafeArea.side, top = 28.dp, bottom = SafeArea.bottom),
         ) {
             if (barShown) {
                 // Seek preview: the picture at the aimed position, above the bar.
@@ -1326,7 +1331,7 @@ private fun UpNextCard(next: Video, onPlay: () -> Unit, onCancel: () -> Unit, mo
         }
         // 12 + 144 + 14 + 198 + 12 = 380 dp (the redesign).
         Column(Modifier.width(198.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text("À suivre · $seconds s", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary)
+            Text("À suivre · $seconds s", fontSize = Dimens.TextMin, fontWeight = FontWeight.SemiBold, color = Palette.TextSecondary)
             Text(next.title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 18.sp, color = Palette.TextPrimary)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
                 LumenButton("Lire", modifier = Modifier.focusRequester(playNow), onClick = onPlay)
@@ -1406,7 +1411,7 @@ private fun SeekLine(position: Long, duration: Long, buffered: Long, storyboard:
             .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)))),
         contentAlignment = Alignment.BottomCenter,
     ) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = Dimens.Gutter, vertical = 28.dp)) {
+        Column(Modifier.fillMaxWidth().padding(start = SafeArea.side, end = SafeArea.side, top = 28.dp, bottom = SafeArea.bottom)) {
             // The picture at the target, above its place on the bar.
             if (storyboard != null && duration > 0) {
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -1483,8 +1488,8 @@ private fun StatsOverlay(player: LumenPlayer, videoId: String, streamInfo: Strin
     ) {
         lines.forEach { (label, value) ->
             Row {
-                Text(label, fontSize = 12.sp, color = Color.White.copy(alpha = 0.65f), modifier = Modifier.width(120.dp))
-                Text(value, fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(label, fontSize = Dimens.TextMin, color = Color.White.copy(alpha = 0.65f), modifier = Modifier.width(120.dp))
+                Text(value, fontSize = Dimens.TextMin, color = Color.White, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }

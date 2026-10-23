@@ -56,11 +56,9 @@ fun CardMenuDialog(
 ) {
     LumenDialog(onDismissRequest = onDismiss) {
         val first = remember { FocusRequester() }
-        Column(
-            Modifier
-                .width(520.dp)
-                .background(Palette.Panel, DialogShape)
-                .padding(24.dp),
+        SafeDialog(
+            520.dp,
+            Modifier.background(Palette.Panel, DialogShape).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 10.dp)) {
@@ -98,11 +96,7 @@ fun PairingDialog(pairing: Pairing, onRetry: () -> Unit, onDismiss: () -> Unit) 
     LumenDialog(onDismissRequest = onDismiss) {
         val button = remember { FocusRequester() }
         // Like the sign-in: the text and the code on the left, the QR code on the right.
-        Row(
-            Modifier
-                .width(760.dp)
-                .background(Palette.Panel, DialogShape)
-                .padding(32.dp),
+        SafeDialog(SIGN_IN_WIDTH, Modifier.background(Palette.Panel, DialogShape).padding(32.dp)) { Row(
             horizontalArrangement = Arrangement.spacedBy(32.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -119,7 +113,7 @@ fun PairingDialog(pairing: Pairing, onRetry: () -> Unit, onDismiss: () -> Unit) 
                     when {
                         pairing.error != null -> Text(pairing.error, color = Palette.Danger, fontSize = 15.sp, lineHeight = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         pairing.code == null -> Text("Code en cours…", color = Palette.TextSecondary, fontSize = 28.sp, lineHeight = 34.sp)
-                        else -> Text(pairing.code, fontSize = 40.sp, lineHeight = 48.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp, maxLines = 1)
+                        else -> CodeText(pairing.code)
                     }
                 }
                 Text(
@@ -138,7 +132,7 @@ fun PairingDialog(pairing: Pairing, onRetry: () -> Unit, onDismiss: () -> Unit) 
                 val digits = pairing.code?.filter(Char::isDigit).orEmpty()
                 if (pairing.error == null && digits.isNotEmpty()) QrCode(QR_PAIR_URL + digits, Modifier.fillMaxSize().padding(14.dp))
             }
-        }
+        } }
         // At opening, and after "Réessayer" (it goes away with the error, focus and all): "Fermer".
         LaunchedEffect(pairing.error == null) {
             withFrameNanos { }

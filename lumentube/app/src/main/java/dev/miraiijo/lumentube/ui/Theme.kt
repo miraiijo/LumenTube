@@ -1,10 +1,12 @@
 package dev.miraiijo.lumentube.ui
 
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -171,7 +173,7 @@ private fun isDaytime(): Boolean {
 
 private const val DAY_START_MIN = 7 * 60 + 30
 /** "Taille de l'interface", in %: from [UI_SCALE_MIN] to [UI_SCALE_MAX] by [UI_SCALE_STEP]. */
-const val UI_SCALE_DEFAULT = 80
+const val UI_SCALE_DEFAULT = 100
 const val UI_SCALE_MIN = 60
 const val UI_SCALE_MAX = 120
 const val UI_SCALE_STEP = 5
@@ -207,19 +209,38 @@ fun LumenTubeTheme(appearance: Appearance = Appearance.NIGHT, uiScale: Int = UI_
         // tv-material's Text takes LocalContentColor, black by default outside a Surface: without
         // this, every Text with no explicit color (row titles, the sheet's title) is black on black.
         // "Taille de l'interface": everything drawn at uiScale % — dp and sp alike, dialogs included
-        // (80 % by default, so a 4K TV shows more room around smaller elements).
+        // (100 % by default). The safe zone ([Safe]) is not scaled: it's given back in scaled dp.
         val density = androidx.compose.ui.platform.LocalDensity.current
         val scale = uiScale.coerceIn(UI_SCALE_MIN, UI_SCALE_MAX) / 100f
         val scaled = androidx.compose.runtime.remember(density, scale) {
             androidx.compose.ui.unit.Density(density.density * scale, density.fontScale)
         }
+        val safe = androidx.compose.runtime.remember(scale) { safeInsets(scale) }
         CompositionLocalProvider(
             LocalContentColor provides Palette.TextPrimary,
             androidx.compose.ui.platform.LocalDensity provides scaled,
+            LocalSafe provides safe,
             content = content,
         )
     }
 }
+
+/**
+ * TV overscan safe zone, in system dp (the screen's own: 960 × 540 on the Freebox Player POP),
+ * whatever "Taille de l'interface". Read it through [LocalSafe] (in the current, scaled dp).
+ */
+object Safe {
+    val Side = 48.dp
+    val Top = 32.dp
+    val Bottom = 48.dp
+}
+
+/** [Safe] at a UI scale: 48 system dp are 48 / scale dp once the density is scaled. */
+private fun safeInsets(scale: Float): PaddingValues =
+    PaddingValues(start = Safe.Side / scale, top = Safe.Top / scale, end = Safe.Side / scale, bottom = Safe.Bottom / scale)
+
+/** The safe zone in the current dp (provided by [LumenTubeTheme], again in [LumenDialog]). */
+val LocalSafe = staticCompositionLocalOf { safeInsets(1f) }
 
 /** Shared measurements: one set of radii, heights and font sizes for the whole app. */
 object Dimens {
@@ -257,10 +278,11 @@ val DialogShape = RoundedCornerShape(Dimens.RadiusDialog)
 @Composable
 fun LumenDialog(onDismissRequest: () -> Unit, content: @Composable () -> Unit) {
     val density = androidx.compose.ui.platform.LocalDensity.current
+    val safe = LocalSafe.current
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismissRequest,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides density, content = content)
+        CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides density, LocalSafe provides safe, content = content)
     }
 }

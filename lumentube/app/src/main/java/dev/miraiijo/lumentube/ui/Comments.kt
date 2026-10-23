@@ -157,21 +157,19 @@ fun CommentsPanel(commentsKey: String, modifier: Modifier = Modifier) {
         }
     }
 
-    Column(
+    // To the screen's edges, its content in the safe zone (the last comment above the bottom inset).
+    SafeSidePanel(
+        PANEL_WIDTH,
         modifier
-            .width(PANEL_WIDTH)
-            .fillMaxHeight()
-            .background(Palette.Panel.copy(alpha = 0.97f))
             // The focus stays in the panel until Back closes it.
             .focusProperties { exit = { FocusRequester.Cancel } }
-            .focusGroup()
-            .padding(start = 20.dp, end = 20.dp, top = 32.dp),
-    ) {
+            .focusGroup(),
+    ) { bottom ->
         Text("Commentaires", fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 12.dp, bottom = 12.dp))
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(4.dp),
-            contentPadding = PaddingValues(bottom = 32.dp),
+            contentPadding = bottom,
         ) {
             itemsIndexed(lines, key = { _, line -> line.key }) { index, line ->
                 // The end of the list is near: the next page.

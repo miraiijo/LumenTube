@@ -51,12 +51,14 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import dev.miraiijo.lumentube.data.Section
+import dev.miraiijo.lumentube.update.Updater
 import kotlinx.coroutines.delay
 
 /**
- * The redesign's header (Lumen's): the section's name in large, the sections as tabs under it, and
- * on the right the round buttons (search, account, settings) above the time and, with a video in
- * the small window, "Lecture en cours". Replaces the side menu. OK on a tab opens that section.
+ * The redesign's header (Lumen's bar): the sections as tabs with Recherche right after them, and
+ * on the right ("Lecture en cours" with a video in the small window) the account, the appearance
+ * (Jour / Nuit / Auto: OK goes to the next one), Réglages (a red dot: an update is available) and
+ * the time right-most. Replaces the side menu. OK on a tab opens that section.
  */
 @Composable
 fun TopHeader(
@@ -71,6 +73,11 @@ fun TopHeader(
     onAccount: () -> Unit,
     onSettings: () -> Unit,
     onRestorePlayer: () -> Unit,
+    /** "Apparence" (0 = Auto, 1 = Jour, 2 = Nuit) and OK on its button: the next one. */
+    appearance: Int = 0,
+    onAppearance: () -> Unit = {},
+    /** An update was found (Réglages › Mises à jour): a red dot on Réglages. */
+    updateFound: Updater.UpdateInfo? = null,
     /** Incremented when a section is shown from the tabs: the focus goes (stays) on its tab. */
     tabFocusTick: Int = 0,
 ) {
@@ -90,30 +97,35 @@ fun TopHeader(
             // "Lecture en cours" with a video in the small window (Back then OK: full screen again).
             .focusProperties { enter = { if (minimized) playerButton else if (section in sections) requesters.getValue(section) else FocusRequester.Default } }
             .focusGroup()
-            .padding(start = Dimens.Gutter, end = Dimens.Gutter, top = 22.dp, bottom = 14.dp),
+            // The bar's top in the TV's safe zone (system dp, whatever the interface size).
+            .padding(start = Dimens.Gutter, end = Dimens.Gutter, top = SafeArea.top, bottom = 14.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Opale: one bar. The sections on the left (no big title), then the round glass buttons
-        // and the time right-most, all on one line.
-        // The tabs scroll when they don't fit (signed in, 9 tabs, from ~95 %): before, the last
-        // ones were squeezed to nothing and the focus went invisible on them.
-        Box(Modifier.weight(1f)) {
-            EdgeScroll(TAB_MARGIN) {
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(TAB_GAP)) {
-                    sections.forEach { item ->
-                        Tab(
-                            label = if (item == Section.HOME) "Pour toi" else item.label,
-                            current = item == section,
-                            modifier = Modifier.focusRequester(requesters.getValue(item)),
-                            onClick = { onSection(item) },
-                        )
+        // Opale: one bar, as in Lumen. The sections on the left (no big title) and Recherche right
+        // after them; the round glass buttons and the time right-most, all on one line.
+        Row(Modifier.weight(1f, fill = false), horizontalArrangement = Arrangement.spacedBy(TAB_GAP), verticalAlignment = Alignment.CenterVertically) {
+            // The tabs scroll when they don't fit (signed in, 9 tabs, from ~95 %): before, the last
+            // ones were squeezed to nothing and the focus went invisible on them.
+            Box(Modifier.weight(1f, fill = false)) {
+                EdgeScroll(TAB_MARGIN) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(TAB_GAP)) {
+                        sections.forEach { item ->
+                            Tab(
+                                label = if (item == Section.HOME) "Pour toi" else item.label,
+                                current = item == section,
+                                modifier = Modifier.focusRequester(requesters.getValue(item)),
+                                onClick = { onSection(item) },
+                            )
+                        }
                     }
                 }
             }
+            RoundButton(onClick = { onSection(Section.SEARCH) }) { Icon(LumenIcon.SEARCH, size = HEADER_ICON) }
         }
         Row(
             Modifier.padding(start = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (minimized) {
@@ -125,9 +137,22 @@ fun TopHeader(
                     onClick = onRestorePlayer,
                 )
             }
-            RoundButton(onClick = { onSection(Section.SEARCH) }) { Icon(LumenIcon.SEARCH, size = 16.dp) }
-            RoundButton(onClick = onAccount, filled = false) { AvatarPicture(accountAvatar, accountName, HEADER_BUTTON, 17.sp) }
-            RoundButton(onClick = onSettings) { Icon(LumenIcon.SETTINGS, size = 16.dp) }
+            RoundButton(onClick = onAccount, filled = false) { AvatarPicture(accountAvatar, accountName, HEADER_BUTTON, 13.sp) }
+            // One button for the three looks: it shows the current one (sun, moon, "A").
+            RoundButton(onClick = onAppearance) {
+                when (appearance) {
+                    1 -> Icon(LumenIcon.SUN, size = HEADER_ICON)
+                    2 -> Icon(LumenIcon.MOON, size = HEADER_ICON)
+                    else -> Text("A", fontSize = Dimens.TextMin, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            // Réglages, with Lumen's red dot when an update is waiting (drawn over the button's corner).
+            Box(Modifier.size(HEADER_BUTTON)) {
+                RoundButton(onClick = onSettings) { Icon(LumenIcon.SETTINGS, size = HEADER_ICON) }
+                if (updateFound != null) {
+                    Box(Modifier.align(Alignment.TopEnd).size(UPDATE_DOT).background(Palette.Live, CircleShape))
+                }
+            }
             // The time right-most, as in Lumen.
             HeaderClock(Modifier.padding(start = 2.dp))
         }
@@ -216,7 +241,7 @@ private fun HeaderClock(modifier: Modifier = Modifier) {
         }
     }
     // Tabular figures: every digit as wide, so the round buttons don't shift each minute.
-    Text(time, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextPrimary, style = androidx.tv.material3.LocalTextStyle.current.copy(fontFeatureSettings = "tnum"), modifier = modifier)
+    Text(time, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Palette.TextPrimary, style = androidx.tv.material3.LocalTextStyle.current.copy(fontFeatureSettings = "tnum"), modifier = modifier)
 }
 
 /**
@@ -232,7 +257,10 @@ fun Modifier.lumenBackground(): Modifier = drawBehind {
     drawRect(Brush.radialGradient(listOf(colors.glowCool, Color.Transparent), center = Offset(0f, size.height), radius = size.width * GLOW_COOL_RADIUS))
 }
 
-private val HEADER_BUTTON = 38.dp
+/** Lumen's bar: 30 dp round glass buttons, 14 dp icons, 10 dp apart (Dimens.PillGap). */
+private val HEADER_BUTTON = 30.dp
+private val HEADER_ICON = 14.dp
+private val UPDATE_DOT = 7.dp
 /** Tabs as text: the gap between two words, and the bar under the focused / current one. */
 private val TAB_GAP = 28.dp
 private val TAB_BAR = 3.dp

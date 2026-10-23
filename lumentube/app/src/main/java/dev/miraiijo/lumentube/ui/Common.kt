@@ -5,7 +5,20 @@ package dev.miraiijo.lumentube.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -89,6 +102,70 @@ private class MarginSpec(private val start: Float, private val end: Float) : Bri
         }
     }
 }
+
+/** The safe zone's sides in the current dp ([LocalSafe]), for one-sided paddings. */
+object SafeArea {
+    val side: Dp
+        @Composable @ReadOnlyComposable get() = LocalSafe.current.calculateStartPadding(LayoutDirection.Ltr)
+    val top: Dp
+        @Composable @ReadOnlyComposable get() = LocalSafe.current.calculateTopPadding()
+    val bottom: Dp
+        @Composable @ReadOnlyComposable get() = LocalSafe.current.calculateBottomPadding()
+}
+
+/** Keeps the content inside the TV's safe zone (all four sides). */
+@Composable
+fun Modifier.safePadding(): Modifier = padding(LocalSafe.current)
+
+/**
+ * A dialog's panel, centred inside the safe zone: [width] at most (narrower on a small or scaled
+ * screen), never taller than the safe zone (its content scrolls instead). [modifier] is the
+ * panel's own (background, inner padding), applied inside the width cap, outside the scroll.
+ */
+@Composable
+fun SafeDialog(
+    width: Dp,
+    modifier: Modifier = Modifier,
+    horizontalAlignment: Alignment.Horizontal = Alignment.Start,
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    // The padded Box already bounds the height: no BoxWithConstraints (a subcomposition) needed.
+    Box(Modifier.fillMaxSize().safePadding(), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier.widthIn(max = width).then(modifier).verticalScroll(rememberScrollState()),
+            horizontalAlignment = horizontalAlignment,
+            verticalArrangement = verticalArrangement,
+            content = content,
+        )
+    }
+}
+
+/**
+ * The player's side panels (settings, comments): the background runs to the screen's right, top
+ * and bottom edges, the content stays in the safe zone (end and top padded); the list inside gets
+ * the bottom inset as content padding ([content]'s argument), and the focused line is never
+ * scrolled into it.
+ */
+@Composable
+fun SafeSidePanel(width: Dp, modifier: Modifier = Modifier, content: @Composable ColumnScope.(bottom: PaddingValues) -> Unit) {
+    val safe = LocalSafe.current
+    val bottom = safe.calculateBottomPadding()
+    val density = LocalDensity.current
+    val spec = remember(density, bottom) { with(density) { MarginSpec(0f, bottom.toPx()) } }
+    Column(
+        modifier
+            .width(width)
+            .fillMaxHeight()
+            .background(Palette.Panel.copy(alpha = 0.97f))
+            .padding(start = PANEL_INNER, end = safe.calculateEndPadding(LayoutDirection.Ltr), top = safe.calculateTopPadding()),
+    ) {
+        CompositionLocalProvider(LocalBringIntoViewSpec provides spec) { this@Column.content(PaddingValues(bottom = bottom)) }
+    }
+}
+
+/** A side panel's inner margin on the video's side. */
+private val PANEL_INNER = 20.dp
 
 /**
  * Page rows: the column only scrolls when the focused card would leave the screen, keeping its row
