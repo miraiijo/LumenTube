@@ -306,6 +306,13 @@ fun Root(vm: MainViewModel) {
         // The video plays over the pages (they stay composed: Back returns to the same card).
         val playing = state.playing
         val playingId = state.playingId ?: playing?.videoId
+        // "Fréquence d'affichage automatique": one for all the videos that follow each other (no
+        // switch between equivalent rates); the TV's own mode comes back once no video plays.
+        val activity = androidx.compose.ui.platform.LocalContext.current.findActivity()
+        val frameRate = remember(activity) { activity?.let { dev.miraiijo.lumentube.player.AutoFrameRate(it) } }
+        androidx.compose.runtime.DisposableEffect(frameRate, playingId != null) {
+            onDispose { frameRate?.reset() }
+        }
         if (playingId != null) {
             // One player screen per video: everything (PlayerView, subtitle output, listeners) starts
             // fresh for the next one ("À suivre" included).
@@ -333,6 +340,7 @@ fun Root(vm: MainViewModel) {
                     returnFocusTick++
                 },
                 onPosition = { seconds -> vm.notePosition(playingId, seconds) },
+                frameRate = frameRate,
                 modifier = if (state.minimized) {
                     // A third of the screen's width, whatever the interface size (a fixed 400 dp
                     // took half the screen at 120 %), inside the TV's safe zone.
@@ -388,4 +396,11 @@ private fun resumeSeconds(video: dev.miraiijo.lumentube.data.Video): Int {
     if (saved > 0) return saved
     val percent = video.watchedPercent
     return if (percent in 3..94 && video.durationMs > 0) (video.durationMs / 1000 * percent / 100).toInt() else 0
+}
+
+/** The activity behind a Compose context (null if there is none). */
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

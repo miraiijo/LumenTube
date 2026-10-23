@@ -47,6 +47,11 @@ class PlayerPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_STATS, false)
         set(value) = prefs.edit().putBoolean(KEY_STATS, value).apply()
 
+    /** "Fréquence d'affichage automatique": the TV follows the video's frame rate (off by default: HDMI blank at each switch). */
+    var autoFrameRate: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_FRAME_RATE, false)
+        set(value) = prefs.edit().putBoolean(KEY_AUTO_FRAME_RATE, value).apply()
+
     /** "Regarder sur la TV": a linked phone can send videos and drive the player (off until a phone is linked). */
     var remote: Boolean
         get() = prefs.getBoolean(KEY_REMOTE, false)
@@ -82,6 +87,7 @@ class PlayerPrefs(context: Context) {
         const val KEY_DEARROW = "dearrow"
         const val KEY_PICTURE_FORMAT = "picture_format"
         const val KEY_STATS = "stats"
+        const val KEY_AUTO_FRAME_RATE = "auto_frame_rate"
         const val KEY_REMOTE = "remote"
         const val KEY_APPEARANCE = "appearance"
         const val KEY_LARGE_UI = "large_ui"

@@ -512,7 +512,7 @@ V.player=()=>`<div class="scene full" data-id="vid" style="--h:30"></div>
  <div class="ovl from-r tg pmenu" data-id="pm-main"><h4>Réglages</h4>
   <div class="mhd">LECTURE</div>${mrow('pm-0','Qualité','Auto · 1080p60',{sub:1,vid:'pmv-0'})}${mrow('pm-1','Sous-titres','Désactivés',{sub:1})}${mrow('pm-2','Vitesse','Normale',{sub:1})}${mrow('pm-3','Format de l’image','Image entière',{sub:1})}
   <div class="mhd">VIDÉO ET CHAÎNE</div>${mrow('pm-4','À regarder plus tard',null)}${mrow('pm-5','Voir la chaîne','Cuisine du Dimanche')}${mrow('pm-6','S’abonner','Cuisine du Dimanche')}
-  <div class="mhd">OPTIONS</div>${mrow('pm-7','SponsorBlock','Activé')}${mrow('pm-8','Statistiques pour les curieux','Masquées',{vid:'pmv-8'})}</div>
+  <div class="mhd">OPTIONS</div>${mrow('pm-7','SponsorBlock','Activé')}${mrow('pm-8','Statistiques pour les curieux','Masquées',{vid:'pmv-8'})}<div data-grp="afr">${mrow('pm-9','Fréquence d’affichage automatique',null)}</div></div>
  <div class="ovl from-r tg pmenu" data-id="pm-q"><h4>Qualité</h4><div data-grp="qs">${mrow('q-0','Auto','selon la connexion et la box',{sel:1})}${['2160p60 · 4K','1440p60','1080p60','720p60','480p','360p'].map((l,i)=>mrow('q-'+(i+1),l,null)).join('')}</div></div>
  <div class="ovl from-r tg pmenu" data-id="pm-sub"><h4>Sous-titres</h4><div data-grp="ss">${mrow('st-0','Désactivés',null,{sel:1})}<div class="mhd">PRÉFÉRÉES</div>${mrow('st-1','Français',null)}${mrow('st-2','Anglais (généré automatiquement)',null)}<div class="mhd">AUTRES LANGUES</div>${mrow('st-3','Espagnol',null)}${mrow('st-4','Italien',null)}</div></div>
  <div class="ovl from-r tg pmenu" data-id="pm-ch"><h4>Chapitres</h4><div data-grp="cs">${CHAP.map(([t,s],i)=>mrow('chp-'+i,t,mm(s),{sel:i===1})).join('')}</div></div>
@@ -666,7 +666,7 @@ const SCREENS=[
  {k:'B',t:'Retour',f:'cb-6',on:['ctl'],sel:{g6:''},st:{...PANEL_OFF,info:{transform:'none'}}},
  ]},
 {id:'reglages-lecteur',title:'Lecteur : réglages, qualité, statistiques',desc:'Le bouton Réglages (ou la touche Menu, de partout) ouvre le panneau en trois sections : LECTURE (qualité, sous-titres, piste audio s’il y en a plusieurs, vitesse, format de l’image), VIDÉO ET CHAÎNE, OPTIONS.',
- notes:['Qualité : Auto (adaptatif selon la connexion et la charge de la box ; s’il perd plus de 10 % des images, il descend d’un cran pour la session) ou une qualité tenue. Les pistes HDR (« 2160p60 · 4K HDR ») n’apparaissent que si la TV et le décodeur les gèrent.','Vitesse : 0,5× à 2×. Format : Image entière, Remplir l’écran, Étirer.','Statistiques : vidéo, codec, débits, images perdues, gels relancés, HDR de la piste et de l’écran, tampon, connexion, volume.'],
+ notes:['Qualité : Auto (adaptatif selon la connexion et la charge de la box ; s’il perd plus de 10 % des images, il descend d’un cran pour la session) ou une qualité tenue. Les pistes HDR (« 2160p60 · 4K HDR ») n’apparaissent que si la TV et le décodeur les gèrent.','Vitesse : 0,5× à 2×. Format : Image entière, Remplir l’écran, Étirer.','Statistiques : vidéo, codec, débits, images perdues, gels relancés, HDR de la piste et de l’écran, tampon, connexion, volume.','Fréquence d’affichage automatique (désactivée par défaut) : une fois la cadence de la vidéo connue, la TV passe à la même définition en 24 / 23,976 Hz, 50 Hz ou 60 / 59,94 Hz. Jamais de bascule entre cadences équivalentes (30 puis 60 i/s, 25 puis 50) ; le mode d’origine revient en quittant le lecteur ou en désactivant l’option. Cadence inconnue : rien ne change.'],
  steps:[
  {view:'player',f:'cb-8',on:['ctl'],k:'▶',t:'Réglages'},
  {k:'OK',t:'Réglages',f:'pm-0',on:['ctl','pm-main'],sel:{g8:'cb-8'},st:PANEL_ON,n:'Focus sur la 1re ligne, jamais sur un titre de section.'},
@@ -675,6 +675,8 @@ const SCREENS=[
  {k:'OK',t:'1080p60',f:'pm-0',on:['ctl','pm-main'],sel:{qs:'q-3'},txt:{'pmv-0':'1080p60'},n:'Qualité tenue ; retour à la liste principale, sur la ligne d’origine.'},
  {k:'▼…',t:'Bas ×7',f:'pm-8'},
  {k:'OK',t:'Statistiques',txt:{'pmv-8':'Affichées'}},
+ {k:'▼',t:'Bas',f:'pm-9'},
+ {k:'OK',t:'Fréquence auto',sel:{afr:'pm-9'},n:'Coché : activée. Vidéo à 25 i/s : la TV passe en 50 Hz (écran noir un instant).'},
  {k:'B',t:'Retour',f:'cb-8',on:['ctl'],sel:{g8:''},st:PANEL_OFF},
  {k:'⏱',t:'4 s',f:null,on:['stats'],n:'Commandes masquées : les statistiques en haut à gauche, jamais sur le titre, la barre ou un panneau.'},
  {k:'OK',t:'Commandes',f:'pb',on:['ctl'],n:'Commandes affichées : les statistiques se cachent.'},

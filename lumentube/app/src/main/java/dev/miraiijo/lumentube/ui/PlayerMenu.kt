@@ -72,6 +72,9 @@ class VideoActions(
     /** "Statistiques pour les curieux" shown. */
     val stats: Boolean = false,
     val onStats: () -> Unit = {},
+    /** "Fréquence d'affichage automatique" on (a check mark: the label is too long for a value). */
+    val autoFrameRate: Boolean = false,
+    val onAutoFrameRate: () -> Unit = {},
     /** The video's chapters, the one playing (-1: none yet) and a jump to one. */
     val chapters: List<dev.miraiijo.lumentube.data.Chapter> = emptyList(),
     val currentChapter: Int = -1,
@@ -115,7 +118,7 @@ fun PlayerMenuPanel(
 ) {
     // Bumped after each choice: the values shown are read from the player again.
     var version by remember { mutableIntStateOf(0) }
-    val entries = remember(menu, tracksTick, version, sponsorBlock, pictureFormat, actions.details, actions.watchLaterDone, actions.stats, actions.currentChapter) {
+    val entries = remember(menu, tracksTick, version, sponsorBlock, pictureFormat, actions.details, actions.watchLaterDone, actions.stats, actions.autoFrameRate, actions.currentChapter) {
         buildEntries(menu, player, prefs, live, sponsorBlock, onSponsorBlock, pictureFormat, onPictureFormat, actions, onMenu) { version++ }
     }
     val title = when (menu) {
@@ -224,6 +227,7 @@ private fun buildEntries(
         add(Entry("OPTIONS", header = true) {})
         if (!live) add(Entry("SponsorBlock", if (sponsorBlock) "Activé" else "Désactivé") { onSponsorBlock(!sponsorBlock) })
         add(Entry("Statistiques pour les curieux", if (actions.stats) "Affichées" else "Masquées", onClick = actions.onStats))
+        add(Entry("Fréquence d’affichage automatique", selected = actions.autoFrameRate, onClick = actions.onAutoFrameRate))
     }
     PlayerMenu.FORMAT -> PICTURE_FORMATS.mapIndexed { index, name ->
         Entry(name, selected = index == pictureFormat) {

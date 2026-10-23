@@ -70,10 +70,12 @@ import androidx.tv.material3.IconButton
 import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.Text
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.google.android.exoplayer2.Format
 import com.google.android.exoplayer2.Player
 import com.google.android.exoplayer2.text.CaptionStyleCompat
 import com.google.android.exoplayer2.ui.AspectRatioFrameLayout
 import com.google.android.exoplayer2.ui.PlayerView
+import com.google.android.exoplayer2.video.VideoListener
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItem
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemStoryboard
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager
@@ -85,6 +87,7 @@ import dev.miraiijo.lumentube.data.Details
 import dev.miraiijo.lumentube.data.Segment
 import dev.miraiijo.lumentube.data.Video
 import dev.miraiijo.lumentube.data.YouTube
+import dev.miraiijo.lumentube.player.AutoFrameRate
 import dev.miraiijo.lumentube.player.LumenPlayer
 import dev.miraiijo.lumentube.remote.RemoteControl
 import dev.miraiijo.lumentube.player.PlayerPrefs
@@ -126,6 +129,8 @@ private const val SEEK_LINE_MS = 1_500L
 private const val SEEK_COMMIT_MS = 600L
 /** adb logcat -s LumenTube.Timing: how long a video takes to start, step by step. */
 private const val TIMING_TAG = "LumenTube.Timing"
+/** First frame (or a new size) to display switch: Auto's first quality change has passed. */
+private const val AFR_SETTLE_MS = 1_500L
 
 private fun formatsKind(info: com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo) = when {
     info.containsDashFormats() -> "DASH"
@@ -169,6 +174,8 @@ fun PlayerScreen(
     onOpenChannel: (String, String) -> Unit = { _, _ -> },
     /** Where the video is (seconds), told when it pauses for the background: kept across a process kill. */
     onPosition: (Int) -> Unit = {},
+    /** "Fréquence d'affichage automatique": shared by the player screens that follow each other (null: no activity). */
+    frameRate: AutoFrameRate? = null,
     modifier: Modifier = Modifier.fillMaxSize(),
 ) {
     val isMini by rememberUpdatedState(minimized)
@@ -267,6 +274,7 @@ fun PlayerScreen(
     var openedAt by remember(videoId) { mutableLongStateOf(0L) }
     /** "Statistiques pour les curieux": shown, and how this video was opened (formats, client, timings). */
     var stats by remember { mutableStateOf(prefs.stats) }
+    var autoFrameRate by remember { mutableStateOf(prefs.autoFrameRate) }
     var streamInfo by remember(videoId) { mutableStateOf<String?>(null) }
     var formatsMs by remember(videoId) { mutableLongStateOf(-1L) }
     var firstFrameMs by remember(videoId) { mutableLongStateOf(-1L) }
@@ -419,6 +427,38 @@ fun PlayerScreen(
             player.exo.removeListener(listener)
             player.release()
             RemoteControl.reportIdle()
+        }
+    }
+
+    // The display follows the video's frame rate, once its first frame is on screen and the format
+    // has settled (Auto may start low); announced by the manifest, unknown = the TV stays as it is.
+    // Declared after the player's effect: disposed before the player is released.
+    DisposableEffect(player, autoFrameRate, frameRate) {
+        val afr = frameRate
+        if (afr == null || !autoFrameRate) {
+            afr?.reset()
+            return@DisposableEffect onDispose { }
+        }
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val check = Runnable {
+            val fps = player.exo.videoFormat?.frameRate ?: Format.NO_VALUE.toFloat()
+            if (fps > 0f) afr.apply(fps)
+        }
+        fun settle() {
+            handler.removeCallbacks(check)
+            handler.postDelayed(check, AFR_SETTLE_MS)
+        }
+        val listener = object : VideoListener {
+            override fun onRenderedFirstFrame() = settle()
+
+            override fun onVideoSizeChanged(width: Int, height: Int, unappliedRotationDegrees: Int, pixelWidthHeightRatio: Float) = settle()
+        }
+        player.exo.addVideoListener(listener)
+        // Turned on while the video already plays.
+        if (player.exo.videoFormat != null) settle()
+        onDispose {
+            handler.removeCallbacks(check)
+            player.exo.removeVideoListener(listener)
         }
     }
 
@@ -928,6 +968,11 @@ fun PlayerScreen(
                     onStats = {
                         stats = !stats
                         prefs.stats = stats
+                    },
+                    autoFrameRate = autoFrameRate,
+                    onAutoFrameRate = {
+                        autoFrameRate = !autoFrameRate
+                        prefs.autoFrameRate = autoFrameRate
                     },
                     chapters = chapters,
                     currentChapter = chapters.indexOfLast { it.startMs <= position },
