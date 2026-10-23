@@ -13,9 +13,9 @@ buildscript {
         gradlePluginPortal()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.7.3'
-        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21'
-        classpath 'org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.0.21'
+        classpath 'com.android.tools.build:gradle:8.13.2'
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21'
+        classpath 'org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.4.21'
     }
 }
 
@@ -51,7 +51,7 @@ allprojects {
  * SmartTube update), each one is adapted here when it's configured:
  *  - namespace from its manifest's package, and a copy of the manifest without that attribute;
  *  - BuildConfig generated (AGP 8 turned it off by default);
- *  - Kotlin compiled for Java 8 like their Java code, with the K1 frontend.
+ *  - Kotlin compiled for Java 8 like their Java code, at language level 2.0 (oldest one Kotlin 2.4 supports).
  */
 def upstreamRoot = gradle.ext.upstreamRoot.canonicalPath
 subprojects { p ->
@@ -74,9 +74,9 @@ subprojects { p ->
     }
     p.tasks.withType(KotlinCompile).configureEach {
         compilerOptions.jvmTarget.set(JvmTarget.JVM_1_8)
-        // Upstream Kotlin (youtubeapi: ~190 files) is written for Kotlin 1.8: compiled with the K1
-        // frontend (language 1.9) rather than K2, whose stricter checks could reject it.
-        compilerOptions.languageVersion.set(KotlinVersion.KOTLIN_1_9)
-        compilerOptions.apiVersion.set(KotlinVersion.KOTLIN_1_9)
+        // Upstream Kotlin (youtubeapi: ~190 files) is written for Kotlin 1.8. Kotlin 2.4 dropped the K1
+        // frontend (language 1.9): compiled at the oldest level left, 2.0.
+        compilerOptions.languageVersion.set(KotlinVersion.KOTLIN_2_0)
+        compilerOptions.apiVersion.set(KotlinVersion.KOTLIN_2_0)
     }
 }

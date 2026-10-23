@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -10,14 +12,14 @@ val releaseKeystore: String? = System.getenv("LUMENTUBE_KEYSTORE_PATH")
 
 android {
     namespace = "dev.miraiijo.lumentube"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "dev.miraiijo.lumentube"
         minSdk = 28
         targetSdk = 35
-        versionCode = 67
-        versionName = "1.0 bêta 6"
+        versionCode = 68
+        versionName = "1.0 bêta 7"
         // The Freebox Player POP runs a 32-bit userspace; arm64 kept for other boxes.
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
         // Upstream modules have SmartTube's build flavors: use the "stable" one.
@@ -55,7 +57,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -63,6 +64,10 @@ android {
     packaging {
         resources.excludes += listOf("META-INF/*.kotlin_module", "META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*")
     }
+}
+
+kotlin {
+    compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
 }
 
 dependencies {
@@ -85,20 +90,20 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:3.12.13")
 
     // UI: same stack as Lumen.
-    val composeBom = platform("androidx.compose:compose-bom:2025.04.01")
+    val composeBom = platform("androidx.compose:compose-bom:2026.06.01")
     implementation(composeBom)
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
+    implementation("androidx.core:core-ktx:1.18.0")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.animation:animation")
     implementation("androidx.compose.ui:ui")
-    implementation("androidx.tv:tv-material:1.0.0")
+    implementation("androidx.tv:tv-material:1.1.0")
     // Installs the Baseline Profiles (AndroidX/Compose libraries' + src/main/baseline-prof.txt) on a
     // sideloaded APK too (no Play Store): faster cold start and first scrolls. Same version as Lumen.
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     // Thumbnails: Glide (no OkHttp 4, which Coil needs and the engine can't use).
     implementation("com.github.bumptech.glide:compose:1.0.0-beta01")
     // QR code of the sign-in, drawn on the box (no web QR service sees the activation code).
-    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.zxing:core:3.5.4")
 }
