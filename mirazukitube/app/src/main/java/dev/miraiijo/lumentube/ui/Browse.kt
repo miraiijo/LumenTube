@@ -138,7 +138,7 @@ fun BrowsePage(
     // dp): the last row's caption never goes under the screen's bottom edge (overscan).
     val rowTitle = 24.dp + lines(ROW_TITLE_LINE, 1)
     val cardCaption = 12.dp + lines(TITLE_LINE, 2) + lines(CHANNEL_LINE, 1) + SafeArea.bottom
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val listState = rememberRowsState()
     LaunchedEffect(focusTick, page.rows.isNotEmpty(), page.error, needsAccount) {
         if (focusTick == 0 || focusTick == servedTick) return@LaunchedEffect
         // Moved meanwhile to the tabs or the channel's header (rows still loading): left there.
