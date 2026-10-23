@@ -140,7 +140,7 @@ fun SignInDialog(code: String?, error: String?, onRetry: () -> Unit, onDismiss: 
                         else -> CodeText(code)
                     }
                 }
-                Text("LumenTube reste connecté ensuite. Tu peux lier plusieurs comptes et choisir lequel à l’ouverture.", color = Palette.TextSecondary, fontSize = 13.sp)
+                Text("Halune Tube reste connecté ensuite. Tu peux lier plusieurs comptes et choisir lequel à l’ouverture.", color = Palette.TextSecondary, fontSize = 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap)) {
                     if (error != null) LumenButton("Réessayer", icon = LumenIcon.REFRESH, onClick = onRetry)
                     LumenButton("Annuler", modifier = Modifier.focusRequester(button), onClick = onDismiss)
@@ -295,7 +295,7 @@ fun ProfileDialog(
                 }
             }
             Spacer(Modifier.height(36.dp))
-            Text("Le compte change ton Accueil, tes abonnements, ton historique et le flux de Lumen.", fontSize = Dimens.TextMin, color = Palette.TextSecondary)
+            Text("Le compte change ton Accueil, tes abonnements, ton historique et le flux de Halune.", fontSize = Dimens.TextMin, color = Palette.TextSecondary)
         }
         LaunchedEffect(Unit) {
             withFrameNanos { }
@@ -455,7 +455,7 @@ fun SettingsDialog(
                             }
                         }
                         SettingsPage.PHONE -> {
-                            SettingCard("Regarder sur la TV", "L’app YouTube du téléphone, liée avec un code TV, envoie ses vidéos ici et sert de télécommande, quand LumenTube est ouvert.") {
+                            SettingCard("Regarder sur la TV", "L’app YouTube du téléphone, liée avec un code TV, envoie ses vidéos ici et sert de télécommande, quand Halune Tube est ouvert.") {
                                 Choice("Activé", settings.remote) { onSettings(settings.copy(remote = true)) }
                                 Choice("Désactivé", !settings.remote) { onSettings(settings.copy(remote = false)) }
                                 LumenButton("Lier un téléphone", modifier = Modifier.focusRequester(pair), icon = LumenIcon.PLUS, onClick = onPair)
@@ -464,11 +464,11 @@ fun SettingsDialog(
                             val context = androidx.compose.ui.platform.LocalContext.current
                             val canOpen = remember(settings.backgroundCast) { android.provider.Settings.canDrawOverlays(context) }
                             SettingCard(
-                                "Recevoir même LumenTube fermé",
+                                "Recevoir même Halune Tube fermé",
                                 if (settings.backgroundCast && !canOpen) {
                                     "Autorisation à donner une fois depuis l’ordinateur : adb shell appops set dev.miraiijo.lumentube SYSTEM_ALERT_WINDOW allow"
                                 } else {
-                                    "LumenTube reste prêt en arrière-plan et s’ouvre quand le téléphone envoie une vidéo. Garde environ 50 à 80 Mo de mémoire."
+                                    "Halune Tube reste prêt en arrière-plan et s’ouvre quand le téléphone envoie une vidéo. Garde environ 50 à 80 Mo de mémoire."
                                 },
                             ) {
                                 Choice("Activé", settings.backgroundCast) { onSettings(settings.copy(backgroundCast = true, remote = true)) }
@@ -495,16 +495,17 @@ fun SettingsDialog(
                                     }
                                 }
                             }
-                            SettingCard("Code parent", "Demandé pour quitter le profil enfant. Le profil enfant de Lumen se quitte dans Lumen.") {
+                            SettingCard("Code parent", "Demandé pour quitter le profil enfant. Le profil enfant de Halune se quitte dans Halune.") {
                                 LumenButton("Changer le code", contentColor = Palette.ChipText, onClick = onChangeKidsPin)
                                 LumenButton("Supprimer le profil enfant", icon = LumenIcon.CLOSE, onClick = onDeleteKids)
                             }
                         }
                         SettingsPage.UPDATES -> {
                             val installedBeta = Updater.isBeta(update.installed)
+                            HaluneLogo(Modifier.height(40.dp))
                             SettingCard(
                                 "Version installée · ${update.installed}${if (installedBeta) " (bêta)" else ""}",
-                                update.message ?: "LumenTube vérifie une fois par jour, au démarrage.",
+                                update.message ?: "Halune Tube vérifie une fois par jour, au démarrage.",
                             ) {
                                 LumenButton(
                                     if (update.busy && update.progress == null) "Vérification…" else "Vérifier",
@@ -541,7 +542,7 @@ fun SettingsDialog(
                             val mit = remember { readLicence(context, "SmartTube-MIT.txt") }
                             SettingCard(
                                 "Basé sur SmartTube",
-                                "LumenTube est un fork de SmartTube (github.com/yuliskov/SmartTube) et utilise son moteur : MediaServiceCore, SharedModules et son ExoPlayer modifié. Appli non officielle, sans lien avec SmartTube, YouTube ou Google.",
+                                "Halune Tube est un fork de SmartTube (github.com/yuliskov/SmartTube) et utilise son moteur : MediaServiceCore, SharedModules et son ExoPlayer modifié. Appli non officielle, sans lien avec SmartTube, YouTube ou Google.",
                             ) {}
                             SettingCard("Licence de SmartTube", mit) {}
                             SettingCard(
