@@ -10,6 +10,13 @@ on:
       - "SharedModules"
       - "exoplayer-amzn-2.10.6/**"
       - ".github/workflows/mirazukitube.yml"
+  pull_request:
+    paths:
+      - "mirazukitube/**"
+      - "MediaServiceCore"
+      - "SharedModules"
+      - "exoplayer-amzn-2.10.6/**"
+      - ".github/workflows/mirazukitube.yml"
 
 # Build and check only: the APK comes out UNSIGNED. Signing and publishing happen on the Mac
 # (mirazuki-ship: the key never leaves it), so there is no secret at all in GitHub. Read-only token:
