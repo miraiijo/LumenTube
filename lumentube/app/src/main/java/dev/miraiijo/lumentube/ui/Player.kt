@@ -1418,7 +1418,7 @@ private fun UpNextCard(next: Video, onPlay: () -> Unit, onCancel: () -> Unit, mo
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.width(144.dp).aspectRatio(16f / 9f).clip(ControlShape).background(Palette.Tile)) {
-            Thumbnail(next.videoId, next.thumbnail, Modifier.fillMaxSize(), small = true)
+            Thumbnail(next.videoId, next.thumbnail, Modifier.fillMaxSize(), small = true, width = 144.dp)
         }
         // 12 + 144 + 14 + 198 + 12 = 380 dp (the redesign).
         Column(Modifier.width(198.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {

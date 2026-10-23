@@ -6,9 +6,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -207,10 +209,10 @@ private fun DrawScope.drawIcon(icon: LumenIcon, color: Color) {
         LumenIcon.CHEVRON_UP -> { line(6f, 15f, 12f, 9f); line(12f, 9f, 18f, 15f) }
         LumenIcon.CHEVRON_DOWN -> { line(6f, 9f, 12f, 15f); line(12f, 15f, 18f, 9f) }
         LumenIcon.MOON -> {
-            // Crescent: outer arc of a circle, back along the arc of an offset circle.
-            val outer = (0..24).map { i -> val a = Math.toRadians(70.0 + 220.0 * i / 24); p(13.5f + 9f * cos(a).toFloat(), 12f + 9f * sin(a).toFloat()) }
-            val inner = (0..24).map { i -> val a = Math.toRadians(250.0 - 160.0 * i / 24); p(16.5f + 7f * cos(a).toFloat(), 10f + 7f * sin(a).toFloat()) }
-            polygon(outer + inner, filled = true)
+            // Crescent: a disc minus an offset disc (exact tips, centred in the grid: 4–20.7 × 3.4–20.6).
+            // The former outline stopped its two arcs at mismatched angles: a flat, cut-off lower tip.
+            fun disc(x: Float, y: Float, r: Float) = Path().apply { addOval(Rect(p(x - r, y - r), p(x + r, y + r))) }
+            drawPath(Path().apply { op(disc(12.5f, 12f, 8.5f), disc(17f, 8.5f, 7f), PathOperation.Difference) }, color)
         }
         LumenIcon.BOLT -> polygon(listOf(p(13.5f, 2.5f), p(6f, 13.5f), p(11.5f, 13.5f), p(10f, 21.5f), p(18f, 10f), p(12.5f, 10f)), filled = true)
         LumenIcon.SMILE -> {
