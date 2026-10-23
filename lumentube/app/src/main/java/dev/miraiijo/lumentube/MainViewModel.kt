@@ -765,9 +765,11 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
             )
         }
         viewModelScope.launch {
-            val found = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                runCatching { if (Updater.dailyCheckDue(app)) Updater.check(app, UPDATE_APP) else null }.getOrNull()
-            }
+            if (!runCatching { Updater.dailyCheckDue(app) }.getOrDefault(false)) return@launch
+            val result = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { Updater.check(app, UPDATE_APP) } }
+            // Recorded only once the channel answered: offline at start-up, the next start checks again.
+            if (result.isSuccess) runCatching { Updater.markChecked(app) }
+            val found = result.getOrNull()
             if (found != null) {
                 _state.update { it.copy(update = it.update.copy(found = found)) }
                 showNotice("Mise à jour disponible : ${found.versionName} (Réglages › Mises à jour).")
@@ -805,7 +807,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     fun installUpdate() {
         val current = _state.value.update
         val found = current.found ?: return
-        if (current.busy) return
+        if (current.busy || Updater.isDownloading()) return
         val app = getApplication<Application>()
         if (!runCatching { Updater.canInstall(app) }.getOrDefault(false)) {
             runCatching { Updater.openInstallPermissionSettings(app) }

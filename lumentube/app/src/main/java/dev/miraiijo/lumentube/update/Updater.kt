@@ -66,14 +66,27 @@ object Updater {
         prefs(context).edit().putBoolean(KEY_BETA, value).apply()
     }
 
-    /** True at most once a day (the silent check at start-up); records the check. */
+    /** True at most once a day (the silent check at start-up). [markChecked] once the check succeeded. */
     fun dailyCheckDue(context: Context): Boolean {
-        val prefs = prefs(context)
+        val last = prefs(context).getLong(KEY_LAST_CHECK, 0L)
         val now = System.currentTimeMillis()
-        if (now - prefs.getLong(KEY_LAST_CHECK, 0L) < DAY_MS) return false
-        prefs.edit().putLong(KEY_LAST_CHECK, now).apply()
-        return true
+        // A clock set back (last check "in the future") must not silence the checks for days.
+        return last > now || now - last >= DAY_MS
     }
+
+    /** Records a successful check (a failed one, offline at start-up, is retried at the next start). */
+    fun markChecked(context: Context) {
+        prefs(context).edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
+    }
+
+    /**
+     * One download at a time in this process (LumenTube's own update): two downloads at
+     * once would fight for the bandwidth and the cache. [download] refuses while this is held.
+     */
+    private val busy = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** True while an APK is being downloaded and checked. */
+    fun isDownloading(): Boolean = busy.get()
 
     /**
      * The version to install for [app] (« lumen », « lumentube », « lumeniptv »), or null when up to
@@ -115,9 +128,20 @@ object Updater {
      * of the certificate a first install must carry (an installed app is compared with itself).
      */
     fun download(context: Context, update: UpdateInfo, expectedCert: String = "", onProgress: (Float) -> Unit = {}): File {
+        if (!busy.compareAndSet(false, true)) throw IOException("Un autre téléchargement est en cours : réessaie dans un instant")
+        try {
+            return downloadLocked(context, update, expectedCert, onProgress)
+        } finally {
+            busy.set(false)
+        }
+    }
+
+    private fun downloadLocked(context: Context, update: UpdateInfo, expectedCert: String, onProgress: (Float) -> Unit): File {
         val dir = File(context.cacheDir, "updates").apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() }
-        val target = File(dir, "update.apk")
+        // One file per app: the installer may still be reading another app's APK.
+        File(dir, "update.apk").delete()
+        val target = File(dir, "${update.packageName}.apk")
+        target.delete()
         val digest = MessageDigest.getInstance("SHA-256")
         val connection = open(update.apkUrl)
         try {
@@ -193,15 +217,14 @@ object Updater {
         val info = pm.getPackageArchiveInfo(apk.path, PackageManager.GET_SIGNING_CERTIFICATES) ?: fail(apk, "APK illisible")
         if (info.packageName != update.packageName) fail(apk, "APK d'une autre appli : refusé")
         if (info.longVersionCode != update.versionCode) fail(apk, "Version différente de celle annoncée : refusé")
-        // Some Android versions don't read the certificates of an archive: the installer still checks.
+        // Fail closed: an archive whose certificates can't be read is refused (not left to the installer).
         val incoming = info.signingInfo?.apkContentsSigners?.map { hex(sha256(it.toByteArray())) }?.toSet()
-        if (!incoming.isNullOrEmpty()) {
-            val installed = signers(context, update.packageName)
-            val expected = expectedCert.lowercase().replace(":", "")
-            when {
-                installed.isNotEmpty() -> if (incoming != installed) fail(apk, "APK signé par une autre clé : refusé")
-                expected.isNotEmpty() -> if (expected !in incoming) fail(apk, "APK signé par une autre clé : refusé")
-            }
+        if (incoming.isNullOrEmpty()) fail(apk, "Signature de l'APK illisible : refusé")
+        val installed = signers(context, update.packageName)
+        val expected = expectedCert.lowercase().replace(":", "")
+        when {
+            installed.isNotEmpty() -> if (incoming != installed) fail(apk, "APK signé par une autre clé : refusé")
+            expected.isNotEmpty() -> if (expected !in incoming) fail(apk, "APK signé par une autre clé : refusé")
         }
     }
 
