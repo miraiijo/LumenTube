@@ -81,8 +81,10 @@ fun TopHeader(
     updateFound: Updater.UpdateInfo? = null,
     /** Incremented when a section is shown from the tabs: the focus goes (stays) on its tab. */
     tabFocusTick: Int = 0,
+    /** Kids profile: Accueil alone, no Rechercher nor Réglages. */
+    kids: Boolean = false,
 ) {
-    val sections = Section.entries.filter { it != Section.SEARCH && (!it.account || signedIn) }
+    val sections = if (kids) listOf(Section.HOME) else Section.entries.filter { it != Section.SEARCH && (!it.account || signedIn) }
     val requesters = remember { Section.entries.associateWith { FocusRequester() } }
     val playerButton = remember { FocusRequester() }
     LaunchedEffect(tabFocusTick) {
@@ -122,7 +124,7 @@ fun TopHeader(
                     }
                 }
             }
-            RoundButton(onClick = { onSection(Section.SEARCH) }) { Icon(LumenIcon.SEARCH, size = HEADER_ICON) }
+            if (!kids) RoundButton(onClick = { onSection(Section.SEARCH) }) { Icon(LumenIcon.SEARCH, size = HEADER_ICON) }
         }
         Row(
             Modifier.padding(start = 24.dp),
@@ -148,7 +150,7 @@ fun TopHeader(
                 }
             }
             // Réglages, with Lumen's red dot when an update is waiting (drawn over the button's corner).
-            Box(Modifier.size(HEADER_BUTTON)) {
+            if (!kids) Box(Modifier.size(HEADER_BUTTON)) {
                 RoundButton(onClick = onSettings) { Icon(LumenIcon.SETTINGS, size = HEADER_ICON) }
                 if (updateFound != null) {
                     Box(Modifier.align(Alignment.TopEnd).size(UPDATE_DOT).background(Palette.Live, CircleShape))

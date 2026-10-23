@@ -144,7 +144,7 @@ fun Root(vm: MainViewModel) {
                 // Search key (gamepad Select): straight to Rechercher, from any page (not over the video).
                 // The remote's mic (SEARCH or VOICE_ASSIST): Rechercher, and the dictation right away.
                 val voice = native.keyCode == android.view.KeyEvent.KEYCODE_VOICE_ASSIST
-                if ((native.keyCode == android.view.KeyEvent.KEYCODE_SEARCH || voice) && !fullScreenPlayer) {
+                if ((native.keyCode == android.view.KeyEvent.KEYCODE_SEARCH || voice) && !fullScreenPlayer && !state.kids) {
                     if (native.repeatCount == 0) {
                         if (state.section != Search || state.opened != null) showSection(Search)
                         if (voice || !native.isFromSource(android.view.InputDevice.SOURCE_GAMEPAD)) dictate = true
@@ -187,6 +187,7 @@ fun Root(vm: MainViewModel) {
                     vm.updateSettings(state.settings.copy(appearance = next))
                 },
                 updateFound = state.update.found,
+                kids = state.kids,
             )
         }
         Box(
@@ -243,9 +244,12 @@ fun Root(vm: MainViewModel) {
                         onLoadMore = vm::loadMore,
                         // The opened channel / playlist reloads itself, not the section under it.
                         onRetry = vm::retry,
-                        needsAccount = shown.section.account && !state.signedIn && shown.opened == null,
+                        needsAccount = shown.section.account && !state.signedIn && shown.opened == null && !state.kids,
                         onSignIn = vm::startSignIn,
                         onLongPress = vm::openCardMenu,
+                        onKid = if (state.kidsExists && !state.kids) vm::toggleKidChannel else null,
+                        // Kids profile: the rows come back when a parent allows a channel.
+                        showRetry = !state.kids || state.kidChannels.isNotEmpty(),
                         channel = shown.opened?.channel,
                         signedIn = state.signedIn,
                         onSubscribe = vm::toggleChannelSubscription,
@@ -269,6 +273,8 @@ fun Root(vm: MainViewModel) {
                 onAdd = vm::startSignIn,
                 onGuest = vm::chooseGuest,
                 guest = !state.signedIn,
+                onKids = vm::chooseKids,
+                kidsExists = state.kidsExists,
                 onDismiss = { if (state.choosingAccount) vm.skipAccountChoice() else vm.closeAccounts() },
                 signingIn = state.signingIn,
             )
@@ -285,6 +291,10 @@ fun Root(vm: MainViewModel) {
                 onCheckUpdate = vm::checkUpdate,
                 onInstallUpdate = vm::installUpdate,
                 onWantsBeta = vm::setWantsBeta,
+                kidChannels = state.kidChannels.takeIf { state.kidsExists },
+                onRemoveKidChannel = vm::removeKidChannel,
+                onChangeKidsPin = vm::changeKidsPin,
+                onDeleteKids = vm::deleteKids,
             )
         } else if (state.cardMenu != null) {
             val video = state.cardMenu!!
@@ -310,6 +320,10 @@ fun Root(vm: MainViewModel) {
                 },
                 onDismiss = vm::closeCardMenu,
             )
+        }
+        // The parental code opens over "Qui regarde ?" and Réglages (composed after them: on top).
+        state.pin?.let { prompt ->
+            PinDialog(prompt.title, prompt.hint, key = prompt, submit = { vm.submitPin(it) }, onDismiss = vm::closePin)
         }
         if (state.signingIn) {
             SignInDialog(code = state.signInCode, error = state.signInError, onRetry = vm::startSignIn, onDismiss = vm::cancelSignIn)
@@ -355,6 +369,7 @@ fun Root(vm: MainViewModel) {
                 },
                 onPosition = { seconds -> vm.notePosition(playingId, seconds) },
                 frameRate = frameRate,
+                kids = state.kids,
                 modifier = if (state.minimized) {
                     // A third of the screen's width, whatever the interface size (a fixed 400 dp
                     // took half the screen at 120 %), inside the TV's safe zone.

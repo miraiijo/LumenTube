@@ -79,6 +79,8 @@ class VideoActions(
     val chapters: List<dev.miraiijo.lumentube.data.Chapter> = emptyList(),
     val currentChapter: Int = -1,
     val onChapter: (dev.miraiijo.lumentube.data.Chapter) -> Unit = {},
+    /** Kids profile: no channel page, no account actions. */
+    val kids: Boolean = false,
 )
 
 private class Entry(
@@ -210,7 +212,7 @@ private fun buildEntries(
         add(Entry("Format de l’image", PICTURE_FORMATS[pictureFormat.coerceIn(0, PICTURE_FORMATS.lastIndex)], submenu = true) { onMenu(PlayerMenu.FORMAT) })
 
         val channelId = details?.channelId
-        if (channelId != null || actions.signedIn) {
+        if (!actions.kids && (channelId != null || actions.signedIn)) {
             add(Entry("VIDÉO ET CHAÎNE", header = true) {})
             if (actions.signedIn) {
                 add(Entry("À regarder plus tard", if (actions.watchLaterDone) "Ajoutée" else null, selected = actions.watchLaterDone, onClick = actions.onWatchLater))

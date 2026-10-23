@@ -176,6 +176,8 @@ fun PlayerScreen(
     onPosition: (Int) -> Unit = {},
     /** "Fréquence d'affichage automatique": shared by the player screens that follow each other (null: no activity). */
     frameRate: AutoFrameRate? = null,
+    /** Kids profile: no comments, no channel page, no YouTube "À suivre" (the video ends, the page comes back). */
+    kids: Boolean = false,
     modifier: Modifier = Modifier.fillMaxSize(),
 ) {
     val isMini by rememberUpdatedState(minimized)
@@ -396,7 +398,7 @@ fun PlayerScreen(
                     retried = false
                 }
                 if (playbackState == Player.STATE_ENDED) {
-                    val next = details?.next
+                    val next = details?.next?.takeIf { !kids }
                     when {
                         !prefs.autoplay || next == null -> onExit()
                         // Small window: no card to show, the next one starts right away.
@@ -651,7 +653,7 @@ fun PlayerScreen(
     }
 
     fun openComments() {
-        if (details?.commentsKey == null) return
+        if (kids || details?.commentsKey == null) return
         menu = null
         commentsOpen = true
         controls = false
@@ -888,7 +890,7 @@ fun PlayerScreen(
                 disliked = disliked,
                 onLike = ::toggleLike,
                 onDislike = ::toggleDislike,
-                hasComments = details?.commentsKey != null,
+                hasComments = !kids && details?.commentsKey != null,
                 commentsButton = commentsButton,
                 onComments = ::openComments,
                 hasInfo = details != null,
@@ -962,7 +964,7 @@ fun PlayerScreen(
                     onWatchLater = ::addToWatchLater,
                     onChannel = {
                         val id = details?.channelId
-                        if (id != null) {
+                        if (id != null && !kids) {
                             closeMenu()
                             onOpenChannel(id, details?.channel ?: shownChannel)
                         }
@@ -983,6 +985,7 @@ fun PlayerScreen(
                         player.exo.seekTo(chapter.startMs)
                         position = chapter.startMs
                     },
+                    kids = kids,
                 ),
                 // A choice made in a list opened directly (subtitles button) closes the panel.
                 onMenu = { next -> if (next == null || (next == PlayerMenu.MAIN && menuRoot != PlayerMenu.MAIN)) closeMenu() else menu = next },

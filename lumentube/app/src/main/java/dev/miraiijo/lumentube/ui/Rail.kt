@@ -224,6 +224,9 @@ fun ProfileDialog(
     onGuest: (() -> Unit)? = null,
     /** Accounts linked but none selected: "Invité" is the current one. */
     guest: Boolean = false,
+    /** "Enfant": the kids profile, or its creation (parental code first); null hides it. */
+    onKids: (() -> Unit)? = null,
+    kidsExists: Boolean = false,
     /** The sign-in dialog is open over this one: when it closes, the focus goes back to "Ajouter". */
     signingIn: Boolean = false,
 ) {
@@ -270,6 +273,16 @@ fun ProfileDialog(
                         onClick = onGuest,
                     ) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(LumenIcon.USER, size = 40.dp) }
+                    }
+                }
+                if (onKids != null) {
+                    ProfileTile(
+                        name = "Enfant",
+                        caption = if (kidsExists) "Chaînes choisies" else "À créer",
+                        modifier = Modifier,
+                        onClick = onKids,
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(LumenIcon.SMILE, size = 40.dp) }
                     }
                 }
                 ProfileTile(
@@ -337,7 +350,7 @@ private fun ProfileTile(name: String, caption: String?, modifier: Modifier, onCl
 }
 
 /** Réglages' categories (left column). */
-private enum class SettingsPage(val label: String) { PLAYBACK("Lecture"), DISPLAY("Affichage"), PHONE("Téléphone"), ACCOUNT("Compte"), UPDATES("Mises à jour") }
+private enum class SettingsPage(val label: String) { PLAYBACK("Lecture"), DISPLAY("Affichage"), PHONE("Téléphone"), ACCOUNT("Compte"), KIDS("Enfant"), UPDATES("Mises à jour") }
 
 /**
  * Réglages (the redesign: full screen, like Lumen's): the categories on the left (the one focused
@@ -358,6 +371,11 @@ fun SettingsDialog(
     onCheckUpdate: () -> Unit = {},
     onInstallUpdate: () -> Unit = {},
     onWantsBeta: (Boolean) -> Unit = {},
+    /** Réglages › Enfant: the channels the kids profile may watch (null: no kids profile, no page). */
+    kidChannels: List<dev.miraiijo.lumentube.kids.KidChannel>? = null,
+    onRemoveKidChannel: (String) -> Unit = {},
+    onChangeKidsPin: () -> Unit = {},
+    onDeleteKids: () -> Unit = {},
 ) {
     LumenDialog(onDismissRequest = onDismiss) {
         val first = remember { FocusRequester() }
@@ -373,7 +391,7 @@ fun SettingsDialog(
             }
         }
         var page by remember { mutableStateOf(SettingsPage.PLAYBACK) }
-        val pages = SettingsPage.entries.filter { it != SettingsPage.ACCOUNT || accountName != null }
+        val pages = SettingsPage.entries.filter { (it != SettingsPage.ACCOUNT || accountName != null) && (it != SettingsPage.KIDS || kidChannels != null) }
         Column(Modifier.fillMaxSize().lumenBackground().safePadding()) {
             Text("Réglages", fontSize = 44.sp, lineHeight = 50.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.03).em, color = Palette.TextPrimary)
             Row(Modifier.weight(1f).padding(top = 22.dp), horizontalArrangement = Arrangement.spacedBy(22.dp)) {
@@ -460,6 +478,26 @@ fun SettingsDialog(
                         SettingsPage.ACCOUNT -> {
                             SettingCard("Compte YouTube", "Les autres comptes liés restent sur la box (« Qui regarde ? »).") {
                                 LumenButton("Se déconnecter de ${accountName.orEmpty()}", icon = LumenIcon.CLOSE, onClick = onSignOut)
+                            }
+                        }
+                        SettingsPage.KIDS -> {
+                            val channels = kidChannels.orEmpty()
+                            SettingCard(
+                                "Chaînes autorisées · ${channels.size}",
+                                if (channels.isEmpty()) "Aucune pour l’instant : « Pour Enfant » sur la page d’une chaîne l’ajoute." else "OK sur une chaîne la retire. « Pour Enfant » sur la page d’une chaîne en ajoute une.",
+                            ) {
+                                // A long list scrolls sideways under the focus.
+                                EdgeScroll(24.dp) {
+                                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        channels.forEach { channel ->
+                                            LumenButton(channel.name, icon = LumenIcon.CLOSE, contentColor = Palette.ChipText) { onRemoveKidChannel(channel.id) }
+                                        }
+                                    }
+                                }
+                            }
+                            SettingCard("Code parent", "Demandé pour quitter le profil enfant. Le profil enfant de Lumen se quitte dans Lumen.") {
+                                LumenButton("Changer le code", contentColor = Palette.ChipText, onClick = onChangeKidsPin)
+                                LumenButton("Supprimer le profil enfant", icon = LumenIcon.CLOSE, onClick = onDeleteKids)
                             }
                         }
                         SettingsPage.UPDATES -> {

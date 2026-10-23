@@ -12,12 +12,17 @@ import dev.miraiijo.lumentube.data.Section
 import dev.miraiijo.lumentube.data.Video
 import dev.miraiijo.lumentube.data.VideoRow
 import dev.miraiijo.lumentube.data.YouTube
+import dev.miraiijo.lumentube.kids.KidChannel
+import dev.miraiijo.lumentube.kids.KidsStore
+import dev.miraiijo.lumentube.kids.LumenProfile
+import dev.miraiijo.lumentube.kids.PinResult
 import dev.miraiijo.lumentube.player.PlayerPrefs
 import dev.miraiijo.lumentube.remote.RemoteControl
 import dev.miraiijo.lumentube.ui.UI_SCALE_DEFAULT
 import dev.miraiijo.lumentube.update.Updater
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import io.reactivex.disposables.Disposable
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,7 +59,30 @@ data class ChannelHeader(
     val subscribed: Boolean? = null,
     val sorts: List<String> = emptyList(),
     val sort: Int = -1,
+    /** Allowed for the kids profile (null: no kids profile, no button). */
+    val kidAllowed: Boolean? = null,
 )
+
+/** A step of the parental code dialog (kids profile). */
+enum class PinStep { CREATE, CONFIRM, UNLOCK, CHANGE_CHECK, CHANGE_NEW, CHANGE_CONFIRM, DELETE_CHECK }
+
+/** The parental code dialog: its step, the code typed first (to confirm it), a note instead of the hint. */
+data class PinPrompt(val step: PinStep, val first: String? = null, val note: String? = null) {
+    val title: String
+        get() = when (step) {
+            PinStep.CREATE -> "Profil enfant : choisis un code parent"
+            PinStep.CONFIRM, PinStep.CHANGE_CONFIRM -> "Confirme le code parent"
+            PinStep.UNLOCK -> "Quitter le profil enfant"
+            PinStep.CHANGE_CHECK, PinStep.DELETE_CHECK -> "Code parent actuel"
+            PinStep.CHANGE_NEW -> "Nouveau code parent"
+        }
+    val hint: String
+        get() = note ?: when (step) {
+            PinStep.CREATE, PinStep.CHANGE_NEW -> "4 chiffres. Il sera demandé pour quitter le profil enfant."
+            PinStep.CONFIRM, PinStep.CHANGE_CONFIRM -> "Les mêmes 4 chiffres, encore une fois."
+            else -> "Code parent à 4 chiffres"
+        }
+}
 
 /** The app-wide switches of the "Compte et réglages" dialog. */
 data class Settings(
@@ -140,6 +168,18 @@ data class UiState(
     val pairing: Pairing? = null,
     /** Réglages › Mises à jour. */
     val update: UpdateUi = UpdateUi(),
+    /**
+     * Kids profile on: no account, only the allowed channels (Accueil, one row each), no search,
+     * comments, card menus, Réglages, phone or links. [kidsLocked]: Lumen's current profile is a
+     * kids one, the way out is in Lumen (no parental code here).
+     */
+    val kids: Boolean = false,
+    val kidsLocked: Boolean = false,
+    /** The kids profile exists (its parental code is set) and the channels it may watch. */
+    val kidsExists: Boolean = false,
+    val kidChannels: List<KidChannel> = emptyList(),
+    /** Parental code dialog open. */
+    val pin: PinPrompt? = null,
 ) {
     val opened: Opened?
         get() = openedStack.lastOrNull()
@@ -172,6 +212,9 @@ data class UiState(
 
 class MainViewModel(application: Application, private val saved: SavedStateHandle) : AndroidViewModel(application) {
     private val prefs = PlayerPrefs(application)
+    private val kidsStore = KidsStore(application)
+    /** One kids profile change at a time (start, Lumen's profile, the parental code). */
+    private val kidsMutex = kotlinx.coroutines.sync.Mutex()
     private val _state = MutableStateFlow(UiState(settings = prefs.settings()))
     val state: StateFlow<UiState> = _state.asStateFlow()
     private val loads = mutableMapOf<Section, Job>()
@@ -216,6 +259,14 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         viewModelScope.launch {
             // A Lumen launch cut short (process killed while playing as another account): back home.
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { YouTube.restoreHome() } }
+            kidsUi()
+            // Kids profile: Lumen's current profile is a kids one, or it was left on (a kid closing
+            // the app comes back to it). Turned on by Lumen and Lumen back on an adult: off again.
+            if (startKids()) {
+                _state.update { it.copy(accounts = YouTube.accounts()) }
+                keepSavedState()
+                return@launch
+            }
             val accounts = YouTube.accounts()
             val guest = accounts.isNotEmpty() && !kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { YouTube.signedIn }
             // Several accounts, or "Invité" left on last time: "Qui regarde ?" first, Accueil loads
@@ -229,18 +280,22 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
                 refreshAccount()
                 show(if (restored) savedSection else Section.HOME)
             }
-            // Kept from now on (written into the saved state at each change, cheap).
-            state.collect { s ->
-                saved[KEY_PICKED] = !s.choosingAccount
-                saved[KEY_SECTION] = s.section.name
-                val video = (s.playing?.videoId ?: s.playingId).takeIf { !playingAs }
-                if (video != saved.get<String>(KEY_VIDEO)) {
-                    saved[KEY_VIDEO] = video
-                    saved[KEY_POSITION] = s.playing?.let { 0 } ?: s.playingStart
-                }
-            }
+            keepSavedState()
         }
         initUpdates()
+    }
+
+    /** The saved state follows the UI from now on (written at each change, cheap). */
+    private suspend fun keepSavedState() {
+        state.collect { s ->
+            saved[KEY_PICKED] = !s.choosingAccount
+            saved[KEY_SECTION] = s.section.name
+            val video = (s.playing?.videoId ?: s.playingId).takeIf { !playingAs }
+            if (video != saved.get<String>(KEY_VIDEO)) {
+                saved[KEY_VIDEO] = video
+                saved[KEY_POSITION] = s.playing?.let { 0 } ?: s.playingStart
+            }
+        }
     }
 
     /** Where the video is (the player tells it when it pauses or goes to the background). */
@@ -256,6 +311,8 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     }
 
     fun show(section: Section) {
+        // Kids profile: Accueil only.
+        if (_state.value.kids && section != Section.HOME) return
         channelJob?.cancel()
         _state.update { it.copy(section = section, openedStack = emptyList(), focusKey = null) }
         if (section == Section.SEARCH) return
@@ -277,6 +334,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     }
 
     private fun load(section: Section) {
+        if (_state.value.kids) return loadKids()
         loads[section]?.cancel()
         if (section == Section.HOME) {
             homeExtrasJob?.cancel()
@@ -317,7 +375,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
      */
     fun loadHomeExtras(error: String? = null, fromLoad: Boolean = false) {
         val s = _state.value
-        if (homeExtrasJob != null) return
+        if (homeExtrasJob != null || s.kids) return
         // From the page: only Accueil's own (a page fading out doesn't ask).
         if (!fromLoad && (s.section != Section.HOME || s.opened != null)) return
         val home = s.pages[Section.HOME] ?: return
@@ -381,7 +439,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
 
     fun search(query: String) {
         val text = query.trim()
-        if (text.isEmpty()) return
+        if (text.isEmpty() || _state.value.kids) return
         searchJob?.cancel()
         suggestJob?.cancel()
         val options = _state.value.searchOptions
@@ -442,6 +500,8 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
 
     /** OK on a card: play a video, open a channel / playlist. */
     fun select(video: Video) {
+        // Kids profile: the videos of its rows only (no channel, no playlist).
+        if (_state.value.kids && (!video.isVideo || video.videoId == null)) return
         if (video.isVideo && video.videoId != null) {
             // The video already in the small window: back to full screen, where it was.
             val current = _state.value.let { it.playing?.videoId ?: it.playingId }
@@ -480,15 +540,20 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
 
     /** From the player: the video goes to the small window, the channel page opens behind it. */
     fun openChannelFromPlayer(channelId: String, name: String) {
+        if (_state.value.kids) return
         _state.update { it.copy(minimized = true) }
         openChannel(channelId, name, null)
     }
 
     /** A channel page (from a channel card, a card's menu or the player): header, then its rows. */
     fun openChannel(channelId: String, name: String, avatar: String?, from: Video? = null) {
+        if (_state.value.kids) return
         channelJob?.cancel()
         val prev = _state.value.opened?.takeIf { it.channel?.id == channelId }
-        val header = ChannelHeader(channelId, name.ifBlank { "Chaîne" }, avatar ?: prev?.channel?.avatar)
+        val header = ChannelHeader(
+            channelId, name.ifBlank { "Chaîne" }, avatar ?: prev?.channel?.avatar,
+            kidAllowed = if (kidsStore.exists) kidsStore.isAllowed(channelId) else null,
+        )
         val entry = Opened(key = channelId, title = header.name, page = Page(), channel = header, from = from ?: prev?.from)
         _state.update { s -> s.copy(openedStack = s.openedStack.pushOrReplace(entry), focusKey = null, cardMenu = null) }
         channelJob = viewModelScope.launch {
@@ -560,7 +625,9 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
 
     // ---- Card menu (long press) -----------------------------------------------------------------
 
-    fun openCardMenu(video: Video) = _state.update { it.copy(cardMenu = video) }
+    fun openCardMenu(video: Video) {
+        if (!_state.value.kids) _state.update { it.copy(cardMenu = video) }
+    }
 
     fun closeCardMenu() = _state.update { it.copy(cardMenu = null) }
 
@@ -628,6 +695,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     /** The activity is on screen (or not): commands are listened to only then, when it's enabled. */
     fun onForeground(on: Boolean) {
         foreground = on
+        if (on) checkLumenProfile()
         RemoteControl.uiForeground = on
         // Off screen, the background service (when enabled) keeps listening.
         if (on && _state.value.settings.remote) RemoteControl.start(getApplication())
@@ -656,6 +724,10 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         when (event) {
             is RemoteControl.Event.Open -> {
                 val s = _state.value
+                if (s.kids) {
+                    showNotice("Profil enfant : les vidéos envoyées par un téléphone ne sont pas lues.")
+                    return
+                }
                 val current = s.playing?.videoId ?: s.playingId
                 // The video already playing: only its position (the player handles the Seek).
                 if (current == event.videoId) {
@@ -680,7 +752,10 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     }
 
     /** "À suivre" from the player: the next video replaces the current one. */
-    fun playNext(video: Video) = _state.update { it.copy(playing = video, playingId = null) }
+    fun playNext(video: Video) {
+        if (_state.value.kids) return stopPlaying()
+        _state.update { it.copy(playing = video, playingId = null) }
+    }
 
     fun closeOpened() = _state.update { s ->
         channelJob?.cancel()
@@ -694,6 +769,11 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
      * same: the selected account. [skipPickerAsked]: no "Qui regarde ?".
      */
     fun playLink(videoId: String, startSeconds: Int = 0, accountId: String? = null, skipPickerAsked: Boolean = false) {
+        // Kids profile: only its allowed channels play, never a link from elsewhere.
+        if (_state.value.kids || kidsStore.active) {
+            showNotice("Profil enfant : seules les chaînes autorisées se regardent ici.")
+            return
+        }
         // A launch for an account plays at once: "Qui regarde ?" never covers it.
         if (skipPickerAsked || accountId != null) {
             skipPicker = true
@@ -793,6 +873,212 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         }
     }
 
+    // ---- Kids profile ---------------------------------------------------------------------------
+
+    private fun kidsUi() = _state.update { it.copy(kidsExists = kidsStore.exists, kidChannels = kidsStore.channels) }
+
+    /** At start: true when the kids profile is on (Lumen's current profile, or left on here). */
+    private suspend fun startKids(): Boolean {
+        val lumenKids = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { LumenProfile.currentIsKids(getApplication()) }
+        return kidsMutex.withLock {
+            when {
+                lumenKids == true -> beginKids(fromLumen = true)
+                // Turned on by Lumen, and Lumen is on an adult profile now: off, without a code.
+                kidsStore.active && kidsStore.fromLumen && lumenKids == false -> {
+                    endKidsLocked()
+                    return@withLock false
+                }
+                kidsStore.active -> beginKids(fromLumen = kidsStore.fromLumen)
+                else -> return@withLock false
+            }
+            true
+        }
+    }
+
+    /** Back on screen: Lumen's profile may have changed meanwhile (kids ↔ adult). */
+    private fun checkLumenProfile() {
+        viewModelScope.launch {
+            val lumenKids = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { LumenProfile.currentIsKids(getApplication()) } ?: return@launch
+            kidsMutex.withLock {
+                val s = _state.value
+                if (lumenKids && !(s.kids && s.kidsLocked)) {
+                    beginKids(fromLumen = true)
+                } else if (!lumenKids && s.kids && s.kidsLocked) {
+                    endKidsLocked()
+                    reloadAfterKids()
+                }
+            }
+        }
+    }
+
+    /**
+     * Kids profile on (under [kidsMutex]): YouTube without account (the account in use is kept
+     * to come back to), only the allowed channels; a video playing stops (it was an adult's).
+     */
+    private suspend fun beginKids(fromLumen: Boolean) {
+        if (!_state.value.kids) {
+            // A Lumen launch playing as another account: that account goes first (the engine is
+            // LumenTube's again), then no account at all.
+            if (playingAs) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { YouTube.endPlayAs() } }
+                playingAs = false
+            }
+            kidsStore.previousAccount = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { YouTube.homeAccountId() }
+            if (!YouTube.useGuest()) YouTube.useGuest()
+        }
+        kidsStore.active = true
+        kidsStore.fromLumen = fromLumen
+        if (signIn != null) cancelSignIn()
+        cancelLoads()
+        channelJob?.cancel()
+        _state.update {
+            it.copy(
+                kids = true, kidsLocked = fromLumen, pin = null,
+                choosingAccount = false, accountsOpen = false, settingsOpen = false, pairing = null, cardMenu = null,
+                playing = null, playingId = null, minimized = false,
+                pages = emptyMap(), resume = null, search = null, section = Section.HOME, openedStack = emptyList(), focusKey = null,
+            )
+        }
+        kidsUi()
+        refreshAccount()
+        show(Section.HOME)
+    }
+
+    /** Kids profile off (under [kidsMutex]): the account used before comes back. */
+    private suspend fun endKidsLocked() {
+        kidsStore.active = false
+        kidsStore.fromLumen = false
+        val previous = kidsStore.previousAccount
+        kidsStore.previousAccount = null
+        if (previous != null) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { YouTube.selectFeedAccount(previous) } }
+        _state.update { it.copy(kids = false, kidsLocked = false, pin = null) }
+    }
+
+    private fun reloadAfterKids() {
+        cancelLoads()
+        _state.update { it.copy(pages = emptyMap(), resume = null, search = null, section = Section.HOME, openedStack = emptyList(), focusKey = null, playing = null, playingId = null, minimized = false) }
+        refreshAccount()
+        show(Section.HOME)
+    }
+
+    /** "Enfant" in "Qui regarde ?": the profile, or its creation (a parental code first). */
+    fun chooseKids() {
+        if (_state.value.kids) return
+        if (!kidsStore.exists) {
+            _state.update { it.copy(pin = PinPrompt(PinStep.CREATE)) }
+            return
+        }
+        viewModelScope.launch { kidsMutex.withLock { beginKids(fromLumen = false) } }
+    }
+
+    /** Réglages › Enfant. */
+    fun changeKidsPin() = _state.update { it.copy(pin = PinPrompt(PinStep.CHANGE_CHECK)) }
+
+    fun deleteKids() = _state.update { it.copy(pin = PinPrompt(PinStep.DELETE_CHECK)) }
+
+    fun removeKidChannel(id: String) {
+        if (_state.value.kids) return
+        kidsStore.disallow(id)
+        kidsUi()
+    }
+
+    fun closePin() = _state.update { it.copy(pin = null) }
+
+    /** The 4 digits typed in the parental code dialog: an error to show, or null (the dialog moves on). */
+    suspend fun submitPin(code: String): String? {
+        val prompt = _state.value.pin ?: return null
+        val io = kotlinx.coroutines.Dispatchers.IO
+        return when (prompt.step) {
+            PinStep.CREATE, PinStep.CHANGE_NEW -> {
+                val confirm = if (prompt.step == PinStep.CREATE) PinStep.CONFIRM else PinStep.CHANGE_CONFIRM
+                _state.update { it.copy(pin = PinPrompt(confirm, first = code)) }
+                null
+            }
+            PinStep.CONFIRM, PinStep.CHANGE_CONFIRM -> {
+                if (code != prompt.first) {
+                    val again = if (prompt.step == PinStep.CONFIRM) PinStep.CREATE else PinStep.CHANGE_NEW
+                    _state.update { it.copy(pin = PinPrompt(again, note = "Les deux codes étaient différents : recommence.")) }
+                    return null
+                }
+                kotlinx.coroutines.withContext(io) { kidsStore.setPin(code) }
+                _state.update { it.copy(pin = null) }
+                kidsUi()
+                if (prompt.step == PinStep.CONFIRM) {
+                    kidsMutex.withLock { beginKids(fromLumen = false) }
+                } else {
+                    showNotice("Code parent changé.")
+                }
+                null
+            }
+            PinStep.UNLOCK, PinStep.CHANGE_CHECK, PinStep.DELETE_CHECK -> when (val result = kotlinx.coroutines.withContext(io) { kidsStore.verify(code) }) {
+                PinResult.Ok -> {
+                    when (prompt.step) {
+                        PinStep.UNLOCK -> {
+                            kidsMutex.withLock { endKidsLocked() }
+                            reloadAfterKids()
+                            // Who watches now: the accounts, "Invité" and "Enfant" again.
+                            _state.update { it.copy(accountsOpen = true) }
+                        }
+                        PinStep.CHANGE_CHECK -> _state.update { it.copy(pin = PinPrompt(PinStep.CHANGE_NEW)) }
+                        else -> {
+                            kidsStore.delete()
+                            _state.update { it.copy(pin = null) }
+                            kidsUi()
+                            showNotice("Profil enfant supprimé.")
+                        }
+                    }
+                    null
+                }
+                PinResult.Wrong -> "Code incorrect."
+                is PinResult.Locked -> "Trop d’essais : réessaie dans ${result.minutes} min."
+            }
+        }
+    }
+
+    /** "Pour Enfant" on a channel page: the kids profile may watch it (or not anymore). */
+    fun toggleKidChannel() {
+        val channel = _state.value.opened?.channel ?: return
+        if (_state.value.kids || !kidsStore.exists) return
+        val allowed = kidsStore.isAllowed(channel.id)
+        if (allowed) kidsStore.disallow(channel.id) else kidsStore.allow(KidChannel(channel.id, channel.name, channel.avatar))
+        updateChannel(channel.id) { it.copy(kidAllowed = !allowed) }
+        kidsUi()
+        showNotice(if (allowed) "${channel.name} retirée du profil enfant." else "${channel.name} autorisée pour le profil enfant.")
+    }
+
+    /**
+     * Accueil of the kids profile: one row per allowed channel, its latest videos (its own
+     * "Vidéos" order, so never another channel's), at most [KIDS_PARALLEL] channels at a time.
+     */
+    private fun loadKids() {
+        loads[Section.HOME]?.cancel()
+        val channels = kidsStore.channels
+        _state.update { it.copy(pages = it.pages + (Section.HOME to Page(loading = true)), resume = null) }
+        loads[Section.HOME] = viewModelScope.launch {
+            fun set(page: Page) = _state.update { it.copy(pages = it.pages + (Section.HOME to page)) }
+            if (channels.isEmpty()) {
+                set(Page(loading = false, error = KIDS_EMPTY))
+                return@launch
+            }
+            val rows = arrayOfNulls<VideoRow>(channels.size)
+            val gate = kotlinx.coroutines.sync.Semaphore(KIDS_PARALLEL)
+            kotlinx.coroutines.coroutineScope {
+                channels.forEachIndexed { index, channel ->
+                    launch {
+                        val row = gate.withPermit { runCatching { YouTube.channelSorts(channel.id) }.getOrNull() }?.firstOrNull() ?: return@launch
+                        val videos = row.items.filter { it.isVideo && it.videoId != null && (it.raw.channelId == null || it.raw.channelId == channel.id) }
+                        if (videos.isEmpty()) return@launch
+                        rows[index] = row.copy(key = "$KIDS_ROW${channel.id}", title = channel.name, items = videos, canLoadMore = false)
+                        set(Page(rows.filterNotNull(), loading = true))
+                    }
+                }
+            }
+            val shown = rows.filterNotNull()
+            set(if (shown.isEmpty()) Page(loading = false, error = "Les chaînes autorisées ne répondent pas pour l’instant.") else Page(shown, loading = false))
+            fetchDeArrow(shown)
+        }
+    }
+
     // ---- Self-update (Réglages › Mises à jour) -------------------------------------------------
 
     /** The installed version, then the silent daily check (a notice when a version is ready). */
@@ -888,11 +1174,22 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
 
     // ---- Settings -----------------------------------------------------------------------------
 
-    fun openSettings() = _state.update { it.copy(settingsOpen = true) }
+    fun openSettings() {
+        if (!_state.value.kids) _state.update { it.copy(settingsOpen = true) }
+    }
 
     fun openAccounts() {
-        _state.update { it.copy(accountsOpen = true) }
-        refreshAccount()
+        val s = _state.value
+        when {
+            // Lumen's kids profile: the way out is in Lumen, behind its own parental code.
+            s.kidsLocked -> showNotice("Profil enfant de Lumen : change de profil dans Lumen.")
+            // LumenTube's kids profile: the parental code first.
+            s.kids -> _state.update { it.copy(pin = PinPrompt(PinStep.UNLOCK)) }
+            else -> {
+                _state.update { it.copy(accountsOpen = true) }
+                refreshAccount()
+            }
+        }
     }
 
     fun closeAccounts() = _state.update { it.copy(accountsOpen = false) }
@@ -923,6 +1220,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     // ---- Account ------------------------------------------------------------------------------
 
     fun startSignIn() {
+        if (_state.value.kids) return
         signIn?.dispose()
         _state.update { it.copy(signingIn = true, signInCode = null, signInError = null) }
         signIn = YouTube.signIn(
@@ -939,6 +1237,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
 
     /** Account picked at launch ("Qui regarde ?") or in the settings: Accueil reloads for it. */
     fun chooseAccount(account: Account) {
+        if (_state.value.kids) return
         viewModelScope.launch {
             if (!account.selected) YouTube.selectAccount(account)
             // Playing as another account for Lumen: the new home loads when that video stops.
@@ -957,6 +1256,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
 
     /** "Invité" in "Qui regarde ?": signed-out YouTube, the linked accounts kept. */
     fun chooseGuest() {
+        if (_state.value.kids) return
         viewModelScope.launch {
             if (!YouTube.useGuest()) {
                 _state.update { it.copy(choosingAccount = false, accountsOpen = false) }
@@ -1002,8 +1302,9 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
                 it.copy(
                     signedIn = signed,
                     accountId = id,
-                    accountName = if (signed) YouTube.accountName else null,
-                    accountAvatar = if (signed) YouTube.accountAvatar else null,
+                    // Kids profile: no account, its own name on the header's round button.
+                    accountName = if (it.kids) "Enfant" else if (signed) YouTube.accountName else null,
+                    accountAvatar = if (signed && !it.kids) YouTube.accountAvatar else null,
                     accounts = accounts,
                 )
             }
@@ -1028,6 +1329,10 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         const val HISTORY_SETTLE_MS = 400L
         /** …and is waited for, at most this long, before LumenTube's account comes back. */
         const val HISTORY_WAIT_MS = 5_000L
+        /** Kids profile: Accueil's rows' keys, and channels read at once (the Freebox Player POP is slow). */
+        const val KIDS_ROW = "kids-"
+        const val KIDS_PARALLEL = 3
+        const val KIDS_EMPTY = "Aucune chaîne autorisée pour l’instant. Un parent en choisit depuis un profil adulte : « Pour Enfant » sur la page d’une chaîne."
     }
 
     override fun onCleared() {

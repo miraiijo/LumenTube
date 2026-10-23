@@ -534,6 +534,7 @@ const codeDlg=(id,title,p,s,btns,seed)=>`<div class="ovl pop tg full" data-id="$
 V.who=()=>`<div class="who"><h3>Qui regarde ?</h3><div class="ptiles">
  ${[['Moi','Compte actuel'],['Alex','']].map(([n,c],i)=>`<div class="pt" data-id="pf-${i}"><div class="pring">${av(n,110,46)}</div><div class="pn">${n}</div><div class="pc">${c}</div></div>`).join('')}
  <div class="pt" data-id="pf-guest"><div class="pring"><div class="padd">${I.user}</div></div><div class="pn">Invité</div><div class="pc">Sans compte</div></div>
+ <div class="pt" data-id="pf-kids"><div class="pring"><div class="padd">${I.smile||I.user}</div></div><div class="pn">Enfant</div><div class="pc">Chaînes choisies</div></div>
  <div class="pt" data-id="pf-add"><div class="pring"><div class="padd">${I.plus}</div></div><div class="pn">Ajouter</div><div class="pc"></div></div></div>
  <div class="wfoot">Le compte change ton Accueil, tes abonnements, ton historique et le flux de Lumen.</div></div>
  ${codeDlg('si','Connecter un compte YouTube','Scanne le QR code avec ton téléphone, ou ouvre youtube.com/activate et saisis ce code :','LumenTube reste connecté ensuite. Tu peux lier plusieurs comptes et choisir lequel à l’ouverture.',cbtn('si-0','','Annuler'),7)}`;
@@ -712,16 +713,18 @@ const SCREENS=[
  {k:'B',t:'Retour',f:'btn-now',on:[],n:'Retour : sur « Lecture en cours ».'},
  {k:'OK',t:'Plein écran',view:'player',f:'pb',on:['ctl'],n:'Plein écran à la même position. La touche lecture/pause fait pareil, de n’importe où.'},
  ]},
-{id:'comptes',title:'« Qui regarde ? » et connexion',desc:'Plein écran, comme dans Lumen : les comptes liés en grands avatars ronds, « Invité » et « Ajouter ». Au lancement quand plusieurs comptes sont liés, et depuis l’avatar de l’en-tête. La connexion s’ouvre par-dessus : un code et un QR code.',
- notes:['Connexion impossible : le message en rouge à la place du code, et « Réessayer » ; le focus revient après.','Lancée depuis Lumen avec un compte, une vidéo démarre sans « Qui regarde ? ».'],
+{id:'comptes',title:'« Qui regarde ? » et connexion',desc:'Plein écran, comme dans Lumen : les comptes liés en grands avatars ronds, « Invité », « Enfant » et « Ajouter ». Au lancement quand plusieurs comptes sont liés, et depuis l’avatar de l’en-tête. La connexion s’ouvre par-dessus : un code et un QR code.',
+ notes:['Profil enfant : sans compte YouTube, une rangée par chaîne autorisée (ses dernières vidéos), rien d’autre. Pas de Rechercher, de Réglages, de menu de carte, de commentaires, de « Voir la chaîne » ni de « À suivre » de YouTube ; les vidéos du téléphone et les liens des autres applis ne sont pas lus. L’avatar (« Enfant ») demande le code parent (4 chiffres, 5 essais puis 5 min d’attente) avant « Qui regarde ? ». Rouvert au lancement tant qu’il n’est pas quitté.','Profil enfant de Lumen : LumenTube s’ouvre en profil enfant, sans sortie ici (« change de profil dans Lumen ») ; revenu sur un profil adulte dans Lumen, LumenTube revient au compte d’avant.','Un parent autorise une chaîne depuis un profil adulte : « Pour Enfant » sur la page de la chaîne (« Autorisée pour Enfant » ensuite). Réglages › Enfant : les chaînes (OK en retire une), « Changer le code », « Supprimer le profil enfant » (code demandé).','Connexion impossible : le message en rouge à la place du code, et « Réessayer » ; le focus revient après.','Lancée depuis Lumen avec un compte, une vidéo démarre sans « Qui regarde ? ».'],
  steps:[
  {view:'who',f:'pf-0',k:'▶',t:'Lancement',n:'Focus sur le compte actuel (« Compte actuel » sous le nom). Anneau détaché autour de l’avatar, ×1,1.'},
  {k:'▶',t:'Droite',f:'pf-1'},
  {k:'▶',t:'Droite',f:'pf-guest',n:'« Invité » : YouTube sans compte (rien dans l’historique ni les recommandations de personne), les comptes liés restent. Proposé dès qu’un compte est lié ; laissé en Invité, « Qui regarde ? » revient au lancement suivant.'},
+ {k:'▶',t:'Droite',f:'pf-kids',n:'« Enfant » : le profil enfant (« À créer » tant qu’il n’existe pas : OK demande alors de choisir un code parent, deux fois).'},
  {k:'▶',t:'Droite',f:'pf-add'},
  {k:'OK',t:'Ajouter',f:'si-0',on:['si'],n:'Connexion par-dessus « Qui regarde ? ». Le code a une place fixe : la fenêtre ne saute pas.'},
  {k:'⏱',t:'Code',txt:{'si-code':'XKT-4QF-BPM'},st:{'si-code':CODE_ST,'si-qr':{opacity:'1'}},n:'Code et QR code dessiné sur la box (aucun service web) ; scanné, il ouvre youtube.com/activate avec le code rempli. La fenêtre se ferme seule une fois le compte lié.'},
  {k:'B',t:'Annuler',f:'pf-add',on:[],n:'Fermée : focus rendu à « Ajouter ».'},
+ {k:'◀',t:'Gauche',f:'pf-kids'},
  {k:'◀',t:'Gauche',f:'pf-guest'},
  {k:'◀',t:'Gauche',f:'pf-1'},
  {k:'OK',t:'Alex',view:'home',f:'h0-0',txt:{hav:'A'},st:{hav:{background:grad('Alex')}},n:'Compte choisi : l’Accueil, les abonnements, l’historique et le flux de Lumen suivent ce compte.'},
