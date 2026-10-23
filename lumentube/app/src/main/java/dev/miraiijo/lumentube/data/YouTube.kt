@@ -638,7 +638,9 @@ object YouTube {
     suspend fun isSubscribed(channelId: String): Boolean = withContext(Dispatchers.IO) {
         if (!signedIn) return@withContext false
         val known = subscribedChannels ?: runCatching {
-            service.contentService.subscribedChannels?.mediaItems.orEmpty().mapNotNull { it?.channelId }.toMutableSet()
+            java.util.concurrent.ConcurrentHashMap.newKeySet<String>().apply {
+                addAll(service.contentService.subscribedChannels?.mediaItems.orEmpty().mapNotNull { it?.channelId })
+            }
         }.getOrNull()?.also { subscribedChannels = it }
         known?.contains(channelId) == true
     }

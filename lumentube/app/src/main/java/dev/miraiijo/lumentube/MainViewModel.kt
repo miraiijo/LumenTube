@@ -431,7 +431,11 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         deArrowAsked += ids
         viewModelScope.launch {
             val found = YouTube.deArrow(ids)
-            if (found.isNotEmpty()) _state.update { it.copy(deArrow = it.deArrow + found) }
+            if (found.isEmpty()) {
+                deArrowAsked -= ids.toSet()
+            } else {
+                _state.update { it.copy(deArrow = it.deArrow + found) }
+            }
         }
     }
 
