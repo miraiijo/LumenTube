@@ -4,7 +4,8 @@ YouTube sans pubs pour Android TV, avec l'interface de Lumen. C'est un fork de
 [SmartTube](https://github.com/yuliskov/SmartTube) (licence MIT, conservée dans `../LICENSE`).
 
 ## Principe
-- Le dépôt est un fork de SmartTube. **Aucun fichier de SmartTube n'est modifié.** Tout est dans `lumentube/`, avec en plus `.github/workflows/lumentube.yml`.
+- Le dépôt est un fork de SmartTube. **Aucun fichier de SmartTube n'est modifié.** Tout est dans `lumentube/`, avec en plus `.github/workflows/lumentube.yml`. Seule exception : le README de la racine présente LumenTube, et celui de SmartTube est déplacé dans `README-SmartTube.md`. Si un `git merge upstream/master` signale un conflit sur `README.md`, garde la version de LumenTube et reporte au besoin les changements dans `README-SmartTube.md`.
+- Licence : l'avis MIT de SmartTube doit suivre chaque copie. Il est affiché dans Réglages › À propos, et les textes des licences sont dans l'APK (`app/src/main/assets/licenses/`).
 - `lumentube/` est un build Gradle autonome (AGP 8.7, Kotlin 2, Compose TV, comme Lumen). Il compile depuis les dossiers parents le moteur de SmartTube, tel quel :
   - `MediaServiceCore` : API YouTube, compte, abonnements, historique ;
   - `SharedModules` ;

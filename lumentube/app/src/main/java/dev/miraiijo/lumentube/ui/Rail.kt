@@ -350,7 +350,7 @@ private fun ProfileTile(name: String, caption: String?, modifier: Modifier, onCl
 }
 
 /** Réglages' categories (left column). */
-private enum class SettingsPage(val label: String) { PLAYBACK("Lecture"), DISPLAY("Affichage"), PHONE("Téléphone"), ACCOUNT("Compte"), KIDS("Enfant"), UPDATES("Mises à jour") }
+private enum class SettingsPage(val label: String) { PLAYBACK("Lecture"), DISPLAY("Affichage"), PHONE("Téléphone"), ACCOUNT("Compte"), KIDS("Enfant"), UPDATES("Mises à jour"), ABOUT("À propos") }
 
 /**
  * Réglages (the redesign: full screen, like Lumen's): the categories on the left (the one focused
@@ -534,6 +534,21 @@ fun SettingsDialog(
                                 }
                             }
                         }
+                        SettingsPage.ABOUT -> {
+                            // SmartTube's MIT licence asks for its notice in every copy: shown here, and
+                            // every licence text is in the APK (assets/licenses).
+                            val context = androidx.compose.ui.platform.LocalContext.current
+                            val mit = remember { readLicence(context, "SmartTube-MIT.txt") }
+                            SettingCard(
+                                "Basé sur SmartTube",
+                                "LumenTube est un fork de SmartTube (github.com/yuliskov/SmartTube) et utilise son moteur : MediaServiceCore, SharedModules et son ExoPlayer modifié. Appli non officielle, sans lien avec SmartTube, YouTube ou Google.",
+                            ) {}
+                            SettingCard("Licence de SmartTube", mit) {}
+                            SettingCard(
+                                "Autres composants",
+                                "ExoPlayer, AndroidX, Cronet, OkHttp, RxJava et ZXing : licence Apache 2.0. Glide : licences BSD, MIT et Apache 2.0. Police Inter : SIL Open Font License 1.1. Les textes complets sont dans l’APK (assets/licenses).",
+                            ) {}
+                        }
                     }
                 } }
             }
@@ -583,6 +598,11 @@ private fun SettingCard(title: String, help: String, choices: @Composable () -> 
         Text(help, fontSize = Dimens.TextMin, color = if (Palette.colors.isLight) Palette.TextSecondary else SETTINGS_HELP_NIGHT, modifier = Modifier.padding(top = 8.dp))
     }
 }
+
+/** A licence text from assets/licenses, its paragraphs joined back into lines (the file wraps at 70 columns). */
+private fun readLicence(context: android.content.Context, name: String): String =
+    runCatching { context.assets.open("licenses/$name").bufferedReader().use { it.readText() } }.getOrDefault("")
+        .trim().split(Regex("\\n\\s*\\n")).joinToString("\n\n") { it.replace(Regex("\\s*\\n\\s*"), " ") }
 
 /** The settings' help text at night (the redesign's, a touch lighter than TextSecondary). */
 private val SETTINGS_HELP_NIGHT = Color(0xFFA3A5AD)
