@@ -53,7 +53,18 @@ jobs:
         working-directory: lumentube
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon --build-cache :app:assembleRelease
+          set -o pipefail
+          ./gradlew --no-daemon --build-cache :app:assembleRelease 2>&1 | tee build.log
+
+      - name: Report build errors
+        if: failure()
+        working-directory: lumentube
+        run: |
+          # Compiler / Gradle errors as one annotation (readable from the API without the log download).
+          msg=$(grep -E '^e: |^\* What went wrong|error:|FAILED|Exception' build.log | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Build errors::${msg:-no matching lines}"
+          msg2=$(grep -A12 '^\* What went wrong' build.log | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          [ -n "$msg2" ] && echo "::error title=What went wrong::$msg2" || true
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
