@@ -181,6 +181,15 @@ data class UiState(
     /** Parental code dialog open. */
     val pin: PinPrompt? = null,
 ) {
+    /**
+     * The launch has something to show (the splash screen can go): Accueil's first rows or its
+     * error, "Qui regarde ?", or a video opened from a link.
+     */
+    fun readyToShow(): Boolean {
+        val home = pages[Section.HOME]
+        return choosingAccount || playing != null || playingId != null || (home != null && (home.rows.isNotEmpty() || !home.loading))
+    }
+
     val opened: Opened?
         get() = openedStack.lastOrNull()
 

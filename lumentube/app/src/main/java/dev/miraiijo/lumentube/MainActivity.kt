@@ -10,6 +10,7 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.toArgb
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import dev.miraiijo.lumentube.link.LumenLink
 import dev.miraiijo.lumentube.ui.Appearance
 import dev.miraiijo.lumentube.ui.DayColors
@@ -23,6 +24,15 @@ class MainActivity : ComponentActivity() {
     private val vm: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Halune's logo while Accueil loads behind it: off as soon as there's something to show
+        // (rows, an error, "Qui regarde ?", a video opened from a link), at most SPLASH_MAX_MS.
+        val splash = installSplashScreen()
+        val shownAt = android.os.SystemClock.uptimeMillis()
+        splash.setKeepOnScreenCondition { android.os.SystemClock.uptimeMillis() - shownAt < SPLASH_MAX_MS && !vm.state.value.readyToShow() }
+        // A short fade instead of a cut.
+        splash.setOnExitAnimationListener { view ->
+            view.view.animate().alpha(0f).setDuration(SPLASH_FADE_MS).withEndAction { view.remove() }.start()
+        }
         super.onCreate(savedInstanceState)
         // Warm-up, like SmartTube's splash: YouTube's player script and the signature engine load now
         // (in the background) instead of during the first video's start. Here rather than in the
@@ -138,6 +148,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
+        /** The splash never stays longer than this, whatever is still loading. */
+        const val SPLASH_MAX_MS = 3_000L
+        const val SPLASH_FADE_MS = 250L
         val VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")
         val GAMEPAD_KEYS = mapOf(
             KeyEvent.KEYCODE_BUTTON_A to KeyEvent.KEYCODE_DPAD_CENTER,
