@@ -1,8 +1,8 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
+    // Kotlin is built into AGP 9: no org.jetbrains.kotlin.android here.
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
@@ -12,14 +12,14 @@ val releaseKeystore: String? = System.getenv("LUMENTUBE_KEYSTORE_PATH")
 
 android {
     namespace = "dev.miraiijo.lumentube"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "dev.miraiijo.lumentube"
         minSdk = 28
         targetSdk = 35
-        versionCode = 68
-        versionName = "1.0 bêta 7"
+        versionCode = 69
+        versionName = "1.0 bêta 8"
         // The Freebox Player POP runs a 32-bit userspace; arm64 kept for other boxes.
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
         // Upstream modules have SmartTube's build flavors: use the "stable" one.
@@ -90,11 +90,11 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:3.12.13")
 
     // UI: same stack as Lumen.
-    val composeBom = platform("androidx.compose:compose-bom:2026.06.01")
+    val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
-    implementation("androidx.core:core-ktx:1.18.0")
+    implementation("androidx.core:core-ktx:1.19.1")
     implementation("androidx.activity:activity-compose:1.13.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.11.0")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.animation:animation")
     implementation("androidx.compose.ui:ui")
@@ -103,7 +103,8 @@ dependencies {
     // sideloaded APK too (no Play Store): faster cold start and first scrolls. Same version as Lumen.
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     // Thumbnails: Glide (no OkHttp 4, which Coil needs and the engine can't use).
-    implementation("com.github.bumptech.glide:compose:1.0.0-beta01")
+    implementation("com.github.bumptech.glide:glide:5.0.9")
+    implementation("com.github.bumptech.glide:compose:1.0.0-beta10")
     // QR code of the sign-in, drawn on the box (no web QR service sees the activation code).
     implementation("com.google.zxing:core:3.5.4")
 }
