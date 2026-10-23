@@ -122,6 +122,8 @@ svg{display:block}
 .rows{position:absolute;left:0;right:0;top:80px;bottom:0;overflow:hidden;transition:opacity .22s}
 .rin{position:absolute;left:0;right:0;top:0;transition:transform .45s cubic-bezier(.2,.8,.2,1)}
 .vrow{position:absolute;left:0;right:0;height:237px}
+/* Thin full-width rule above every row but the first (Palette.Divider, 1 px, inset by the gutter). */
+.vrow+.vrow::before{content:'';position:absolute;left:48px;right:48px;top:0;height:1px;background:var(--div)}
 .rt{position:absolute;left:48px;top:8px;font-size:16px;line-height:20px;font-weight:700;white-space:nowrap}
 .rc{position:absolute;left:48px;top:44px;display:flex;gap:16px;transition:transform .45s cubic-bezier(.2,.8,.2,1)}
 .cw{width:204px;flex:none;transition:width .35s,opacity .3s,margin .35s}
@@ -384,7 +386,7 @@ comment:sv('<rect x="3.5" y="4" width="17" height="12" rx="3"/><path fill="curre
 info:sv('<circle cx="12" cy="12" r="9"/><path d="M12 11V17"/><circle cx="12" cy="7.8" r="1.3" fill="currentColor" stroke="none"/>'),
 check:sv('<path d="M5 12.5L10 17.5L19 7"/>'),
 sun:sv('<circle cx="12" cy="12" r="4"/>'+[0,1,2,3,4,5,6,7].map(i=>{const a=Math.PI*i/4,c=Math.cos(a),n=Math.sin(a);return `<path d="M${(12+6.8*c).toFixed(2)} ${(12+6.8*n).toFixed(2)}L${(12+9.2*c).toFixed(2)} ${(12+9.2*n).toFixed(2)}"/>`}).join('')),
-moon:sv('<path fill="currentColor" stroke="none" d="M16.58 20.46A9 9 0 1 1 16.58 3.54A7 7 0 1 0 16.58 20.46Z"/>'),
+moon:sv('<path fill="currentColor" stroke="none" d="M12.09 3.51A8.5 8.5 0 1 0 20.63 14.49A7 7 0 0 1 12.09 3.51Z"/>'),
 plus:sv('<path d="M12 5V19M5 12H19"/>'),
 refresh:sv('<path d="M18.06 15.5A7 7 0 1 1 18.06 8.5"/><path fill="currentColor" stroke="none" d="M19.5 4V10H13.5Z"/>'),
 close:sv('<path d="M6 6L18 18M18 6L6 18"/>'),
