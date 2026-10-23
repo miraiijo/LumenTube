@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="lumentube_background">#FF070707</color>
-    <!-- The Halune logos' night background. -->
-    <color name="splash_background">#FF151722</color>
+    <!-- The Halune banners' night background (the same in Halune IPTV). -->
+    <color name="splash_background">#FF10121A</color>
 
     <style name="Theme.LumenTube" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/lumentube_background</item>

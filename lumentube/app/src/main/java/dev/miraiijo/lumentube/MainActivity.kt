@@ -29,10 +29,6 @@ class MainActivity : ComponentActivity() {
         val splash = installSplashScreen()
         val shownAt = android.os.SystemClock.uptimeMillis()
         splash.setKeepOnScreenCondition { android.os.SystemClock.uptimeMillis() - shownAt < SPLASH_MAX_MS && !vm.state.value.readyToShow() }
-        // A short fade instead of a cut.
-        splash.setOnExitAnimationListener { view ->
-            view.view.animate().alpha(0f).setDuration(SPLASH_FADE_MS).withEndAction { view.remove() }.start()
-        }
         super.onCreate(savedInstanceState)
         // Warm-up, like SmartTube's splash: YouTube's player script and the signature engine load now
         // (in the background) instead of during the first video's start. Here rather than in the
@@ -148,9 +144,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
-        /** The splash never stays longer than this, whatever is still loading. */
+        /**
+         * The splash never stays longer than this, whatever is still loading (Accueil comes from
+         * the network: longer than Halune IPTV's 1.5 s, its rows usually arrive within it).
+         */
         const val SPLASH_MAX_MS = 3_000L
-        const val SPLASH_FADE_MS = 250L
         val VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")
         val GAMEPAD_KEYS = mapOf(
             KeyEvent.KEYCODE_BUTTON_A to KeyEvent.KEYCODE_DPAD_CENTER,
