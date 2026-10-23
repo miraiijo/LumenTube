@@ -2,7 +2,13 @@
 
 package dev.miraiijo.lumentube.ui
 
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.layout.LazyLayoutCacheWindow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.background
@@ -93,8 +99,37 @@ fun MirazukiButton(
     }
 }
 
-/** Scrolls only when the focused element would leave the visible area, keeping margins. */
-private class MarginSpec(private val start: Float, private val end: Float) : BringIntoViewSpec {
+/**
+ * Up / Down between rows, the Apple TV way: the page glides to the focused row on a soft spring
+ * without bounce (about 0.4 s to settle) instead of Compose's stiff default (about 0.15 s), which
+ * turned every row change into a jump on the box. A spring keeps its speed when the next row is
+ * asked for before the page has arrived: a held Down is one continuous slide, never a stop and a
+ * fresh start at each row. Left / Right along a row keep Compose's default.
+ */
+private val PageGlide: AnimationSpec<Float> = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 240f)
+private val RowSpring: AnimationSpec<Float> = spring()
+
+/**
+ * Pages of rows keep the rows around the visible ones ready: one screen below is composed and laid
+ * out ahead of time (in the frames' idle time), half a screen above is kept. A row is never built
+ * in the middle of the glide that brings it in, and going back up doesn't rebuild it.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private val ROWS_CACHE = LazyLayoutCacheWindow(aheadFraction = 1f, behindFraction = 0.5f)
+
+/** State of a vertical page of rows (see [ROWS_CACHE]). */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun rememberRowsState(): LazyListState = rememberLazyListState(cacheWindow = ROWS_CACHE)
+
+/**
+ * Scrolls only when the focused element would leave the visible area, keeping margins. Vertical
+ * lists [glide]; lines that scroll sideways don't.
+ */
+private class MarginSpec(private val start: Float, private val end: Float, private val glide: Boolean = false) : BringIntoViewSpec {
+    @Suppress("OVERRIDE_DEPRECATION")
+    override val scrollAnimationSpec: AnimationSpec<Float> get() = if (glide) PageGlide else RowSpring
+
     override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
         val visibleEnd = containerSize - end
         return when {
@@ -154,7 +189,7 @@ fun SafeSidePanel(width: Dp, modifier: Modifier = Modifier, content: @Composable
     val safe = LocalSafe.current
     val bottom = safe.calculateBottomPadding()
     val density = LocalDensity.current
-    val spec = remember(density, bottom) { with(density) { MarginSpec(0f, bottom.toPx()) } }
+    val spec = remember(density, bottom) { with(density) { MarginSpec(0f, bottom.toPx(), glide = true) } }
     Column(
         modifier
             .width(width)
@@ -176,7 +211,7 @@ private val PANEL_INNER = 20.dp
 @Composable
 fun RowsScroll(start: Dp, end: Dp, content: @Composable () -> Unit) {
     val density = LocalDensity.current
-    val spec = remember(density, start, end) { with(density) { MarginSpec(start.toPx(), end.toPx()) } }
+    val spec = remember(density, start, end) { with(density) { MarginSpec(start.toPx(), end.toPx(), glide = true) } }
     CompositionLocalProvider(LocalBringIntoViewSpec provides spec, content = content)
 }
 
