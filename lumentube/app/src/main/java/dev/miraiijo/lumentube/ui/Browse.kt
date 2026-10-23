@@ -114,6 +114,8 @@ fun BrowsePage(
     focusElsewhere: () -> Boolean = { false },
     /** The last rows are on screen and the page is loaded (Accueil: its extra rows come then). */
     onEndReached: () -> Unit = {},
+    /** "Pour Enfant" on a channel page (null: no kids profile, no button). */
+    onKid: (() -> Unit)? = null,
 ) {
     val first = remember { FocusRequester() }
     val action = remember { FocusRequester() }
@@ -179,7 +181,7 @@ fun BrowsePage(
     Column(Modifier.fillMaxSize()) {
         Spacer(Modifier.height(top))
         when {
-            channel != null -> ChannelSheet(channel, signedIn, onSubscribe, onSort, onSignIn, Modifier.onFocusChanged { sheetFocused = it.hasFocus })
+            channel != null -> ChannelSheet(channel, signedIn, onSubscribe, onSort, onSignIn, onKid, Modifier.onFocusChanged { sheetFocused = it.hasFocus })
             title != null -> Text(
                 title,
                 fontSize = 34.sp,
@@ -446,7 +448,7 @@ private fun Modifier.menuKey(action: (() -> Unit)?): Modifier = if (action == nu
  * large, then "S’abonner" / "Abonné" and its orders (Accueil, Plus récentes, Populaires…).
  */
 @Composable
-private fun ChannelSheet(channel: ChannelHeader, signedIn: Boolean, onSubscribe: () -> Unit, onSort: (Int) -> Unit, onSignIn: () -> Unit, modifier: Modifier = Modifier) {
+private fun ChannelSheet(channel: ChannelHeader, signedIn: Boolean, onSubscribe: () -> Unit, onSort: (Int) -> Unit, onSignIn: () -> Unit, onKid: (() -> Unit)?, modifier: Modifier = Modifier) {
     Column(
         // 54 dp under the sorts before the first row (the redesign's room between header and rows).
         modifier.fillMaxWidth().padding(top = 36.dp, bottom = 54.dp),
@@ -485,6 +487,14 @@ private fun ChannelSheet(channel: ChannelHeader, signedIn: Boolean, onSubscribe:
                     }
                 },
             )
+            // The kids profile may watch this channel (a parent decides, from an adult profile).
+            if (onKid != null && channel.kidAllowed != null) {
+                LumenButton(
+                    if (channel.kidAllowed) "Autorisée pour Enfant" else "Pour Enfant",
+                    icon = if (channel.kidAllowed) LumenIcon.CHECK else LumenIcon.PLUS,
+                    onClick = onKid,
+                )
+            }
             if (channel.sorts.isNotEmpty()) {
                 Spacer(Modifier.width(12.dp))
                 SortChip("Accueil", channel.sort == -1) { onSort(-1) }

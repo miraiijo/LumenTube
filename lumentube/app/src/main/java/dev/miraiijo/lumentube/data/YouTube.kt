@@ -864,6 +864,25 @@ object YouTube {
         }
     }
 
+    /**
+     * Invité: no account selected (the linked ones stay on the box). YouTube then serves its
+     * signed-out pages: nothing is added to anyone's history or recommendations. False while a
+     * Lumen launch plays as another account (the engine isn't LumenTube's to change then).
+     */
+    suspend fun useGuest(): Boolean = withContext(Dispatchers.IO) {
+        val write = accountLock.writeLock()
+        if (!write.tryLock(LOCK_WAIT_S, TimeUnit.SECONDS)) return@withContext false
+        try {
+            if (playAsHome != null) return@withContext false
+            runCatching {
+                service.signInService.selectAccount(null)
+                service.invalidateCache()
+            }.isSuccess
+        } finally {
+            write.unlock()
+        }
+    }
+
     /** LumenTube's own account (not the one a Lumen launch plays as). */
     private fun homeAccount(): com.liskovsoft.mediaserviceinterfaces.oauth.Account? =
         (playAsHome ?: swapHomeMem)?.let(::engineAccount) ?: runCatching { service.signInService.selectedAccount }.getOrNull()
