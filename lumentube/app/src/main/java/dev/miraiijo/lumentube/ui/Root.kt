@@ -134,11 +134,15 @@ fun Root(vm: MainViewModel) {
                 val native = event.nativeKeyEvent
                 if (native.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
                 // An arrow held down (like YouTube's TV app): the focus walks on at a steady pace,
-                // one card every HOLD_STEP_MS, each scroll done before the next. The remote's own
-                // repeat (~20 a second) piled up scrolls the Freebox Player POP couldn't keep up
-                // with. Not over the full-screen video: there, a held arrow seeks faster and faster.
+                // one card every HOLD_STEP_MS, one row every HOLD_ROW_MS, each scroll done before the
+                // next. The remote's own repeat (~20 a second) piled up scrolls the Freebox Player
+                // POP couldn't keep up with. Not over the full-screen video: there, a held arrow
+                // seeks faster and faster. (Réglages and the other dialogs are windows of their own:
+                // they keep the remote's repeat.)
                 if (native.repeatCount > 0 && native.keyCode in ARROW_KEYS && !fullScreenPlayer) {
-                    if (native.eventTime - heldStep[0] < HOLD_STEP_MS) return@onPreviewKeyEvent true
+                    val vertical = native.keyCode == android.view.KeyEvent.KEYCODE_DPAD_UP || native.keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN
+                    val step = if (vertical) HOLD_ROW_MS else HOLD_STEP_MS
+                    if (native.eventTime - heldStep[0] < step) return@onPreviewKeyEvent true
                     heldStep[0] = native.eventTime
                 }
                 // Search key (gamepad Select): straight to Rechercher, from any page (not over the video).
@@ -408,8 +412,14 @@ fun Root(vm: MainViewModel) {
 /** Width of the in-app picture-in-picture window (16:9), a share of the screen's. */
 private const val MINI_FRACTION = 0.33f
 
-/** A held arrow's pace: one step every 130 ms (about 8 cards a second). */
+/** A held Left / Right's pace: one card every 130 ms (about 8 a second). */
 private const val HOLD_STEP_MS = 130L
+
+/**
+ * A held Up / Down's pace: one row every 280 ms (about 3.5 a second). Slower than along a row:
+ * each new row brings a whole row of thumbnails to decode, which the box needs time for.
+ */
+private const val HOLD_ROW_MS = 280L
 
 private val ARROW_KEYS = setOf(
     android.view.KeyEvent.KEYCODE_DPAD_UP,
