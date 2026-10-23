@@ -106,6 +106,8 @@ fun BrowsePage(
     top: androidx.compose.ui.unit.Dp = 0.dp,
     /** The focus is somewhere the user put it on purpose (the header's tabs): the page leaves it there. */
     focusElsewhere: () -> Boolean = { false },
+    /** The last rows are on screen and the page is loaded (Accueil: its extra rows come then). */
+    onEndReached: () -> Unit = {},
 ) {
     val first = remember { FocusRequester() }
     val action = remember { FocusRequester() }
@@ -135,6 +137,17 @@ fun BrowsePage(
     val rowTitle = 24.dp + lines(ROW_TITLE_LINE, 1)
     val cardCaption = 12.dp + lines(TITLE_LINE, 2) + lines(CHANNEL_LINE, 1) + SafeArea.bottom
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    // Read in a derived state: scrolling doesn't recompose the page, only crossing the end does.
+    val atEnd by androidx.compose.runtime.remember(listState) {
+        androidx.compose.runtime.derivedStateOf {
+            val info = listState.layoutInfo
+            info.totalItemsCount > 0 && (info.visibleItemsInfo.lastOrNull()?.index ?: -1) >= info.totalItemsCount - 2
+        }
+    }
+    val endReached by androidx.compose.runtime.rememberUpdatedState(onEndReached)
+    LaunchedEffect(atEnd, page.loading) {
+        if (atEnd && !page.loading) endReached()
+    }
     // A row inserted on top (Reprendre arriving after the feed) while the page was at its top: back
     // to the top, the list kept the old first row in place and hid the new one above the screen.
     val firstKey = page.rows.firstOrNull()?.key

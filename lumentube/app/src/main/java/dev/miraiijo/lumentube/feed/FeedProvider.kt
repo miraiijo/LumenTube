@@ -27,8 +27,10 @@ import java.util.concurrent.TimeUnit
  * Trust (lumen-link v3, see link/LumenLink.kt): only answers Lumen, the calling package must be
  * dev.miraiijo.lumen signed with the certificate in BuildConfig.CERT_LUMEN (gradle.properties).
  * Not a signature permission: the two apps have their own keys. LumenTube also works without Lumen.
- * Each account has its own cache (FeedCache); older than 30 min and signed in: refreshed first, 8 s
- * at most, else the old cache is served. Signed out: empty. No e-mail, token or cookie, ever.
+ * Each account has its own cache (FeedCache), always answered at once; older than 30 min and
+ * signed in, it's refreshed in the background (one refresh per account and list at a time, not
+ * retried within a minute) and Lumen is notified when the new one is written. Signed out: empty.
+ * No e-mail, token or cookie, ever.
  */
 class FeedProvider : ContentProvider() {
     private val matcher = UriMatcher(UriMatcher.NO_MATCH).apply {
@@ -41,8 +43,25 @@ class FeedProvider : ContentProvider() {
     /** Refreshes run here, never on the caller's (or the main) thread. */
     private val worker = Executors.newSingleThreadExecutor()
 
-    /** Searches: their own threads, never stuck behind a feed refresh (two at once at most). */
-    private val searches = Executors.newFixedThreadPool(2)
+    /**
+     * Searches: their own threads, never stuck behind a feed refresh. Two at once at most and no
+     * queue: a third one while both are busy (YouTube slow) gets an empty answer at once instead of
+     * piling up behind them.
+     */
+    private val searches = java.util.concurrent.ThreadPoolExecutor(
+        0, 2, 30L, TimeUnit.SECONDS, java.util.concurrent.SynchronousQueue(),
+    )
+
+    /** Refreshes queued or running, as "account/list": never twice the same (single flight). */
+    private val refreshing = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /** Last refresh started per "account/list" (elapsedRealtime): a failing one isn't retried at every query. */
+    private val lastRefresh = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** Last searches answered (key: account and text), for a few minutes: the same search is instant. */
+    private val searchCache = object : LinkedHashMap<String, Pair<Long, List<FeedCache.Item>>>(8, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Long, List<FeedCache.Item>>>?) = size > SEARCH_CACHE_SIZE
+    }
 
     override fun onCreate(): Boolean {
         context?.let(FeedCache::attach)
@@ -85,17 +104,37 @@ class FeedProvider : ContentProvider() {
     private fun videos(list: String, accountId: String?): Cursor {
         val cursor = MatrixCursor(FeedCache.COLUMNS)
         if (accountId == null) return cursor
-        var (updatedMs, items) = FeedCache.load(list, accountId)
-        if (System.currentTimeMillis() - updatedMs > MAX_AGE_MS) {
-            // Fetched as that account (the engine switches back right after); LumenTube on screen:
-            // only if it's the engine's account, else the cache is served as it is.
-            val refresh = worker.submit<Boolean> { YouTube.asAccount(accountId, allowSwitch = RemoteControl.accountSwitchAllowed) { YouTube.refreshFeed(list) } ?: false }
-            val refreshed = runCatching { refresh.get(REFRESH_TIMEOUT_S, TimeUnit.SECONDS) }.getOrDefault(false)
-            // Timed out: the refresh goes on in the background and notifies when it's written.
-            if (refreshed) items = FeedCache.load(list, accountId).second
-        }
+        val (updatedMs, items) = FeedCache.load(list, accountId)
+        // The cache now, never a wait on YouTube; stale: refreshed behind (Lumen is notified).
+        if (System.currentTimeMillis() - updatedMs > MAX_AGE_MS) refreshLater(accountId, listOf(list))
         items.take(FeedCache.MAX_ROWS).forEach { cursor.addRow(it.toRow()) }
         return cursor
+    }
+
+    /**
+     * Refreshes [lists] of [accountId] on the worker, as that account (the engine switches back
+     * right after; LumenTube on screen: only if it's the engine's account). Single flight: a list
+     * already queued or running, or started less than a minute ago, isn't asked again.
+     */
+    private fun refreshLater(accountId: String, lists: List<String>, force: Boolean = false) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val todo = lists.filter { list ->
+            val key = "$accountId/$list"
+            val recent = !force && (lastRefresh[key]?.let { now - it < RETRY_MS } ?: false)
+            !recent && refreshing.add(key)
+        }
+        if (todo.isEmpty()) return
+        todo.forEach { lastRefresh["$accountId/$it"] = now }
+        val started = runCatching {
+            worker.execute {
+                try {
+                    YouTube.asAccount(accountId, allowSwitch = RemoteControl.accountSwitchAllowed) { todo.forEach { YouTube.refreshFeed(it) } }
+                } finally {
+                    todo.forEach { refreshing.remove("$accountId/$it") }
+                }
+            }
+        }
+        if (started.isFailure) todo.forEach { refreshing.remove("$accountId/$it") }
     }
 
     /**
@@ -109,7 +148,14 @@ class FeedProvider : ContentProvider() {
         if (text.isEmpty()) return cursor
         // An unknown account asked for: empty, never another account's results.
         if (accountAsked && accountId == null) return cursor
-        val request = searches.submit<List<FeedCache.Item>> {
+        val cacheKey = "${accountId.orEmpty()}/${if (accountAsked) 1 else 0}/$text"
+        val now = android.os.SystemClock.elapsedRealtime()
+        synchronized(searchCache) { searchCache[cacheKey]?.takeIf { now - it.first < SEARCH_CACHE_MS }?.second }?.let { cached ->
+            cached.forEach { cursor.addRow(it.toRow()) }
+            return cursor
+        }
+        // Both search threads busy: empty at once (never queued behind slow ones).
+        val request = runCatching { searches.submit<List<FeedCache.Item>> {
             val items = if (accountId == null) {
                 YouTube.searchItems(text) // signed out
             } else {
@@ -119,11 +165,12 @@ class FeedProvider : ContentProvider() {
                     ?: if (accountAsked || YouTube.playingAsOther) emptyList() else YouTube.searchItems(text)
             }
             FeedCache.itemsFrom(items, SEARCH)
-        }
+        } }.getOrNull() ?: return cursor
         val items = runCatching { request.get(REFRESH_TIMEOUT_S, TimeUnit.SECONDS) }
             .onFailure { request.cancel(true) }
-            .getOrDefault(emptyList())
-        items.forEach { cursor.addRow(it.toRow()) }
+            .getOrNull()
+        if (!items.isNullOrEmpty()) synchronized(searchCache) { searchCache[cacheKey] = android.os.SystemClock.elapsedRealtime() to items }
+        items.orEmpty().forEach { cursor.addRow(it.toRow()) }
         return cursor
     }
 
@@ -139,15 +186,11 @@ class FeedProvider : ContentProvider() {
         if (method != METHOD_SELECT_ACCOUNT) return null
         ready(ctx)
         val selected = arg != null && YouTube.selectFeedAccount(arg)
-        if (selected) {
-            FeedCache.markStale(arg!!)
-            worker.execute {
-                // As that account (during a Lumen launch played as another one, the engine isn't on it).
-                YouTube.asAccount(arg, allowSwitch = RemoteControl.accountSwitchAllowed) {
-                    YouTube.refreshFeed(FeedCache.CONTINUE)
-                    YouTube.refreshFeed(FeedCache.SUBSCRIPTIONS)
-                }
-            }
+        if (selected && arg != null) {
+            FeedCache.markStale(arg)
+            // As that account (during a Lumen launch played as another one, the engine isn't on it);
+            // the same single flight as the queries' refreshes.
+            refreshLater(arg, listOf(FeedCache.CONTINUE, FeedCache.SUBSCRIPTIONS), force = true)
         }
         return Bundle().apply { putBoolean("ok", selected) }
     }
@@ -193,6 +236,9 @@ class FeedProvider : ContentProvider() {
         const val MAX_QUERY = 200
         const val MAX_AGE_MS = 30 * 60 * 1000L
         const val REFRESH_TIMEOUT_S = 8L
+        const val RETRY_MS = 60_000L
+        const val SEARCH_CACHE_SIZE = 8
+        const val SEARCH_CACHE_MS = 5 * 60_000L
         const val METHOD_SELECT_ACCOUNT = "select_account"
         const val PARAM_ACCOUNT = "account"
         const val MAX_ACCOUNT_ID = 128

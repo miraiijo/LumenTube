@@ -78,6 +78,8 @@ import com.liskovsoft.mediaserviceinterfaces.data.MediaItem
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemStoryboard
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager
 import dev.miraiijo.lumentube.AppScope
+import dev.miraiijo.lumentube.data.ACCOUNT_CHANGED_MESSAGE
+import dev.miraiijo.lumentube.data.ActionResult
 import dev.miraiijo.lumentube.data.Chapter
 import dev.miraiijo.lumentube.data.Details
 import dev.miraiijo.lumentube.data.Segment
@@ -141,7 +143,10 @@ private const val SUBTITLE_RAISED = 0.34f
 /**
  * Full-screen player (the redesign): title, channel and counts top left, the clock top right; at
  * the bottom a thin progress bar, identical round buttons and the time; gradients top and bottom.
- * Hidden controls: OK or Up/Down shows them, Left/Right = ±10 s.
+ * Keys, like YouTube's TV app: hidden controls → OK, Up or Down shows them (focus on the bar),
+ * Left/Right = ±10 s (faster when held). Shown → on the bar Left/Right seek and OK plays / pauses,
+ * Down goes to the buttons (never hides), Up goes back up (buttons → bar → hidden). Back closes
+ * the panel, then the controls, then the video.
  */
 @Composable
 fun PlayerScreen(
@@ -162,10 +167,13 @@ fun PlayerScreen(
     onRestore: () -> Unit = {},
     /** "Voir la chaîne" from the panel: channel id and name. */
     onOpenChannel: (String, String) -> Unit = { _, _ -> },
+    /** Where the video is (seconds), told when it pauses for the background: kept across a process kill. */
+    onPosition: (Int) -> Unit = {},
     modifier: Modifier = Modifier.fillMaxSize(),
 ) {
     val isMini by rememberUpdatedState(minimized)
     val playNext by rememberUpdatedState(onNext)
+    val tellPosition by rememberUpdatedState(onPosition)
     val context = LocalContext.current
     val prefs = remember { PlayerPrefs(context) }
     val player = remember(videoId) { LumenPlayer(context).also { it.setQuality(prefs.quality) } }
@@ -243,6 +251,11 @@ fun PlayerScreen(
     val infoButton = remember { FocusRequester() }
     val chaptersButton = remember { FocusRequester() }
     var subscribed by remember(videoId) { mutableStateOf(false) }
+    /**
+     * The account the details (like, subscription) were read for: the actions only go to it. Lumen
+     * switching the account meanwhile drops them with a message instead of acting as the other one.
+     */
+    var actionAccount by remember(videoId) { mutableStateOf<String?>(null) }
     var watchLaterDone by remember(videoId) { mutableStateOf(false) }
     var storyboard by remember(videoId) { mutableStateOf<MediaItemStoryboard?>(null) }
     var pictureFormat by remember { mutableIntStateOf(prefs.pictureFormat) }
@@ -317,7 +330,8 @@ fun PlayerScreen(
         openedAt = android.os.SystemClock.elapsedRealtime()
         val info = runCatching { YouTube.formatInfo(videoId) }.getOrNull()
         formatsMs = android.os.SystemClock.elapsedRealtime() - openedAt
-        android.util.Log.i(TIMING_TAG, "$videoId: formats in $formatsMs ms (${info?.let { formatsKind(it) } ?: "none"})")
+        // Debug builds only: no video id in a release's logs.
+        if (dev.miraiijo.lumentube.BuildConfig.DEBUG) android.util.Log.i(TIMING_TAG, "$videoId: formats in $formatsMs ms (${info?.let { formatsKind(it) } ?: "none"})")
         streamInfo = info?.let { listOfNotNull(formatsKind(it), it.clientInfo?.clientName?.takeIf { name -> name.isNotBlank() }).joinToString(" · ") }
         infoReady = true
         when {
@@ -328,7 +342,7 @@ fun PlayerScreen(
                 if (shownChannel.isBlank()) shownChannel = info.author.orEmpty()
                 live = info.isLive
                 player.setVolumeLevel(if (prefs.stableVolume) info.volumeLevel else 1f)
-                if (!player.open(info, resumeAt)) error = "Pas encore de flux pour cette vidéo (direct à venir ?)."
+                player.open(info, resumeAt)?.let { error = it }
                 if (storyboard == null && !info.isLive) storyboard = YouTube.storyboard(info)
             }
         }
@@ -366,7 +380,7 @@ fun PlayerScreen(
                 if (playbackState == Player.STATE_READY && !started) {
                     started = true
                     firstFrameMs = android.os.SystemClock.elapsedRealtime() - openedAt
-                    android.util.Log.i(TIMING_TAG, "$videoId: first frame ready $firstFrameMs ms after the request")
+                    if (dev.miraiijo.lumentube.BuildConfig.DEBUG) android.util.Log.i(TIMING_TAG, "$videoId: first frame ready $firstFrameMs ms after the request")
                     // A linked phone follows what plays here.
                     RemoteControl.reportPlaying(videoId, player.exo.currentPosition, player.exo.duration.coerceAtLeast(0L), playWhenReady)
                 }
@@ -417,6 +431,7 @@ fun PlayerScreen(
                 androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
                     player.exo.playWhenReady = false
                     val seconds = player.exo.currentPosition / 1000f
+                    tellPosition(seconds.toInt())
                     AppScope.launch { YouTube.savePosition(videoId, seconds) }
                 }
                 // Not under the comments nor "À suivre" (they keep the screen and the focus).
@@ -464,6 +479,7 @@ fun PlayerScreen(
     }
     LaunchedEffect(videoId, infoReady) {
         if (!infoReady) return@LaunchedEffect
+        actionAccount = YouTube.activeAccountId()
         details = YouTube.details(videoId, item)
         liked = details?.liked == true
         disliked = details?.disliked == true
@@ -534,7 +550,13 @@ fun PlayerScreen(
             if (commentsButton.tryRequestFocus()) return@LaunchedEffect
         }
         // Loading: the controls wait for the first frame, the screen itself holds the remote.
-        if (controls && started) playPause.tryRequestFocus() else root.tryRequestFocus()
+        // Shown: the bar first (Left/Right seek at once), play / pause when there's no bar (live).
+        if (controls && started) {
+            val barShown = !live || duration > 0
+            if (!(barShown && progress.tryRequestFocus())) playPause.tryRequestFocus()
+        } else {
+            root.tryRequestFocus()
+        }
     }
     // "À suivre" counting down when the window shrinks: the next video starts now.
     LaunchedEffect(minimized, upNext) {
@@ -559,9 +581,11 @@ fun PlayerScreen(
         liked = target
         if (target) disliked = false
         scope.launch {
-            if (!YouTube.setLiked(videoId, item, target)) {
+            val result = YouTube.setLiked(videoId, item, target, actionAccount)
+            if (result != ActionResult.DONE) {
                 liked = !target
                 disliked = wasDisliked
+                if (result == ActionResult.ACCOUNT_CHANGED) skipNotice = ACCOUNT_CHANGED_MESSAGE
             }
         }
         show()
@@ -573,9 +597,11 @@ fun PlayerScreen(
         disliked = target
         if (target) liked = false
         scope.launch {
-            if (!YouTube.setDisliked(videoId, item, target)) {
+            val result = YouTube.setDisliked(videoId, item, target, actionAccount)
+            if (result != ActionResult.DONE) {
                 disliked = !target
                 liked = wasLiked
+                if (result == ActionResult.ACCOUNT_CHANGED) skipNotice = ACCOUNT_CHANGED_MESSAGE
             }
         }
         show()
@@ -600,9 +626,11 @@ fun PlayerScreen(
         subscribed = target
         details = details?.copy(subscribed = target)
         scope.launch {
-            if (!YouTube.setSubscribed(channelId, target)) {
+            val result = YouTube.setSubscribed(channelId, target, actionAccount)
+            if (result != ActionResult.DONE) {
                 subscribed = !target
                 details = details?.copy(subscribed = !target)
+                if (result == ActionResult.ACCOUNT_CHANGED) skipNotice = ACCOUNT_CHANGED_MESSAGE
             }
         }
     }
@@ -610,12 +638,23 @@ fun PlayerScreen(
     fun addToWatchLater() {
         if (watchLaterDone) return
         watchLaterDone = true
-        scope.launch { if (!YouTube.watchLater(videoId)) watchLaterDone = false }
+        scope.launch {
+            val result = YouTube.watchLater(videoId, actionAccount)
+            if (result != ActionResult.DONE) {
+                watchLaterDone = false
+                if (result == ActionResult.ACCOUNT_CHANGED) skipNotice = ACCOUNT_CHANGED_MESSAGE
+            }
+        }
     }
 
-    // Back leaves the video, controls shown or not (they hide by themselves, OK brings them back).
-    // The panels (settings, comments) have their own Back, declared after.
+    // Back leaves the video once nothing is over it. Declared after (so asked first): the controls,
+    // then the panels (settings, comments) — Back closes what's on top, one thing at a time.
     BackHandler(enabled = !minimized) { onExit() }
+    BackHandler(enabled = controls && started && error == null && upNext == null && !commentsOpen && !minimized) {
+        // The controls go, the video goes on (a seek preview not released is dropped).
+        preview = null
+        controls = false
+    }
     // Declared after: while the panel is open, Back goes up one level, then closes it.
     BackHandler(enabled = menu != null && !minimized) {
         // Up one level, or closed when it's the level the panel was opened on.
@@ -699,7 +738,8 @@ fun PlayerScreen(
                     // Seek without bringing the buttons (nor their focus): only the time line flashes.
                     AndroidKeyEvent.KEYCODE_DPAD_LEFT -> { nudge(-1, native.repeatCount); true }
                     AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> { nudge(1, native.repeatCount); true }
-                    AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_DPAD_DOWN -> { show(); true }
+                    // Up / Down: the controls (focus on the bar); nothing ever closes the video but Back.
+                    AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_DPAD_DOWN -> { if (native.repeatCount == 0) show(); true }
                     else -> false
                 }
             },
@@ -750,7 +790,8 @@ fun PlayerScreen(
         // Before the first frame: the thumbnail, dimmed.
         AnimatedVisibility(visible = !started && error == null, enter = fadeIn(), exit = fadeOut(tween(400))) {
             Box(Modifier.fillMaxSize()) {
-                Thumbnail(videoId, thumbnail, Modifier.fillMaxSize())
+                // The card's own picture (same address: already in Glide's cache, not asked again).
+                Thumbnail(videoId, thumbnail, Modifier.fillMaxSize(), small = true)
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)))
                 // Loading: the dimmed picture and the dots only (the controls come with the first frame).
                 LoadingDots(Modifier.align(Alignment.Center))
@@ -1039,7 +1080,7 @@ private fun Controls(
     // bar must not aim at a requester no longer attached.
     LaunchedEffect(hasSubtitles, hasChapters, canRate, hasComments, hasInfo) { lastButton = playPause }
     fun Modifier.button(requester: FocusRequester) = focusRequester(requester).onFocusChanged { if (it.isFocused) lastButton = requester }
-    // Live without a seekable window: no bar above the buttons, so Up hides the controls (like Down).
+    // Live without a seekable window: no bar above the buttons, so Up hides the controls.
     val barShown = !live || duration > 0
     val barUp = if (barShown) progress else null
     val upHide = if (barShown) null else onHide
@@ -1123,18 +1164,18 @@ private fun Controls(
                     // Ordered by use, most used first, one even gap between identical round buttons:
                     // playback (play, subtitles, chapters) · the video (thumbs, comments, about) ·
                     // window and settings (always last). ±10 s: Left / Right, or the progress bar.
-                    ControlButton(if (isPlaying) LumenIcon.PAUSE else LumenIcon.PLAY, Modifier.button(playPause), up = barUp, onUp = upHide, onDown = onHide, onClick = onPlayPause)
-                    if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, Modifier.button(subtitlesButton), up = barUp, onUp = upHide, onDown = onHide, highlighted = openedFrom == PlayerMenu.SUBTITLES, onClick = onSubtitles)
-                    if (hasChapters) ControlButton(LumenIcon.CHAPTERS, Modifier.button(chaptersButton), up = barUp, onUp = upHide, onDown = onHide, highlighted = openedFrom == PlayerMenu.CHAPTERS, onClick = onChapters)
+                    ControlButton(if (isPlaying) LumenIcon.PAUSE else LumenIcon.PLAY, Modifier.button(playPause), up = barUp, onUp = upHide, onClick = onPlayPause)
+                    if (hasSubtitles) ControlButton(LumenIcon.SUBTITLES, Modifier.button(subtitlesButton), up = barUp, onUp = upHide, highlighted = openedFrom == PlayerMenu.SUBTITLES, onClick = onSubtitles)
+                    if (hasChapters) ControlButton(LumenIcon.CHAPTERS, Modifier.button(chaptersButton), up = barUp, onUp = upHide, highlighted = openedFrom == PlayerMenu.CHAPTERS, onClick = onChapters)
                     if (canRate) {
-                        ControlButton(if (liked) LumenIcon.THUMB_UP else LumenIcon.THUMB_UP_OUTLINE, Modifier.button(likeButton), up = barUp, onUp = upHide, onDown = onHide, active = liked, onClick = onLike)
-                        ControlButton(if (disliked) LumenIcon.THUMB_DOWN else LumenIcon.THUMB_DOWN_OUTLINE, Modifier.button(dislikeButton), up = barUp, onUp = upHide, onDown = onHide, active = disliked, onClick = onDislike)
+                        ControlButton(if (liked) LumenIcon.THUMB_UP else LumenIcon.THUMB_UP_OUTLINE, Modifier.button(likeButton), up = barUp, onUp = upHide, active = liked, onClick = onLike)
+                        ControlButton(if (disliked) LumenIcon.THUMB_DOWN else LumenIcon.THUMB_DOWN_OUTLINE, Modifier.button(dislikeButton), up = barUp, onUp = upHide, active = disliked, onClick = onDislike)
                     }
-                    if (hasComments) ControlButton(LumenIcon.COMMENT, Modifier.button(commentsButton), up = barUp, onUp = upHide, onDown = onHide, onClick = onComments)
-                    if (hasInfo) ControlButton(LumenIcon.INFO, Modifier.button(infoButton), up = barUp, onUp = upHide, onDown = onHide, highlighted = openedFrom == PlayerMenu.INFO, onClick = onInfo)
+                    if (hasComments) ControlButton(LumenIcon.COMMENT, Modifier.button(commentsButton), up = barUp, onUp = upHide, onClick = onComments)
+                    if (hasInfo) ControlButton(LumenIcon.INFO, Modifier.button(infoButton), up = barUp, onUp = upHide, highlighted = openedFrom == PlayerMenu.INFO, onClick = onInfo)
                     // Small window in a corner: keep watching while browsing ("Lecture en cours" brings it back).
-                    ControlButton(LumenIcon.PIP, Modifier.button(pipButton), up = barUp, onUp = upHide, onDown = onHide, onClick = onMinimize)
-                    ControlButton(LumenIcon.SETTINGS, Modifier.button(settingsButton), up = barUp, onUp = upHide, onDown = onHide, highlighted = openedFrom == PlayerMenu.MAIN, onClick = onSettings)
+                    ControlButton(LumenIcon.PIP, Modifier.button(pipButton), up = barUp, onUp = upHide, onClick = onMinimize)
+                    ControlButton(LumenIcon.SETTINGS, Modifier.button(settingsButton), up = barUp, onUp = upHide, highlighted = openedFrom == PlayerMenu.MAIN, onClick = onSettings)
                 }
                 Text(
                     if (live && duration <= 0) "En direct" else "${formatTime(position)} / ${formatTime(duration)}",
@@ -1168,8 +1209,10 @@ private fun ControlButton(
             .then(if (up != null) Modifier.focusProperties { this.up = up } else Modifier)
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
-                if (onDown != null && native.action == AndroidKeyEvent.ACTION_DOWN && native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN) {
-                    onDown()
+                // Down: the bottom row, nothing under it — kept here (never hides the controls nor
+                // lets the focus slip out of the player).
+                if (native.action == AndroidKeyEvent.ACTION_DOWN && native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN) {
+                    onDown?.invoke()
                     true
                 } else if (onUp != null && native.action == AndroidKeyEvent.ACTION_DOWN && native.keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP) {
                     onUp()

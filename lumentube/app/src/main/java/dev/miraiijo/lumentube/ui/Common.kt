@@ -196,7 +196,8 @@ fun EdgeScroll(margin: Dp, content: @Composable () -> Unit) {
 @Composable
 fun RowScroll(content: @Composable () -> Unit) {
     val density = LocalDensity.current
-    val spec = remember(density) { with(density) { MarginSpec(Dimens.Gutter.toPx(), Dimens.Gutter.toPx()) } }
+    val gutter = Dimens.Gutter
+    val spec = remember(density, gutter) { with(density) { MarginSpec(gutter.toPx(), gutter.toPx()) } }
     CompositionLocalProvider(LocalBringIntoViewSpec provides spec) {
         Box(Modifier.focusRestorer()) { content() }
     }

@@ -49,6 +49,16 @@ jobs:
           cache-read-only: false
           validate-wrappers: false
 
+      # TV legibility: no text below 13 sp in LumenTube's Kotlin (Dimens.TextMin = 13 sp). Fails on
+      # any literal 0–12.99 sp (font sizes and line heights alike), passes otherwise.
+      - name: Check minimum text size (13 sp)
+        run: |
+          if grep -rnE '\b([0-9]|1[0-2])(\.[0-9]+)?f?\.sp\b' lumentube/app/src/main/java; then
+            echo "::error title=Text below 13 sp::use Dimens.TextMin (13 sp) or larger"
+            exit 1
+          fi
+          echo "No text below 13 sp."
+
       - name: Build release APK
         working-directory: lumentube
         run: |

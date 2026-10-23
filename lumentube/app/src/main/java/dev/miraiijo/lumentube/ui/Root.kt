@@ -240,6 +240,9 @@ fun Root(vm: MainViewModel) {
                         onSort = vm::chooseChannelSort,
                         // Up to the tabs before the rows arrived: the rows don't take the focus back.
                         focusElsewhere = { inHeader },
+                        // Accueil: a taste of each feed once its end is reached (the view model
+                        // ignores it on any other page).
+                        onEndReached = { vm.loadHomeExtras() },
                     )
                 }
             }
@@ -329,6 +332,7 @@ fun Root(vm: MainViewModel) {
                     vm.openChannelFromPlayer(id, name)
                     returnFocusTick++
                 },
+                onPosition = { seconds -> vm.notePosition(playingId, seconds) },
                 modifier = if (state.minimized) {
                     // A third of the screen's width, whatever the interface size (a fixed 400 dp
                     // took half the screen at 120 %), inside the TV's safe zone.

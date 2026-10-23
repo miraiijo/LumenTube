@@ -2,8 +2,11 @@ package dev.miraiijo.lumentube
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import dev.miraiijo.lumentube.data.ACCOUNT_CHANGED_MESSAGE
 import dev.miraiijo.lumentube.data.Account
+import dev.miraiijo.lumentube.data.ActionResult
 import dev.miraiijo.lumentube.data.DeArrow
 import dev.miraiijo.lumentube.data.Section
 import dev.miraiijo.lumentube.data.Video
@@ -82,6 +85,11 @@ data class UiState(
     val pages: Map<Section, Page> = emptyMap(),
     val opened: Opened? = null,
     val signedIn: Boolean = false,
+    /**
+     * Opaque id of the account the pages show (null: signed out or not read yet): the actions made
+     * from them (subscribe, À regarder plus tard, Pas intéressé) only go to it.
+     */
+    val accountId: String? = null,
     val accountName: String? = null,
     val accountAvatar: String? = null,
     /** Sign-in in progress: the code to type on youtube.com/activate (null while it's requested). */
@@ -150,11 +158,13 @@ data class UiState(
     }
 }
 
-class MainViewModel(application: Application) : AndroidViewModel(application) {
+class MainViewModel(application: Application, private val saved: SavedStateHandle) : AndroidViewModel(application) {
     private val prefs = PlayerPrefs(application)
     private val _state = MutableStateFlow(UiState(settings = prefs.settings()))
     val state: StateFlow<UiState> = _state.asStateFlow()
     private val loads = mutableMapOf<Section, Job>()
+    /** Accueil's extra rows being loaded (declared before init, which may use it). */
+    private var homeExtrasJob: Job? = null
 
     /** Lumen asked to skip "Qui regarde ?" (contract v2): the start doesn't show it. */
     private var skipPicker = false
@@ -173,31 +183,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // Account switched from Lumen (or anywhere else): the pages reload for the new account.
         accountListener = YouTube.onAccountChanged {
             viewModelScope.launch {
-                val name = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { YouTube.accountName }
-                if (name != _state.value.accountName && !_state.value.choosingAccount) {
-                    loads.values.forEach { it.cancel() }
-                    _state.update { it.copy(pages = emptyMap(), resume = null, search = null, opened = null) }
+                // By id, not by name (two accounts can share a name): the pages are another account's.
+                val id = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { YouTube.homeAccountId() }
+                if (id != _state.value.accountId && !_state.value.choosingAccount) {
+                    cancelLoads()
+                    _state.update { it.copy(pages = emptyMap(), resume = null, search = null, opened = null, cardMenu = null) }
                     refreshAccount()
                     show(_state.value.section.takeIf { it != Section.SEARCH } ?: Section.HOME)
                 }
             }
         }
         viewModelScope.launch { RemoteControl.events.collect(::onRemote) }
+        // Back after the process was killed in the background: the section, the video and the
+        // answer to "Qui regarde ?" come back (not a video played as another account for Lumen).
+        val restored = saved.get<Boolean>(KEY_PICKED) != null
+        val savedSection = saved.get<String>(KEY_SECTION)?.let { name -> Section.entries.firstOrNull { it.name == name } } ?: Section.HOME
+        saved.get<String>(KEY_VIDEO)?.takeIf { VIDEO_ID.matches(it) }?.let { id ->
+            _state.update { it.copy(playingId = id, playingStart = saved.get<Int>(KEY_POSITION) ?: 0) }
+        }
         viewModelScope.launch {
             // A Lumen launch cut short (process killed while playing as another account): back home.
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { YouTube.restoreHome() } }
             val accounts = YouTube.accounts()
             // Several accounts: "Qui regarde ?" first, Accueil loads for the one picked (not when
-            // Lumen launched a video and asked to skip it).
-            if (accounts.size >= 2 && !skipPicker) {
+            // Lumen launched a video and asked to skip it, nor when it was answered before the
+            // process was killed).
+            val ask = if (restored) saved.get<Boolean>(KEY_PICKED) == false else accounts.size >= 2
+            if (ask && !skipPicker) {
                 _state.update { it.copy(accounts = accounts, choosingAccount = true) }
             } else {
                 _state.update { it.copy(accounts = accounts) }
                 refreshAccount()
-                show(Section.HOME)
+                show(if (restored) savedSection else Section.HOME)
+            }
+            // Kept from now on (written into the saved state at each change, cheap).
+            state.collect { s ->
+                saved[KEY_PICKED] = !s.choosingAccount
+                saved[KEY_SECTION] = s.section.name
+                val video = (s.playing?.videoId ?: s.playingId).takeIf { !playingAs }
+                if (video != saved.get<String>(KEY_VIDEO)) {
+                    saved[KEY_VIDEO] = video
+                    saved[KEY_POSITION] = s.playing?.let { 0 } ?: s.playingStart
+                }
             }
         }
         initUpdates()
+    }
+
+    /** Where the video is (the player tells it when it pauses or goes to the background). */
+    fun notePosition(videoId: String, seconds: Int) {
+        if (saved.get<String>(KEY_VIDEO) == videoId) saved[KEY_POSITION] = seconds.coerceAtLeast(0)
+    }
+
+    /** Every section load, Accueil's extra rows included. */
+    private fun cancelLoads() {
+        loads.values.forEach { it.cancel() }
+        homeExtrasJob?.cancel()
+        homeExtrasJob = null
     }
 
     fun show(section: Section) {
@@ -225,7 +267,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun load(section: Section) {
         loads[section]?.cancel()
-        _state.update { it.copy(pages = it.pages + (section to Page(rows = it.pages[section]?.rows.orEmpty(), loading = true))) }
+        if (section == Section.HOME) {
+            homeExtrasJob?.cancel()
+            homeExtrasJob = null
+        }
+        _state.update { it.copy(pages = it.pages + (section to Page(rows = it.pages[section]?.rows.orEmpty().filterNot { r -> r.key.startsWith(YouTube.HOME_EXTRA) }, loading = true))) }
         if (section == Section.HOME) loadResume()
         loads[section] = viewModelScope.launch {
             fun set(page: Page) = _state.update { it.copy(pages = it.pages + (section to page)) }
@@ -239,11 +285,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }.exceptionOrNull()
             if (failure is kotlinx.coroutines.CancellationException) throw failure
+            // Accueil without YouTube's own rows: the feeds' rows right away (they decide the error).
+            if (section == Section.HOME && rows.isEmpty()) {
+                loadHomeExtras(failure?.userMessage(), fromLoad = true)
+                return@launch
+            }
             set(
                 when {
                     rows.isNotEmpty() -> Page(rows, loading = false)
                     failure != null -> Page(loading = false, error = failure.userMessage())
                     else -> Page(loading = false, error = "Rien à afficher ici pour l’instant.")
+                },
+            )
+        }
+    }
+
+    /**
+     * Accueil's end reached (or YouTube's home empty): a taste of each feed, under its rows, once
+     * per load. [error]: shown when no row at all comes (YouTube's home failed too).
+     */
+    fun loadHomeExtras(error: String? = null, fromLoad: Boolean = false) {
+        val s = _state.value
+        if (homeExtrasJob != null) return
+        // From the page: only Accueil's own (a page fading out doesn't ask).
+        if (!fromLoad && (s.section != Section.HOME || s.opened != null)) return
+        val home = s.pages[Section.HOME] ?: return
+        if (home.rows.any { it.key.startsWith(YouTube.HOME_EXTRA) }) return
+        homeExtrasJob = viewModelScope.launch {
+            // From a failed load: none of the rows kept while it loaded (they'd hide its error).
+            val base = if (fromLoad) emptyList() else home.rows.filterNot { it.key.startsWith(YouTube.HOME_EXTRA) }
+            fun set(page: Page) = _state.update { it.copy(pages = it.pages + (Section.HOME to page)) }
+            var extras = emptyList<VideoRow>()
+            val failure = runCatching {
+                YouTube.homeExtras().collect {
+                    extras = it
+                    if (it.isNotEmpty()) set(Page(base + it, loading = true))
+                    fetchDeArrow(it)
+                }
+            }.exceptionOrNull()
+            if (failure is kotlinx.coroutines.CancellationException) throw failure
+            set(
+                when {
+                    base.isNotEmpty() || extras.isNotEmpty() -> Page(base + extras, loading = false)
+                    else -> Page(loading = false, error = error ?: failure?.userMessage() ?: "Rien à afficher ici pour l’instant.")
                 },
             )
         }
@@ -426,11 +510,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleChannelSubscription() {
         val channel = _state.value.opened?.channel ?: return
         val target = channel.subscribed != true
+        val account = _state.value.accountId
         updateChannel(channel.id) { it.copy(subscribed = target) }
         viewModelScope.launch {
-            if (!YouTube.setSubscribed(channel.id, target)) {
+            val result = YouTube.setSubscribed(channel.id, target, account)
+            if (result != ActionResult.DONE) {
                 updateChannel(channel.id) { it.copy(subscribed = !target) }
-                showNotice("Impossible de modifier l’abonnement.")
+                showNotice(if (result == ActionResult.ACCOUNT_CHANGED) ACCOUNT_CHANGED_MESSAGE else "Impossible de modifier l’abonnement.")
             }
         }
     }
@@ -444,7 +530,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun cardWatchLater(video: Video) {
         closeCardMenu()
         val id = video.videoId ?: return
-        viewModelScope.launch { showNotice(if (YouTube.watchLater(id)) "Ajoutée à « À regarder plus tard »." else "Impossible d’ajouter la vidéo.") }
+        val account = _state.value.accountId
+        viewModelScope.launch {
+            showNotice(
+                when (YouTube.watchLater(id, account)) {
+                    ActionResult.DONE -> "Ajoutée à « À regarder plus tard »."
+                    ActionResult.ACCOUNT_CHANGED -> ACCOUNT_CHANGED_MESSAGE
+                    ActionResult.FAILED -> "Impossible d’ajouter la vidéo."
+                },
+            )
+        }
     }
 
     fun cardOpenChannel(video: Video) {
@@ -455,9 +550,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** "Pas intéressé" / "Ne pas recommander cette chaîne": the card (or the channel's cards) leaves the rows. */
     fun cardNotInterested(video: Video, channel: Boolean) {
         closeCardMenu()
+        val account = _state.value.accountId
         viewModelScope.launch {
-            if (!YouTube.notInterested(video, channel)) {
-                showNotice("YouTube n’a pas pris en compte la demande.")
+            val result = YouTube.notInterested(video, channel, account)
+            if (result != ActionResult.DONE) {
+                showNotice(if (result == ActionResult.ACCOUNT_CHANGED) ACCOUNT_CHANGED_MESSAGE else "YouTube n’a pas pris en compte la demande.")
                 return@launch
             }
             val channelId = video.raw.channelId
@@ -615,7 +712,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Pages loaded meanwhile may be the other account's: reloaded for LumenTube's own. */
     private fun reloadHome() {
-        loads.values.forEach { it.cancel() }
+        cancelLoads()
         _state.update { it.copy(pages = emptyMap(), resume = null, search = null, opened = null) }
         refreshAccount()
         show(_state.value.section.takeIf { it != Section.SEARCH } ?: Section.HOME)
@@ -801,7 +898,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 refreshAccount()
                 return@launch
             }
-            loads.values.forEach { it.cancel() }
+            cancelLoads()
             _state.update { it.copy(choosingAccount = false, accountsOpen = false, settingsOpen = false, pages = emptyMap(), resume = null, search = null, section = Section.HOME, opened = null) }
             refreshAccount()
             show(Section.HOME)
@@ -833,9 +930,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val signed = YouTube.signedIn
             val accounts = YouTube.accounts()
+            // LumenTube's own account (its pages), not one a Lumen launch plays as.
+            val id = if (signed) YouTube.homeAccountId() else null
             _state.update {
                 it.copy(
                     signedIn = signed,
+                    accountId = id,
                     accountName = if (signed) YouTube.accountName else null,
                     accountAvatar = if (signed) YouTube.accountAvatar else null,
                     accounts = accounts,
@@ -845,6 +945,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private companion object {
+        /** Saved state (survives the process being killed in the background). */
+        const val KEY_SECTION = "section"
+        const val KEY_VIDEO = "video"
+        const val KEY_POSITION = "position"
+        /** "Qui regarde ?" answered (false: still on screen). Absent: a fresh start. */
+        const val KEY_PICKED = "picked"
+        val VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")
         const val DEARROW_BATCH = 50
         const val RESUME_REFRESH_DELAY_MS = 1_500L
         const val SUGGEST_DELAY_MS = 300L

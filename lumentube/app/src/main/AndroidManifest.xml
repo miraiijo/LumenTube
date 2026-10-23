@@ -19,13 +19,10 @@
          the user confirms on screen. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
-    <!-- Lumen's feed (continue / subscriptions). Lumen declares this permission; LumenTube and Lumen
-         are signed with different keys, so it can't be a signature permission: FeedProvider itself
-         only answers dev.miraiijo.lumen signed with the expected certificate (lumen-link v3,
-         BuildConfig.CERT_LUMEN). -->
-    <permission
-        android:name="dev.miraiijo.lumentube.permission.READ_FEED"
-        android:protectionLevel="normal" />
+    <!-- Lumen's feed (continue / subscriptions): no permission (LumenTube and Lumen are signed with
+         different keys, a signature permission can't work, a normal one protects nothing).
+         FeedProvider itself only answers dev.miraiijo.lumen signed with the expected certificate
+         (lumen-link v3, BuildConfig.CERT_LUMEN). -->
 
     <!-- Rechercher: is there a voice recognition app to dictate with? (package visibility, Android 11+) -->
     <queries>

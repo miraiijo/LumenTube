@@ -339,32 +339,42 @@ class LumenPlayer(context: Context) {
 
     /**
      * Opens a video like SmartTube's VideoLoaderController: DASH formats, else SABR, else a live
-     * DASH / HLS address, else plain URLs. False when there's nothing playable.
+     * DASH / HLS address, else plain URLs. Null when it plays, else the message to show (nothing
+     * playable, or a manifest the parser can't read: an error on screen, never a crash).
      */
-    suspend fun open(info: MediaItemFormatInfo, startMs: Long = 0L): Boolean {
+    suspend fun open(info: MediaItemFormatInfo, startMs: Long = 0L): String? {
         val adaptive = !(info.isLive && info.startTimeMs == 0L)
         // Building the source parses the DASH / SABR manifest (and creates Cronet the first time):
         // done off the main thread so the screen never freezes; only prepare() runs on it.
-        val source: MediaSource = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-            when {
-                adaptive && info.containsDashFormats() -> sources.fromDashFormatInfo(info)
-                adaptive && info.containsSabrFormats() && !info.isLive -> sources.fromSabrFormatInfo(info)
-                info.isLive && info.containsDashUrl() -> sources.fromDashManifestUrl(info.dashManifestUrl)
-                info.isLive && info.containsHlsUrl() -> sources.fromHlsPlaylist(info.hlsManifestUrl)
-                info.containsUrlFormats() -> sources.fromUrlList(info.createUrlList())
-                else -> null
+        val built = runCatching {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                when {
+                    adaptive && info.containsDashFormats() -> sources.fromDashFormatInfo(info)
+                    adaptive && info.containsSabrFormats() && !info.isLive -> sources.fromSabrFormatInfo(info)
+                    info.isLive && info.containsDashUrl() -> sources.fromDashManifestUrl(info.dashManifestUrl)
+                    info.isLive && info.containsHlsUrl() -> sources.fromHlsPlaylist(info.hlsManifestUrl)
+                    info.containsUrlFormats() -> sources.fromUrlList(info.createUrlList())
+                    else -> null
+                }
             }
-        } ?: return false
-        exo.playWhenReady = true
-        if (startMs > 0 && !info.isLive) {
-            // Position first, then prepare without resetting it: the first segments loaded are the
-            // ones at the resume point (seeking after prepare loaded the start, then threw it away).
-            exo.seekTo(startMs)
-            exo.prepare(source, false, true)
-        } else {
-            exo.prepare(source, true, true)
         }
-        return true
+        built.exceptionOrNull()?.let { e ->
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            android.util.Log.w(FREEZE_TAG, "unreadable manifest: ${e.javaClass.simpleName}")
+            return MALFORMED_MESSAGE
+        }
+        val source: MediaSource = built.getOrNull() ?: return NO_STREAM_MESSAGE
+        return runCatching {
+            exo.playWhenReady = true
+            if (startMs > 0 && !info.isLive) {
+                // Position first, then prepare without resetting it: the first segments loaded are the
+                // ones at the resume point (seeking after prepare loaded the start, then threw it away).
+                exo.seekTo(startMs)
+                exo.prepare(source, false, true)
+            } else {
+                exo.prepare(source, true, true)
+            }
+        }.exceptionOrNull()?.let { MALFORMED_MESSAGE }
     }
 
     // ---- Quality, subtitles, audio, speed (menus of the player screen) ---------------------------
@@ -378,19 +388,30 @@ class LumenPlayer(context: Context) {
         display?.hdrCapabilities?.supportedHdrTypes?.toSet().orEmpty()
     }.getOrDefault(emptySet())
 
-    /** The screen shows HDR (HDR10 or HLG: the kinds YouTube streams). */
-    val screenHdr: Boolean
-        get() = android.view.Display.HdrCapabilities.HDR_TYPE_HDR10 in displayHdr || android.view.Display.HdrCapabilities.HDR_TYPE_HLG in displayHdr
+    /** The system's own view of the screen (Configuration): an SDR mode here means no HDR output. */
+    private val configHdr: Boolean = runCatching { context.resources.configuration.isScreenHdr }.getOrDefault(false)
 
-    /** Handled video tracks: (group, track, format). Tracks the decoder can't take (4K, HDR on some boxes) are left out. */
+    /**
+     * The screen shows HDR (HDR10 or HLG: the kinds YouTube streams), as the display AND the
+     * configuration both report it: HDR tracks are never picked otherwise (washed-out colors).
+     */
+    val screenHdr: Boolean
+        get() = configHdr && (android.view.Display.HdrCapabilities.HDR_TYPE_HDR10 in displayHdr || android.view.Display.HdrCapabilities.HDR_TYPE_HLG in displayHdr)
+
+    /**
+     * Handled video tracks: (group, track, format). Tracks the decoder can't take (4K, HDR on some
+     * boxes) are left out, and so are those only a software decoder would play (AV1 on most boxes:
+     * stutters) — unless the video has nothing else.
+     */
     private fun videoTracks(): List<Triple<Int, Int, Format>> {
         val (renderer, groups) = renderer(C.TRACK_TYPE_VIDEO) ?: return emptyList()
         val info = selector.currentMappedTrackInfo ?: return emptyList()
-        return buildList {
+        val handled = buildList {
             for (g in 0 until groups.length) for (t in 0 until groups[g].length) {
                 if (info.getTrackSupport(renderer, g, t) == RendererCapabilities.FORMAT_HANDLED) add(Triple(g, t, groups[g].getFormat(t)))
             }
         }
+        return handled.filter { hardwareDecodes(it.third) }.ifEmpty { handled }
     }
 
     /**
@@ -436,7 +457,8 @@ class LumenPlayer(context: Context) {
         if (appliedFor === groups) return
         appliedFor = groups
         val auto = currentQuality == 0
-        val wantHdr = if (auto) screenHdr else currentQuality >= HDR_FLAG
+        // A saved HDR quality (chosen on another screen) never brings HDR to an SDR one.
+        val wantHdr = screenHdr && (auto || currentQuality >= HDR_FLAG)
         val maxHeight = if (auto) autoCap ?: Int.MAX_VALUE else currentQuality % HDR_FLAG
         val tracks = videoTracks()
         fun pick(hdr: Boolean) = tracks.filter { (_, _, f) ->
@@ -451,8 +473,15 @@ class LumenPlayer(context: Context) {
             val side = LONG_SIDE[maxHeight] ?: Int.MAX_VALUE
             builder.setMaxVideoSize(side, side)
         } else {
-            // One group: the one holding most of the chosen tracks (adaptive switching stays inside it).
-            val group = chosen.groupBy { it.first }.maxByOrNull { it.value.size }!!
+            // One group (adaptive switching stays inside it): the highest quality, then the lightest
+            // codec for the box's decoders (VP9, then H.264, AV1 last), then the most tracks.
+            val group = chosen.groupBy { it.first }.entries.maxWithOrNull(
+                compareBy<Map.Entry<Int, List<Triple<Int, Int, Format>>>>(
+                    { entry -> entry.value.maxOf { qualityOf(it.third) ?: 0 } },
+                    { entry -> codecRank(entry.value.first().third) },
+                    { entry -> entry.value.size },
+                ),
+            ) ?: return
             builder.setSelectionOverride(renderer, groups, DefaultTrackSelector.SelectionOverride(group.key, *group.value.map { it.second }.toIntArray()))
         }
         builder.setForceHighestSupportedBitrate(!auto)
@@ -556,11 +585,21 @@ class LumenPlayer(context: Context) {
                 C.COLOR_TRANSFER_ST2084 -> return "HDR10"
                 C.COLOR_TRANSFER_HLG -> return "HLG"
             }
+            val codecs = format.codecs.orEmpty().lowercase(Locale.US)
+            // The transfer in the codec string (RFC 6381): vp09.PP.LL.DD.CC.cp.TC…, av01.P.LLT.DD.M.CCC.cp.TC…
+            val parts = codecs.split('.')
+            val transfer = when (parts.firstOrNull()) {
+                "vp09" -> parts.getOrNull(6)
+                "av01" -> parts.getOrNull(7)
+                else -> null
+            }?.toIntOrNull()
+            when (transfer) {
+                16 -> return "HDR10"
+                18 -> return "HLG"
+            }
+            // YouTube's HDR itags: 330–337 (VP9.2), 694–702 (AV1); VP9 profile 2 is HDR on YouTube.
             val itag = format.id?.toIntOrNull()
-            val codecs = format.codecs.orEmpty()
-            return if ((itag != null && itag in 330..337) || codecs.startsWith("vp09.02") || codecs.startsWith("vp9.2") ||
-                codecs.endsWith("10.0.110.09.18.09.0") || codecs.endsWith("10.0.110.09.16.09.0")
-            ) "HDR" else null
+            return if ((itag != null && (itag in 330..337 || itag in 694..702)) || codecs.startsWith("vp09.02") || codecs.startsWith("vp9.2")) "HDR" else null
         }
 
         fun isHdr(format: Format) = hdrKind(format) != null
@@ -619,6 +658,53 @@ class LumenPlayer(context: Context) {
             return name.ifBlank { raw }.replaceFirstChar { it.titlecase(Locale.FRENCH) }
         }
 
+        /**
+         * Names of the box's hardware video decoders (MediaCodecList, read once). Empty (unreadable):
+         * no filtering at all.
+         */
+        private val hardwareDecoders: Set<String> by lazy {
+            runCatching {
+                android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).codecInfos
+                    .filter { !it.isEncoder && isHardware(it) && it.supportedTypes.any { type -> type.startsWith("video/", ignoreCase = true) } }
+                    .map { it.name }
+                    .toSet()
+            }.getOrDefault(emptySet())
+        }
+
+        private fun isHardware(info: android.media.MediaCodecInfo): Boolean {
+            if (android.os.Build.VERSION.SDK_INT >= 29) return info.isHardwareAccelerated && !info.isAlias
+            // Android 9: by name (Google's and AOSP's codecs are the software ones).
+            val name = info.name.lowercase(Locale.US)
+            return !name.startsWith("omx.google.") && !name.startsWith("c2.android.") && !name.startsWith("c2.google.") &&
+                !name.contains(".sw.") && !name.contains("ffmpeg")
+        }
+
+        /** "mime|codecs" → a hardware decoder takes it (asked once per kind of track). */
+        private val hardwareCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+        /** A hardware decoder of this box plays [format] (its codec and profile). */
+        fun hardwareDecodes(format: Format): Boolean {
+            val mime = format.sampleMimeType ?: com.google.android.exoplayer2.util.MimeTypes.getMediaMimeType(format.codecs) ?: return true
+            if (!com.google.android.exoplayer2.util.MimeTypes.isVideo(mime) || hardwareDecoders.isEmpty()) return true
+            return hardwareCache.getOrPut("$mime|${format.codecs}") {
+                runCatching {
+                    com.google.android.exoplayer2.mediacodec.MediaCodecUtil.getDecoderInfos(mime, false, false)
+                        .any { it.name in hardwareDecoders && it.isCodecSupported(format.codecs) }
+                }.getOrDefault(true)
+            }
+        }
+
+        /** Codec preference when several can play: VP9, then H.264, then AV1, then the rest. */
+        fun codecRank(format: Format): Int {
+            val codec = format.codecs?.substringBefore('.')?.lowercase(Locale.US)
+            return when (codec) {
+                "vp09", "vp9" -> 3
+                "avc1", "avc3" -> 2
+                "av01" -> 1
+                else -> 0
+            }
+        }
+
         /** Highest loudness correction: +3.5 dB. */
         const val MAX_LEVEL = 1.5f
 
@@ -632,6 +718,8 @@ class LumenPlayer(context: Context) {
         const val MAX_BUFFER_BYTES = 40 shl 20
         const val LOAD_CHECKS = 4
         const val LOAD_MIN_DROPPED = 20
+        const val NO_STREAM_MESSAGE = "Pas encore de flux pour cette vidéo (direct à venir ?)."
+        const val MALFORMED_MESSAGE = "Flux de la vidéo illisible. Réessaie, ou choisis une autre vidéo."
 
         /** Auto's ceiling learnt on this box (dropped frames), for the session; null = none. */
         @Volatile

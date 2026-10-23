@@ -8,9 +8,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.toArgb
+import dev.miraiijo.lumentube.link.LumenLink
 import dev.miraiijo.lumentube.ui.Appearance
 import dev.miraiijo.lumentube.ui.LumenTubeTheme
+import dev.miraiijo.lumentube.ui.Palette
 import dev.miraiijo.lumentube.ui.Root
+import dev.miraiijo.lumentube.ui.windowBackground
 
 class MainActivity : ComponentActivity() {
     private val vm: MainViewModel by viewModels()
@@ -21,9 +26,16 @@ class MainActivity : ComponentActivity() {
         // (in the background) instead of during the first video's start. Here rather than in the
         // Application: a feed query from Lumen starts the process without needing all that.
         com.liskovsoft.youtubeapi.service.YouTubeServiceManager.instance().refreshCacheIfNeeded()
+        // The theme's color behind the first frame (Jour: no black flash before the pages).
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(windowBackground(vm.state.value.settings.appearance).toArgb()))
         setContent {
             val settings = vm.state.collectAsState().value.settings
-            LumenTubeTheme(Appearance.entries.getOrElse(settings.appearance) { Appearance.AUTO }, uiScale = settings.uiScale) { Root(vm) }
+            LumenTubeTheme(Appearance.entries.getOrElse(settings.appearance) { Appearance.AUTO }, uiScale = settings.uiScale) {
+                // And when the look changes (Auto at 7:30 / 19:30, the header's button).
+                val background = Palette.Background
+                LaunchedEffect(background) { window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(background.toArgb())) }
+                Root(vm)
+            }
         }
         if (savedInstanceState == null) handleLink(intent)
     }
@@ -69,23 +81,41 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // getReferrer() reads the current intent: this one, not the one that started the activity.
+        setIntent(intent)
         handleLink(intent)
     }
 
     /**
      * youtube.com/watch?v=…&t=… or youtu.be/…?t=… from another app (Lumen, a browser…): played from
-     * t when given (Lumen's "continue" passes the saved position).
+     * t when given (Lumen's "continue" passes the saved position). A malformed link or extras
+     * (opaque URI, bad parcel) are ignored, never a crash.
      */
     private fun handleLink(intent: Intent?) {
-        val uri = intent?.data ?: return
-        val id = uri.getQueryParameter("v") ?: uri.takeIf { it.host == "youtu.be" }?.lastPathSegment
-        // Only a real video id (11 characters): the engine puts it as is in its signed-in requests.
-        if (id == null || !VIDEO_ID.matches(id)) return
-        // Lumen's contract v2: the account to play as (this playback only) and no "Qui regarde ?".
-        val account = intent.getStringExtra(EXTRA_ACCOUNT_ID)?.takeIf { it.length in 1..MAX_ACCOUNT_ID }
-        // An account asked for (even invalid: then the selected one plays) never shows the picker.
-        val skipPicker = intent.getBooleanExtra(EXTRA_SKIP_PICKER, false) || intent.hasExtra(EXTRA_ACCOUNT_ID)
-        vm.playLink(id, startSeconds(uri.getQueryParameter("t")), account, skipPicker)
+        if (intent == null) return
+        runCatching {
+            val uri = intent.data ?: return
+            val id = uri.getQueryParameter("v") ?: uri.takeIf { it.host == "youtu.be" }?.lastPathSegment
+            // Only a real video id (11 characters): the engine puts it as is in its signed-in requests.
+            if (id == null || !VIDEO_ID.matches(id)) return
+            // Lumen's contract v2 (the account to play as, no "Qui regarde ?"): from Lumen only.
+            val lumen = fromLumen(intent)
+            val account = if (lumen) intent.getStringExtra(EXTRA_ACCOUNT_ID)?.takeIf { it.length in 1..MAX_ACCOUNT_ID } else null
+            // An account asked for (even invalid: then the selected one plays) never shows the picker.
+            val skipPicker = lumen && (intent.getBooleanExtra(EXTRA_SKIP_PICKER, false) || intent.hasExtra(EXTRA_ACCOUNT_ID))
+            vm.playLink(id, startSeconds(uri.getQueryParameter("t")), account, skipPicker)
+        }.onFailure { android.util.Log.w("LumenTube", "link ignored: ${it.javaClass.simpleName}") }
+    }
+
+    /**
+     * The link comes from Lumen (lumen-link v3: package and signing certificate). The caller is
+     * the system's referrer (the launching package); a caller-set referrer extra, which any app can
+     * forge, makes it untrusted. Best effort on Android 10 (no launching uid before Android 14).
+     */
+    private fun fromLumen(intent: Intent): Boolean {
+        if (intent.hasExtra(Intent.EXTRA_REFERRER) || intent.hasExtra(Intent.EXTRA_REFERRER_NAME)) return false
+        val caller = referrer?.takeIf { it.scheme == "android-app" }?.host ?: return false
+        return caller == LumenLink.LUMEN && runCatching { LumenLink.isTrusted(this, caller) }.getOrDefault(false)
     }
 
     /** "90", "90s", "1m30s" or "1h2m3s" → seconds (0 when absent or unreadable). */

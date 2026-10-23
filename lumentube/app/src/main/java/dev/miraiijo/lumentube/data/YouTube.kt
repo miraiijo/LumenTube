@@ -114,6 +114,17 @@ data class CommentPage(val comments: List<Comment>, val next: String?)
 @androidx.compose.runtime.Immutable
 data class DeArrow(val title: String?, val thumbnail: String?)
 
+/** Outcome of an action made with an account (like, subscription, À regarder plus tard…). */
+enum class ActionResult {
+    DONE,
+    FAILED,
+    /** The engine is no longer on the account the screen showed (switched by Lumen): nothing sent. */
+    ACCOUNT_CHANGED,
+}
+
+/** Shown when an action was dropped because the account changed under it. */
+const val ACCOUNT_CHANGED_MESSAGE = "Le compte YouTube a changé : action annulée."
+
 /** A row of cards; [raw] loads the next page (continueGroup). */
 @androidx.compose.runtime.Immutable
 data class VideoRow(val key: String, val title: String, val items: List<Video>, val raw: MediaGroup, val canLoadMore: Boolean = true)
@@ -159,20 +170,9 @@ object YouTube {
 
         when (section) {
             Section.SEARCH -> emit(emptyList())
-            Section.HOME -> {
-                // YouTube's own home first, then a taste of each feed: Accueil is never a single row.
-                safely { addFeed(content.homeObserve) }
-                val extras = buildList<Pair<Observable<List<MediaGroup>>, String>> {
-                    if (signedIn) add(Observable.fromCallable { listOfNotNull(subscriptionsForFeed()) } to "Nouveautés des abonnements")
-                    add(content.musicObserve to Section.MUSIC.label)
-                    add(content.gamingObserve to Section.GAMING.label)
-                    add(content.newsObserve to Section.NEWS.label)
-                    add(content.sportsObserve to Section.SPORTS.label)
-                    add(content.liveObserve to Section.LIVE.label)
-                }
-                // One feed failing (or slow) never empties Accueil.
-                for ((parts, title) in extras) safely { addFeed(parts, limit = 2, titled = title) }
-            }
+            // YouTube's own home only: the taste of each feed comes later, when the page's end is
+            // reached ([homeExtras]), not 5 more requests at every start.
+            Section.HOME -> safely { addFeed(content.homeObserve) }
             // One long feed each: cut into rows (by date / by progress) instead of one endless row.
             Section.SUBSCRIPTIONS -> subscriptionsForFeed()?.let {
                 rows += it.bucketed("SUBSCRIPTIONS", SUBSCRIPTION_BUCKETS) { v -> subscriptionBucket(v) }
@@ -191,6 +191,48 @@ object YouTube {
         }
         if (rows.isEmpty()) emit(emptyList())
     }.flowOn(Dispatchers.IO)
+
+    /**
+     * Accueil's extra rows (a taste of each feed), loaded once the end of YouTube's home is reached:
+     * one feed after the other, each one's first part only, [HOME_EXTRA_ROWS] rows of it (the rest
+     * of its requests are disposed). Every emission is the extra rows so far.
+     */
+    fun homeExtras(): Flow<List<VideoRow>> = flow {
+        val content = service.contentService
+        val rows = mutableListOf<VideoRow>()
+        var index = 0
+        // Cold observables (as before): nothing is requested until each one is iterated.
+        val feeds = buildList<Pair<Observable<List<MediaGroup>>, String>> {
+            if (signedIn) add(Observable.fromCallable { listOfNotNull(subscriptionsForFeed()) } to "Nouveautés des abonnements")
+            add(content.musicObserve to Section.MUSIC.label)
+            add(content.gamingObserve to Section.GAMING.label)
+            add(content.newsObserve to Section.NEWS.label)
+            add(content.sportsObserve to Section.SPORTS.label)
+            add(content.liveObserve to Section.LIVE.label)
+        }
+        // One feed failing (or slow) never empties Accueil.
+        for ((parts, title) in feeds) safely {
+            val iterator = parts.timeout(OBSERVE_TIMEOUT_S, TimeUnit.SECONDS).blockingIterable().iterator()
+            try {
+                var added = 0
+                while (added < HOME_EXTRA_ROWS && iterator.hasNext()) {
+                    for (group in iterator.next().filterNotNull()) {
+                        if (added >= HOME_EXTRA_ROWS) break
+                        rows += group.toRow("$HOME_EXTRA${index++}", title) ?: continue
+                        added++
+                    }
+                }
+            } finally {
+                (iterator as? Disposable)?.dispose()
+            }
+            emit(rows.toList())
+        }
+        if (rows.isEmpty()) emit(emptyList())
+    }.flowOn(Dispatchers.IO)
+
+    /** Key prefix of Accueil's extra rows (told apart from YouTube's home rows). */
+    const val HOME_EXTRA = "HOME-x-"
+    private const val HOME_EXTRA_ROWS = 2
 
     // ---- Lumen's feed (FeedProvider) -----------------------------------------------------------
 
@@ -600,20 +642,22 @@ object YouTube {
     /** "Pas intéressé" ([channel] = false) or "Ne pas recommander la chaîne" can be offered for this card. */
     fun hasFeedback(video: Video): Boolean = video.raw.feedbackToken != null || video.raw.feedbackToken2 != null || video.raw.feedbackEndpoint != null
 
-    /** Tells YouTube (as SmartTube does): this video, or this channel, no more in the recommendations. */
-    suspend fun notInterested(video: Video, channel: Boolean): Boolean = withContext(Dispatchers.IO) {
-        runCatching {
-            val item = video.raw
-            val endpoint = item.feedbackEndpoint
-            val token = if (endpoint != null) {
+    /**
+     * Tells YouTube (as SmartTube does): this video, or this channel, no more in the
+     * recommendations — as [account] only.
+     */
+    suspend fun notInterested(video: Video, channel: Boolean, account: String?): ActionResult = withContext(Dispatchers.IO) {
+        val item = video.raw
+        val endpoint = item.feedbackEndpoint
+        val token = runCatching {
+            if (endpoint != null) {
                 service.mediaItemService.getFeedbackTokensObserve(endpoint).timeout(10, TimeUnit.SECONDS).blockingFirst(emptyList())
                     .getOrNull(if (channel) 1 else 0)
             } else {
                 if (channel) item.feedbackToken2 else item.feedbackToken
-            } ?: return@runCatching false
-            service.mediaItemService.markAsNotInterested(token)
-            true
-        }.getOrDefault(false)
+            }
+        }.getOrNull() ?: return@withContext ActionResult.FAILED
+        onAccount(account) { service.mediaItemService.markAsNotInterested(token) }
     }
 
     suspend fun formatInfo(videoId: String): MediaItemFormatInfo? = withContext(Dispatchers.IO) {
@@ -645,20 +689,44 @@ object YouTube {
         )
     }
 
-    /** Like (or remove the like). Needs an account. */
-    suspend fun setLiked(videoId: String, item: MediaItem?, liked: Boolean) = withContext(Dispatchers.IO) {
-        runCatching {
-            val target = item ?: itemFor(videoId)
-            if (liked) service.mediaItemService.setLike(target) else service.mediaItemService.removeLike(target)
-        }.isSuccess
+    /**
+     * The engine's account right now (opaque id, null: signed out): what account-bound actions of a
+     * screen are checked against ([onAccount]). Blocking-free for the caller (IO).
+     */
+    suspend fun activeAccountId(): String? = withContext(Dispatchers.IO) { currentAccountId() }
+
+    /**
+     * An account-bound request ([block], blocking): under the same lock as every account switch
+     * (read side: switches wait for it, it waits for them), and only if the engine is still on
+     * [expected] — the account the screen showed when the action was asked. Otherwise (Lumen
+     * switched the account meanwhile, or the engine is busy for more than 8 s) nothing is sent.
+     */
+    private fun onAccount(expected: String?, block: () -> Unit): ActionResult {
+        val read = accountLock.readLock()
+        if (!read.tryLock(LOCK_WAIT_S, TimeUnit.SECONDS)) return ActionResult.ACCOUNT_CHANGED
+        try {
+            // Checked last thing before sending: a switch can't happen while the read lock is held.
+            if (expected == null || currentAccountId() != expected) return ActionResult.ACCOUNT_CHANGED
+            return if (runCatching(block).isSuccess) ActionResult.DONE else ActionResult.FAILED
+        } finally {
+            read.unlock()
+        }
     }
 
-    /** "Je n'aime pas" (or remove it). Needs an account. */
-    suspend fun setDisliked(videoId: String, item: MediaItem?, disliked: Boolean) = withContext(Dispatchers.IO) {
-        runCatching {
+    /** Like (or remove the like), as [account] only. */
+    suspend fun setLiked(videoId: String, item: MediaItem?, liked: Boolean, account: String?): ActionResult = withContext(Dispatchers.IO) {
+        onAccount(account) {
+            val target = item ?: itemFor(videoId)
+            if (liked) service.mediaItemService.setLike(target) else service.mediaItemService.removeLike(target)
+        }
+    }
+
+    /** "Je n'aime pas" (or remove it), as [account] only. */
+    suspend fun setDisliked(videoId: String, item: MediaItem?, disliked: Boolean, account: String?): ActionResult = withContext(Dispatchers.IO) {
+        onAccount(account) {
             val target = item ?: itemFor(videoId)
             if (disliked) service.mediaItemService.setDislike(target) else service.mediaItemService.removeDislike(target)
-        }.isSuccess
+        }
     }
 
     /** Estimated dislikes (Return YouTube Dislike, asked by the engine), e.g. "1,2 k"; null if unknown. */
@@ -692,16 +760,17 @@ object YouTube {
         )
     }
 
-    /** Adds the video to "À regarder plus tard" (YouTube's WL playlist). */
-    suspend fun watchLater(videoId: String) = withContext(Dispatchers.IO) {
-        runCatching { service.mediaItemService.addToPlaylistObserve(WATCH_LATER, videoId).blockingSubscribe() }.isSuccess
+    /** Adds the video to "À regarder plus tard" (YouTube's WL playlist), as [account] only. */
+    suspend fun watchLater(videoId: String, account: String?): ActionResult = withContext(Dispatchers.IO) {
+        onAccount(account) { service.mediaItemService.addToPlaylistObserve(WATCH_LATER, videoId).blockingSubscribe() }
     }
 
-    suspend fun setSubscribed(channelId: String, subscribed: Boolean) = withContext(Dispatchers.IO) {
-        runCatching {
+    /** Subscribes to (or unsubscribes from) a channel, as [account] only. */
+    suspend fun setSubscribed(channelId: String, subscribed: Boolean, account: String?): ActionResult = withContext(Dispatchers.IO) {
+        onAccount(account) {
             if (subscribed) service.mediaItemService.subscribe(channelId) else service.mediaItemService.unsubscribe(channelId)
             subscribedChannels?.let { if (subscribed) it += channelId else it -= channelId }
-        }.isSuccess
+        }
     }
 
     /** DeArrow (sponsor.ajay.app) titles and thumbnails for these videos, by video id. */
@@ -773,9 +842,16 @@ object YouTube {
                 selectFeedAccount(id)
                 return@withContext
             }
-            runCatching {
-                service.signInService.selectAccount(account.raw)
-                service.invalidateCache()
+            // No id (no identity at all): still through the switches' lock (never under an action).
+            val write = accountLock.writeLock()
+            if (!write.tryLock(LOCK_WAIT_S, TimeUnit.SECONDS)) return@withContext
+            try {
+                runCatching {
+                    service.signInService.selectAccount(account.raw)
+                    service.invalidateCache()
+                }
+            } finally {
+                write.unlock()
             }
         }
     }

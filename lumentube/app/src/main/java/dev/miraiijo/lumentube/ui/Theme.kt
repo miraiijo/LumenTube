@@ -1,6 +1,7 @@
 package dev.miraiijo.lumentube.ui
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -171,6 +172,16 @@ private fun isDaytime(): Boolean {
     return minutes in DAY_START_MIN until DAY_END_MIN
 }
 
+/**
+ * The window's color for an "Apparence" setting (0 = Auto, 1 = Jour, 2 = Nuit): set before Compose
+ * draws its first frame, so a day start never flashes black.
+ */
+fun windowBackground(appearance: Int): Color = when (Appearance.entries.getOrElse(appearance) { Appearance.AUTO }) {
+    Appearance.DAY -> DayColors.background
+    Appearance.NIGHT -> NightColors.background
+    Appearance.AUTO -> if (isDaytime()) DayColors.background else NightColors.background
+}
+
 private const val DAY_START_MIN = 7 * 60 + 30
 /** "Taille de l'interface", in %: from [UI_SCALE_MIN] to [UI_SCALE_MAX] by [UI_SCALE_STEP]. */
 const val UI_SCALE_DEFAULT = 100
@@ -244,8 +255,12 @@ val LocalSafe = staticCompositionLocalOf { safeInsets(1f) }
 
 /** Shared measurements: one set of radii, heights and font sizes for the whole app. */
 object Dimens {
-    /** Side margin, ~5 % of a 960 dp wide TV screen (overscan safe area). */
-    val Gutter = 48.dp
+    /**
+     * Side margin: the safe zone's side (48 system dp, ~5 % of a 960 dp wide TV screen), in the
+     * current dp — never reduced by "Taille de l'interface" (a fixed 48 dp was 38 at 80 %).
+     */
+    val Gutter: androidx.compose.ui.unit.Dp
+        @Composable @androidx.compose.runtime.ReadOnlyComposable get() = LocalSafe.current.calculateStartPadding(androidx.compose.ui.unit.LayoutDirection.Ltr)
     /** Space between the top of a screen's area and its first content. */
     val ContentTop = 16.dp
     /** Space above each section title (rows never touch the next title). */
