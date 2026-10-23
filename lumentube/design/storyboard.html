@@ -81,8 +81,8 @@ td kbd{min-width:26px;height:24px;font-size:11px}
 /* Theme.kt NightColors / DayColors */
 .stage.nuit{--tp:#F5F5F7;--ts:#98989D;--sel:rgba(255,255,255,.16);--ctl:rgba(255,255,255,.10);--focus:#F5F5F7;--onf:#0A0A0B;--fring:rgba(245,245,247,.35);--ring:#F5F5F7;
   --glass:rgba(255,255,255,.08);--gb:rgba(255,255,255,.10);--tile:#1C1C1E;--tilef:#2C2C2E;--panel:#161618;--shadow:rgba(0,0,0,.55);--div:rgba(255,255,255,.08);--track:rgba(255,255,255,.22);--chip:#E4E5E9;--help:#A3A5AD;--addt:rgba(255,255,255,.10)}
-.stage.jour{--tp:#16171A;--ts:#62656D;--sel:rgba(255,255,255,.90);--ctl:rgba(0,0,0,.06);--focus:#16171A;--onf:#FFFFFF;--fring:rgba(22,23,26,.35);--ring:#16171A;
-  --glass:rgba(255,255,255,.66);--gb:rgba(255,255,255,.92);--tile:#E2E4EA;--tilef:#FFFFFF;--panel:#FFFFFF;--shadow:rgba(20,25,40,.22);--div:rgba(0,0,0,.08);--track:rgba(0,0,0,.14);--chip:#2A2C33;--help:#62656D;--addt:#FFFFFF}
+.stage.jour{--tp:#16171A;--ts:#505257;--sel:rgba(243,238,225,.90);--ctl:rgba(0,0,0,.06);--focus:#16171A;--onf:#F3EEE1;--fring:rgba(22,23,26,.35);--ring:#16171A;
+  --glass:rgba(243,238,225,.62);--gb:rgba(243,238,225,.90);--tile:#D9D5CB;--tilef:#F3EEE1;--panel:#F3EEE1;--shadow:rgba(42,36,24,.20);--div:rgba(0,0,0,.08);--track:rgba(0,0,0,.14);--chip:#2A2C33;--help:#505257;--addt:#F3EEE1}
 .layer{position:absolute;left:0;top:0;width:960px;height:540px;zoom:1.125;overflow:hidden;animation:lin .45s ease both}
 .layer.out{animation:lout .4s ease both}
 @keyframes lin{from{opacity:0;transform:scale(1.015)}to{opacity:1;transform:none}}
@@ -403,7 +403,7 @@ next:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2
 const a=(al,hex)=>{const n=parseInt(hex,16);return `rgba(${n>>16},${(n>>8)&255},${n&255},${(al/255).toFixed(3)})`};
 // Lumen's ambiances (LumenTube itself draws « Neutre » only: Header.kt lumenBackground)
 const AMB={
- 'Neutre':{n:['#0A0B0E','#0E0F13','#111216'],ng:[a(0x24,'C8A46A'),a(0x1A,'5A8CFF')],d:['#EDEFF3','#E8EAF0','#E3E6ED'],dg:[a(0x4D,'C8A46A'),a(0x2E,'5A8CFF')]},
+ 'Neutre':{n:['#0A0B0E','#0E0F13','#111216'],ng:[a(0x24,'C8A46A'),a(0x1A,'5A8CFF')],d:['#E4E1D9','#DFDBD2','#DAD6CC'],dg:[a(0x4D,'C8A46A'),a(0x1F,'5A8CFF')]},
  'Crépuscule':{n:['#0B1026','#1B1240','#2A0F3D'],ng:[a(0x2A,'31C3D6'),a(0x22,'7A3CFF')],d:['#ECEAF6','#E4E0F2','#EDE3F0'],dg:[a(0x33,'7A3CFF'),a(0x26,'31C3D6')]},
  'Aurore':{n:['#1A0B1E','#3A1230','#4A1F1A'],ng:[a(0x2A,'FF7A59'),a(0x22,'E0407B')],d:['#F6EEEA','#F3E4E2','#F5E9E0'],dg:[a(0x40,'FF7A59'),a(0x30,'E0407B')]},
  'Océan':{n:['#041421','#0A2A3F','#06363F'],ng:[a(0x2A,'38D9C9'),a(0x22,'2F6BFF')],d:['#E8F1F4','#DFEDF2','#E3F2F1'],dg:[a(0x38,'38D9C9'),a(0x30,'2F6BFF')]},
