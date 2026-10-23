@@ -327,7 +327,13 @@ object YouTube {
         if (now != null && feedId(now) == feedId(account)) return
         silentNotifications.incrementAndGet()
         switchEpoch++
-        service.signInService.selectAccount(account)
+        try {
+            service.signInService.selectAccount(account)
+        } catch (t: Throwable) {
+            silentNotifications.decrementAndGet()
+            switchEpoch++
+            throw t
+        }
         service.invalidateCache()
         // Again after: a read that saw the first increment but still the old account can't store.
         switchEpoch++
