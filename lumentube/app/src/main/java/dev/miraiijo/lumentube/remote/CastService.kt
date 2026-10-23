@@ -81,7 +81,7 @@ class CastService : Service() {
         )
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle("LumenTube attend le téléphone")
+            .setContentTitle("Mirazuki Tube attend le téléphone")
             .setOngoing(true)
             .build()
     }

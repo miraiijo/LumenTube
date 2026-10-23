@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="lumentube_background">#FF070707</color>
-    <!-- The Halune banners' night background (the same in Halune IPTV). -->
+    <!-- The Mirazuki banners' night background (the same in Mirazuki IPTV). -->
     <color name="splash_background">#FF10121A</color>
 
     <style name="Theme.LumenTube" parent="android:Theme.Material.NoActionBar">

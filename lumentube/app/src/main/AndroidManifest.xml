@@ -38,7 +38,7 @@
         android:allowBackup="false"
         android:banner="@drawable/banner"
         android:icon="@drawable/ic_launcher"
-        android:label="LumenTube"
+        android:label="Mirazuki Tube"
         android:largeHeap="true"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"

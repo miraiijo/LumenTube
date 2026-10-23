@@ -286,7 +286,7 @@ object Updater {
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
                 instanceFollowRedirects = false
-                setRequestProperty("User-Agent", "Lumen-Updater")
+                setRequestProperty("User-Agent", "Mirazuki-Updater")
             }
             when (val code = connection.responseCode) {
                 in 200..299 -> return connection

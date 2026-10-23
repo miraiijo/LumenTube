@@ -55,7 +55,7 @@ class AutoFrameRate(private val activity: Activity) {
     private fun display(): Display? = runCatching<Display?> { activity.windowManager.defaultDisplay }.getOrNull()
 
     companion object {
-        private const val TAG = "LumenTube.AFR"
+        private const val TAG = "MirazukiTube.AFR"
 
         /**
          * Display rates that fit [fps], preferred first; empty = unknown or unusual rate (no switch).

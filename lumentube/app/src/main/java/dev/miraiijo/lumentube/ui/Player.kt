@@ -128,7 +128,7 @@ private const val SEEK_LINE_MS = 1_500L
 /** Pause after the last Left/Right before seeking (the presses in between add up). */
 private const val SEEK_COMMIT_MS = 600L
 /** adb logcat -s LumenTube.Timing: how long a video takes to start, step by step. */
-private const val TIMING_TAG = "LumenTube.Timing"
+private const val TIMING_TAG = "MirazukiTube.Timing"
 /** First frame (or a new size) to display switch: Auto's first quality change has passed. */
 private const val AFR_SETTLE_MS = 1_500L
 

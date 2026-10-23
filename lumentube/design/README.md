@@ -1,6 +1,6 @@
-# Design de LumenTube
+# Design de Mirazuki Tube
 
-- `design/storyboard.html` : le storyboard de LumenTube. Un seul fichier, à ouvrir dans un navigateur (aucun outil nécessaire).
+- `design/storyboard.html` : le storyboard de Mirazuki Tube. Un seul fichier, à ouvrir dans un navigateur (aucun outil nécessaire).
 - Chaque écran y est montré en Jour et en Nuit, avec une séquence touche par touche (étapes cliquables, lecture automatique), et une charte des touches à la fin.
 - C'est la référence de l'interface : toute modification d'interface (prévue ou déjà codée) met à jour `storyboard.html` dans le même changement.
 - Chaque écran porte une étiquette :

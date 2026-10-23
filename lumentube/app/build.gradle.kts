@@ -102,7 +102,7 @@ dependencies {
     // Installs the Baseline Profiles (AndroidX/Compose libraries' + src/main/baseline-prof.txt) on a
     // sideloaded APK too (no Play Store): faster cold start and first scrolls. Same version as Lumen.
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
-    // Splash screen at launch (Halune's logo), the same on Android 9 to 11 as on 12+.
+    // Splash screen at launch (Mirazuki's logo), the same on Android 9 to 11 as on 12+.
     implementation("androidx.core:core-splashscreen:1.0.1")
     // Thumbnails: Glide (no OkHttp 4, which Coil needs and the engine can't use).
     implementation("com.github.bumptech.glide:glide:5.0.9")

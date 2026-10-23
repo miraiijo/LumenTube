@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
     private val vm: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Halune's logo while Accueil loads behind it: off as soon as there's something to show
+        // Mirazuki's logo while Accueil loads behind it: off as soon as there's something to show
         // (rows, an error, "Qui regarde ?", a video opened from a link), at most SPLASH_MAX_MS.
         val splash = installSplashScreen()
         val shownAt = android.os.SystemClock.uptimeMillis()
@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
         // Its buttons are read from their raw code instead, the same whatever the key layout.
         val sony = if (event.device?.vendorId == SONY_VENDOR && android.os.Build.VERSION.SDK_INT < SONY_DRIVER_SDK) SONY_SCANCODES[event.scanCode] else null
         if (event.device?.vendorId == SONY_VENDOR && event.action == KeyEvent.ACTION_DOWN) {
-            android.util.Log.d("LumenTube.Pad", "key=${KeyEvent.keyCodeToString(event.keyCode)} scan=0x${Integer.toHexString(event.scanCode)} → ${sony?.let(KeyEvent::keyCodeToString)}")
+            android.util.Log.d("MirazukiTube.Pad", "key=${KeyEvent.keyCodeToString(event.keyCode)} scan=0x${Integer.toHexString(event.scanCode)} → ${sony?.let(KeyEvent::keyCodeToString)}")
         }
         // L3 / R3: nothing (they used to come as Select / Start).
         if (sony == IGNORED) return true
@@ -114,7 +114,7 @@ class MainActivity : ComponentActivity() {
             // An account asked for (even invalid: then the selected one plays) never shows the picker.
             val skipPicker = lumen && (intent.getBooleanExtra(EXTRA_SKIP_PICKER, false) || intent.hasExtra(EXTRA_ACCOUNT_ID))
             vm.playLink(id, startSeconds(uri.getQueryParameter("t")), account, skipPicker)
-        }.onFailure { android.util.Log.w("LumenTube", "link ignored: ${it.javaClass.simpleName}") }
+        }.onFailure { android.util.Log.w("MirazukiTube", "link ignored: ${it.javaClass.simpleName}") }
     }
 
     /**
@@ -146,7 +146,7 @@ class MainActivity : ComponentActivity() {
     private companion object {
         /**
          * The splash never stays longer than this, whatever is still loading (Accueil comes from
-         * the network: longer than Halune IPTV's 1.5 s, its rows usually arrive within it).
+         * the network: longer than Mirazuki IPTV's 1.5 s, its rows usually arrive within it).
          */
         const val SPLASH_MAX_MS = 3_000L
         val VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")

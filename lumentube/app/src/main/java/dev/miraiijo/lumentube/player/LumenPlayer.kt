@@ -714,7 +714,7 @@ class LumenPlayer(context: Context) {
         const val REBUFFER_MS = 2_500
         const val STUCK_MS = 1_500L
         const val FROZEN_CHECKS = 3
-        const val FREEZE_TAG = "LumenTube.Freeze"
+        const val FREEZE_TAG = "MirazukiTube.Freeze"
         const val MAX_BUFFER_BYTES = 40 shl 20
         const val LOAD_CHECKS = 4
         const val LOAD_MIN_DROPPED = 20
