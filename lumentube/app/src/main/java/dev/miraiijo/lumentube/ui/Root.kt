@@ -197,7 +197,7 @@ fun Root(vm: MainViewModel) {
             // Each layer of the fade draws its own snapshot: the page leaving keeps its data (it
             // showed the incoming page's rows, or "Rien à afficher", for the 220 ms), and only the
             // incoming one gets new focus ticks.
-            val view = PageView(state.section, state.opened, page, state.query, state.suggestions, state.searchOptions, pageFocusTick)
+            val view = PageView(state.section, state.opened, page, state.query, state.suggestions, state.searchOptions, pageFocusTick, state.focusKey)
             val pageKey = state.section to state.opened?.title
             Crossfade(targetState = pageKey, animationSpec = tween(220), label = "pages") { layerKey ->
                 // The current page follows the state; the one fading out keeps the last view it
@@ -227,6 +227,7 @@ fun Root(vm: MainViewModel) {
                         page = shown.page,
                         title = shown.opened?.title,
                         focusTick = shown.focusTick,
+                        focusKey = shown.focusKey,
                         onSelect = select,
                         onLoadMore = vm::loadMore,
                         // The opened channel / playlist reloads itself, not the section under it.
@@ -388,6 +389,7 @@ private data class PageView(
     val suggestions: List<String>,
     val options: Int,
     val focusTick: Int,
+    val focusKey: String? = null,
 )
 
 /** Where a video resumes: YouTube's saved position, else its watched share (not when finished). */

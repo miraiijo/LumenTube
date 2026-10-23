@@ -32,7 +32,14 @@ data class Page(val rows: List<VideoRow> = emptyList(), val loading: Boolean = t
 
 /** A channel or playlist opened from a card, shown over the section. [channel]: a channel page's header. */
 @androidx.compose.runtime.Immutable
-data class Opened(val title: String, val page: Page, val channel: ChannelHeader? = null)
+data class Opened(
+    val title: String,
+    val page: Page,
+    val channel: ChannelHeader? = null,
+    val from: Video? = null,
+    val homeRows: List<VideoRow> = emptyList(),
+    val sortRows: List<VideoRow> = emptyList(),
+)
 
 /**
  * A channel page's header: avatar, name, "S'abonner" ([subscribed] null: unknown or signed out) and
@@ -83,7 +90,8 @@ data class Pairing(val code: String? = null, val error: String? = null)
 data class UiState(
     val section: Section = Section.HOME,
     val pages: Map<Section, Page> = emptyMap(),
-    val opened: Opened? = null,
+    val openedStack: List<Opened> = emptyList(),
+    val focusKey: String? = null,
     val signedIn: Boolean = false,
     /**
      * Opaque id of the account the pages show (null: signed out or not read yet): the actions made
@@ -132,9 +140,12 @@ data class UiState(
     /** Réglages › Mises à jour. */
     val update: UpdateUi = UpdateUi(),
 ) {
+    val opened: Opened?
+        get() = openedStack.lastOrNull()
+
     val page: Page
         get() = when {
-            opened != null -> opened.page
+            opened != null -> opened!!.page
             section == Section.SEARCH -> search ?: Page(loading = false)
             section == Section.HOME -> (pages[section] ?: Page()).let { home ->
                 if (resume == null) home else home.copy(rows = listOf(resume) + home.rows)
@@ -187,7 +198,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
                 val id = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { YouTube.homeAccountId() }
                 if (id != _state.value.accountId && !_state.value.choosingAccount) {
                     cancelLoads()
-                    _state.update { it.copy(pages = emptyMap(), resume = null, search = null, opened = null, cardMenu = null) }
+                    _state.update { it.copy(pages = emptyMap(), resume = null, search = null, openedStack = emptyList(), focusKey = null, cardMenu = null) }
                     refreshAccount()
                     show(_state.value.section.takeIf { it != Section.SEARCH } ?: Section.HOME)
                 }
@@ -243,7 +254,8 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     }
 
     fun show(section: Section) {
-        _state.update { it.copy(section = section, opened = null) }
+        channelJob?.cancel()
+        _state.update { it.copy(section = section, openedStack = emptyList(), focusKey = null) }
         if (section == Section.SEARCH) return
         val current = _state.value.pages[section]
         if (current == null || current.error != null) load(section)
@@ -251,16 +263,13 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
 
     fun reload() = load(_state.value.section)
 
-    /** The playlist (or other card) opened last: "Réessayer" on its page opens it again. */
-    private var openedFrom: Video? = null
-
     /** "Réessayer" on a page: the opened channel / playlist again, else the section. */
     fun retry() {
         val opened = _state.value.opened ?: return reload()
         val channel = opened.channel
         when {
-            channel != null -> openChannel(channel.id, channel.name, channel.avatar)
-            openedFrom != null -> select(openedFrom!!)
+            channel != null -> openChannel(channel.id, channel.name, channel.avatar, opened.from)
+            opened.from != null -> select(opened.from)
             else -> reload()
         }
     }
@@ -342,8 +351,14 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
             if (next == null) return@launch
             _state.update { s ->
                 fun Page.swap() = copy(rows = rows.map { if (it.key == row.key) next else it })
-                val opened = s.opened?.let { o -> o.copy(page = o.page.swap()) }
-                s.copy(opened = opened, pages = s.pages.mapValues { (_, page) -> page.swap() }, search = s.search?.swap())
+                val stack = s.openedStack.map { o ->
+                    o.copy(
+                        page = o.page.swap(),
+                        homeRows = o.homeRows.map { if (it.key == row.key) next else it },
+                        sortRows = o.sortRows.map { if (it.key == row.key) next else it },
+                    )
+                }
+                s.copy(openedStack = stack, pages = s.pages.mapValues { (_, page) -> page.swap() }, search = s.search?.swap())
             }
             fetchDeArrow(listOf(next))
         }
@@ -433,17 +448,21 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         }
         val channelId = video.raw.channelId
         if (video.isChannel && channelId != null) {
-            openChannel(channelId, video.title, video.thumbnail)
+            openChannel(channelId, video.title, video.thumbnail, from = video)
             return
         }
-        openedFrom = video
-        _state.update { it.copy(opened = Opened(video.title, Page())) }
+        val entry = Opened(title = video.title, page = Page(), from = video)
+        _state.update { s -> s.copy(openedStack = s.openedStack.pushOrReplace(entry), focusKey = null) }
         viewModelScope.launch {
             val page = runCatching { YouTube.open(video) }.fold(
                 onSuccess = { Page(it, loading = false, error = if (it.isEmpty()) "Aucune vidéo." else null) },
                 onFailure = { Page(loading = false, error = it.userMessage()) },
             )
-            _state.update { s -> if (s.opened == null) s else s.copy(opened = Opened(video.title, page)) }
+            _state.update { s ->
+                val top = s.opened ?: return@update s
+                if (top.channel != null || top.from?.key != video.key) return@update s
+                s.copy(openedStack = s.openedStack.dropLast(1) + top.copy(page = page))
+            }
             fetchDeArrow(page.rows)
         }
     }
@@ -451,9 +470,6 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     // ---- Channel page ---------------------------------------------------------------------------
 
     private var channelJob: Job? = null
-    /** The opened channel's rows: its own page, then one per order. */
-    private var channelHome: List<VideoRow> = emptyList()
-    private var channelSortRows: List<VideoRow> = emptyList()
 
     /** From the player: the video goes to the small window, the channel page opens behind it. */
     fun openChannelFromPlayer(channelId: String, name: String) {
@@ -462,12 +478,12 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     }
 
     /** A channel page (from a channel card, a card's menu or the player): header, then its rows. */
-    fun openChannel(channelId: String, name: String, avatar: String?) {
+    fun openChannel(channelId: String, name: String, avatar: String?, from: Video? = null) {
         channelJob?.cancel()
-        channelHome = emptyList()
-        channelSortRows = emptyList()
-        val header = ChannelHeader(channelId, name.ifBlank { "Chaîne" }, avatar)
-        _state.update { it.copy(opened = Opened(header.name, Page(), header), cardMenu = null) }
+        val prev = _state.value.opened?.takeIf { it.channel?.id == channelId }
+        val header = ChannelHeader(channelId, name.ifBlank { "Chaîne" }, avatar ?: prev?.channel?.avatar)
+        val entry = Opened(title = header.name, page = Page(), channel = header, from = from ?: prev?.from)
+        _state.update { s -> s.copy(openedStack = s.openedStack.pushOrReplace(entry), focusKey = null, cardMenu = null) }
         channelJob = viewModelScope.launch {
             launch {
                 val subscribed = if (_state.value.signedIn) YouTube.isSubscribed(channelId) else null
@@ -475,35 +491,53 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
             }
             launch {
                 val sorts = runCatching { YouTube.channelSorts(channelId) }.getOrDefault(emptyList())
-                channelSortRows = sorts
-                updateChannel(channelId) { it.copy(sorts = sorts.map { row -> row.title }) }
+                updateChannelEntry(channelId) { o ->
+                    o.copy(
+                        channel = o.channel?.copy(sorts = sorts.map { row -> row.title }),
+                        sortRows = sorts,
+                    )
+                }
             }
             val page = runCatching { YouTube.channelRows(channelId) }.fold(
                 onSuccess = { Page(it, loading = false, error = if (it.isEmpty()) "Aucune vidéo." else null) },
                 onFailure = { Page(loading = false, error = it.userMessage()) },
             )
-            channelHome = page.rows
-            _state.update { s ->
-                val opened = s.opened?.takeIf { it.channel?.id == channelId } ?: return@update s
-                if (opened.channel?.sort != -1) return@update s
-                s.copy(opened = opened.copy(page = page))
+            updateChannelEntry(channelId) { o ->
+                val updated = o.copy(homeRows = page.rows)
+                if (o.channel?.sort == -1) updated.copy(page = page) else updated
             }
             fetchDeArrow(page.rows)
         }
     }
 
-    private fun updateChannel(channelId: String, change: (ChannelHeader) -> ChannelHeader) = _state.update { s ->
-        val opened = s.opened ?: return@update s
-        val channel = opened.channel?.takeIf { it.id == channelId } ?: return@update s
-        s.copy(opened = opened.copy(channel = change(channel)))
+    private fun List<Opened>.pushOrReplace(entry: Opened): List<Opened> {
+        val top = lastOrNull()
+        val same = top != null && when {
+            entry.channel != null -> top.channel?.id == entry.channel.id
+            else -> top.channel == null && ((entry.from != null && top.from?.key == entry.from.key) || top.title == entry.title)
+        }
+        return if (same) dropLast(1) + entry else this + entry
     }
+
+    private fun updateChannelEntry(channelId: String, change: (Opened) -> Opened) = _state.update { s ->
+        val top = s.opened?.takeIf { it.channel?.id == channelId } ?: return@update s
+        s.copy(openedStack = s.openedStack.dropLast(1) + change(top))
+    }
+
+    private fun updateChannel(channelId: String, change: (ChannelHeader) -> ChannelHeader) =
+        updateChannelEntry(channelId) { o -> o.copy(channel = o.channel?.let(change)) }
 
     /** "Accueil de la chaîne" (-1) or one of its orders. */
     fun chooseChannelSort(index: Int) {
-        val channel = _state.value.opened?.channel ?: return
-        val rows = if (index < 0) channelHome else listOfNotNull(channelSortRows.getOrNull(index))
-        updateChannel(channel.id) { it.copy(sort = index) }
-        _state.update { s -> s.opened?.let { s.copy(opened = it.copy(page = Page(rows, loading = false, error = if (rows.isEmpty()) "Aucune vidéo." else null))) } ?: s }
+        val opened = _state.value.opened ?: return
+        val channel = opened.channel ?: return
+        val rows = if (index < 0) opened.homeRows else listOfNotNull(opened.sortRows.getOrNull(index))
+        updateChannelEntry(channel.id) { o ->
+            o.copy(
+                channel = o.channel?.copy(sort = index),
+                page = Page(rows, loading = false, error = if (rows.isEmpty()) "Aucune vidéo." else null),
+            )
+        }
         fetchDeArrow(rows)
     }
 
@@ -544,7 +578,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
 
     fun cardOpenChannel(video: Video) {
         val id = video.raw.channelId ?: return closeCardMenu()
-        openChannel(id, video.channel, null)
+        openChannel(id, video.channel, null, from = video)
     }
 
     /** "Pas intéressé" / "Ne pas recommander cette chaîne": the card (or the channel's cards) leaves the rows. */
@@ -568,7 +602,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         s.copy(
             pages = s.pages.mapValues { (_, page) -> page.without() },
             search = s.search?.without(),
-            opened = s.opened?.let { it.copy(page = it.page.without()) },
+            openedStack = s.openedStack.map { it.copy(page = it.page.without()) },
             resume = s.resume?.let { row -> row.copy(items = row.items.filterNot(matches)).takeIf { it.items.isNotEmpty() } },
         )
     }
@@ -645,7 +679,11 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     /** "À suivre" from the player: the next video replaces the current one. */
     fun playNext(video: Video) = _state.update { it.copy(playing = video, playingId = null) }
 
-    fun closeOpened() = _state.update { it.copy(opened = null) }
+    fun closeOpened() = _state.update { s ->
+        channelJob?.cancel()
+        if (s.openedStack.isEmpty()) s
+        else s.copy(openedStack = s.openedStack.dropLast(1), focusKey = s.openedStack.last().from?.key)
+    }
 
     /**
      * [accountId] (Lumen, contract v2): play as that account, for this playback only (history and
@@ -713,7 +751,8 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     /** Pages loaded meanwhile may be the other account's: reloaded for LumenTube's own. */
     private fun reloadHome() {
         cancelLoads()
-        _state.update { it.copy(pages = emptyMap(), resume = null, search = null, opened = null) }
+        channelJob?.cancel()
+        _state.update { it.copy(pages = emptyMap(), resume = null, search = null, openedStack = emptyList(), focusKey = null) }
         refreshAccount()
         show(_state.value.section.takeIf { it != Section.SEARCH } ?: Section.HOME)
     }
@@ -906,7 +945,8 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
                 return@launch
             }
             cancelLoads()
-            _state.update { it.copy(choosingAccount = false, accountsOpen = false, settingsOpen = false, pages = emptyMap(), resume = null, search = null, section = Section.HOME, opened = null) }
+            channelJob?.cancel()
+            _state.update { it.copy(choosingAccount = false, accountsOpen = false, settingsOpen = false, pages = emptyMap(), resume = null, search = null, section = Section.HOME, openedStack = emptyList(), focusKey = null) }
             refreshAccount()
             show(Section.HOME)
         }

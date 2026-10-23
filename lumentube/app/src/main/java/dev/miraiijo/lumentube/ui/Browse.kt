@@ -93,6 +93,8 @@ fun BrowsePage(
     onRetry: () -> Unit,
     needsAccount: Boolean,
     onSignIn: () -> Unit,
+    /** Card key to focus when returning from a popped page (else the first card). */
+    focusKey: String? = null,
     /** "Réessayer" under an empty page's message. */
     showRetry: Boolean = true,
     /** Long press (or the Menu key) on a card: its menu. */
@@ -115,12 +117,31 @@ fun BrowsePage(
     var servedTick by remember { mutableIntStateOf(0) }
     /** The focus is in the channel's header (S'abonner, a sort): rows arriving don't take it away. */
     var sheetFocused by remember { mutableStateOf(false) }
+    val targetPos = remember(page.rows, focusKey) {
+        if (focusKey == null) null
+        else page.rows.withIndex().firstNotNullOfOrNull { (rIndex, row) ->
+            val cIndex = row.items.indexOfFirst { it.key == focusKey }
+            if (cIndex >= 0) rIndex to cIndex else null
+        }
+    }
+    val targetRow = targetPos?.first ?: 0
+    val targetItem = targetPos?.second ?: 0
+    // Room kept above / below a focused card when the rows scroll, from the text lines (they follow
+    // the system's font scale): the row title (8 + line + 4) with the row's top padding (12), and
+    // the card's title (10 + 2 lines) and channel (2 + line), then the TV's safe zone (48 system
+    // dp): the last row's caption never goes under the screen's bottom edge (overscan).
+    val rowTitle = 24.dp + lines(ROW_TITLE_LINE, 1)
+    val cardCaption = 12.dp + lines(TITLE_LINE, 2) + lines(CHANNEL_LINE, 1) + SafeArea.bottom
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     LaunchedEffect(focusTick, page.rows.isNotEmpty(), page.error, needsAccount) {
         if (focusTick == 0 || focusTick == servedTick) return@LaunchedEffect
         // Moved meanwhile to the tabs or the channel's header (rows still loading): left there.
         if (focusElsewhere() || sheetFocused) {
             servedTick = focusTick
             return@LaunchedEffect
+        }
+        if (targetPos != null && page.rows.isNotEmpty()) {
+            listState.scrollToItem(targetRow)
         }
         withFrameNanos { }
         if (first.tryRequestFocus() || action.tryRequestFocus()) servedTick = focusTick
@@ -130,13 +151,6 @@ fun BrowsePage(
         servedTick = -1
         onRetry()
     }
-    // Room kept above / below a focused card when the rows scroll, from the text lines (they follow
-    // the system's font scale): the row title (8 + line + 4) with the row's top padding (12), and
-    // the card's title (10 + 2 lines) and channel (2 + line), then the TV's safe zone (48 system
-    // dp): the last row's caption never goes under the screen's bottom edge (overscan).
-    val rowTitle = 24.dp + lines(ROW_TITLE_LINE, 1)
-    val cardCaption = 12.dp + lines(TITLE_LINE, 2) + lines(CHANNEL_LINE, 1) + SafeArea.bottom
-    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     // Read in a derived state: scrolling doesn't recompose the page, only crossing the end does.
     val atEnd by androidx.compose.runtime.remember(listState) {
         androidx.compose.runtime.derivedStateOf {
@@ -201,7 +215,8 @@ fun BrowsePage(
                             VideoRowView(
                                 row,
                                 cardWidth = cardWidth,
-                                firstRequester = if (index == 0) first else null,
+                                firstRequester = if (index == targetRow) first else null,
+                                firstIndex = if (index == targetRow) targetItem else 0,
                                 onSelect = onSelect,
                                 onLoadMore = onLoadMore,
                                 onLongPress = onLongPress,
@@ -219,10 +234,15 @@ private fun VideoRowView(
     row: VideoRow,
     cardWidth: androidx.compose.ui.unit.Dp,
     firstRequester: FocusRequester?,
+    firstIndex: Int = 0,
     onSelect: (Video) -> Unit,
     onLoadMore: (VideoRow) -> Unit,
     onLongPress: (Video) -> Unit,
 ) {
+    val rowState = androidx.compose.foundation.lazy.rememberLazyListState()
+    LaunchedEffect(firstRequester, firstIndex) {
+        if (firstRequester != null && firstIndex > 0) rowState.scrollToItem(firstIndex)
+    }
     Column {
         Text(
             row.title,
@@ -241,6 +261,7 @@ private fun VideoRowView(
         val rowHeight = if (channelsOnly) Modifier else Modifier.height(24.dp + cardWidth * 9f / 16f + 12.dp + lines(TITLE_LINE, 2) + lines(CHANNEL_LINE, 1))
         RowScroll {
             LazyRow(
+                state = rowState,
                 modifier = rowHeight,
                 contentPadding = PaddingValues(horizontal = Dimens.Gutter, vertical = if (channelsOnly) 16.dp else 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(Dimens.CardGap),
@@ -249,7 +270,7 @@ private fun VideoRowView(
                     VideoCard(
                         video,
                         width = cardWidth,
-                        modifier = if (index == 0 && firstRequester != null) Modifier.focusRequester(firstRequester) else Modifier,
+                        modifier = if (index == firstIndex && firstRequester != null) Modifier.focusRequester(firstRequester) else Modifier,
                         onFocus = {
                             // Near the end: the next page of the row.
                             if (index >= row.items.size - 4) onLoadMore(row)
