@@ -385,12 +385,15 @@ fun PlayerScreen(
         val listener = object : Player.EventListener {
             override fun onPlayerStateChanged(playWhenReady: Boolean, playbackState: Int) {
                 buffering = playbackState == Player.STATE_BUFFERING || playbackState == Player.STATE_IDLE
-                if (playbackState == Player.STATE_READY && !started) {
-                    started = true
-                    firstFrameMs = android.os.SystemClock.elapsedRealtime() - openedAt
-                    if (dev.miraiijo.lumentube.BuildConfig.DEBUG) android.util.Log.i(TIMING_TAG, "$videoId: first frame ready $firstFrameMs ms after the request")
-                    // A linked phone follows what plays here.
-                    RemoteControl.reportPlaying(videoId, player.exo.currentPosition, player.exo.duration.coerceAtLeast(0L), playWhenReady)
+                if (playbackState == Player.STATE_READY) {
+                    if (!started) {
+                        started = true
+                        firstFrameMs = android.os.SystemClock.elapsedRealtime() - openedAt
+                        if (dev.miraiijo.lumentube.BuildConfig.DEBUG) android.util.Log.i(TIMING_TAG, "$videoId: first frame ready $firstFrameMs ms after the request")
+                        // A linked phone follows what plays here.
+                        RemoteControl.reportPlaying(videoId, player.exo.currentPosition, player.exo.duration.coerceAtLeast(0L), playWhenReady)
+                    }
+                    retried = false
                 }
                 if (playbackState == Player.STATE_ENDED) {
                     val next = details?.next
