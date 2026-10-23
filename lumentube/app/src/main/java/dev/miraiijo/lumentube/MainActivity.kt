@@ -12,7 +12,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.toArgb
 import dev.miraiijo.lumentube.link.LumenLink
 import dev.miraiijo.lumentube.ui.Appearance
+import dev.miraiijo.lumentube.ui.DayColors
 import dev.miraiijo.lumentube.ui.LumenTubeTheme
+import dev.miraiijo.lumentube.ui.NightColors
 import dev.miraiijo.lumentube.ui.Palette
 import dev.miraiijo.lumentube.ui.Root
 import dev.miraiijo.lumentube.ui.windowBackground
@@ -27,7 +29,9 @@ class MainActivity : ComponentActivity() {
         // Application: a feed query from Lumen starts the process without needing all that.
         com.liskovsoft.youtubeapi.service.YouTubeServiceManager.instance().refreshCacheIfNeeded()
         // The theme's color behind the first frame (Jour: no black flash before the pages).
-        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(windowBackground(vm.state.value.settings.appearance).toArgb()))
+        val initialBackground = windowBackground(vm.state.value.settings.appearance)
+        Palette.colors = if (initialBackground == DayColors.background) DayColors else NightColors
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(initialBackground.toArgb()))
         setContent {
             val settings = vm.state.collectAsState().value.settings
             LumenTubeTheme(Appearance.entries.getOrElse(settings.appearance) { Appearance.AUTO }, uiScale = settings.uiScale) {

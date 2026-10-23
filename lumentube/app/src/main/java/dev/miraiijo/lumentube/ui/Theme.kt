@@ -207,7 +207,9 @@ fun LumenTubeTheme(appearance: Appearance = Appearance.NIGHT, uiScale: Int = UI_
         Appearance.AUTO -> daytime
     }
     val target = if (light) DayColors else NightColors
-    if (Palette.colors !== target) Palette.colors = target
+    androidx.compose.runtime.SideEffect {
+        if (Palette.colors !== target) Palette.colors = target
+    }
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = Palette.Highlight,
