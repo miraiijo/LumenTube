@@ -14,7 +14,7 @@ on:
 # Build and check only: the APK comes out UNSIGNED. Signing and publishing happen on the Mac
 # (lumen-ship: the key never leaves it), so there is no secret at all in GitHub. Read-only token:
 # this workflow publishes nothing (the APK is a workflow artifact, signed by lumentube-install.sh
-# or lumen-ship, then published on miraiijo/lumen-releases).
+# or lumen-ship, then published on miraiijo/mirazuki-releases).
 permissions:
   contents: read
 

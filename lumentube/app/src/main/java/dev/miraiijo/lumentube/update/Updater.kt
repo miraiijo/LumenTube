@@ -18,7 +18,7 @@ import java.security.MessageDigest
  * Self-update of the Lumen apps. Same file in Lumen, LumenTube and LumenIPTV (only the package line
  * differs): fix it in the three.
  *
- * Channel: the public repo miraiijo/lumen-releases, release « channel », one `<app>.json` per app,
+ * Channel: the public repo miraiijo/mirazuki-releases (formerly lumen-releases), release « channel », one `<app>.json` per app,
  * written by lumen-ship on the Mac:
  *   {"format":1,"package":"dev.miraiijo.<app>","stable":{…}|null,"beta":{…}|null}
  *   entry: {"versionCode","versionName","apk","sha256","size","notes","date"}
@@ -29,8 +29,10 @@ import java.security.MessageDigest
  * refuses an APK signed with another key). Blocking calls: IO dispatcher only.
  */
 object Updater {
-    private const val RELEASES = "https://github.com/miraiijo/lumen-releases/releases/download/"
+    private const val RELEASES = "https://github.com/miraiijo/mirazuki-releases/releases/download/"
     private const val CHANNEL = "${RELEASES}channel/"
+    /** The channel's address before the rename (GitHub redirects it): versions published for older installs still point there. */
+    private const val FORMER_RELEASES = "https://github.com/miraiijo/lumen-releases/releases/download/"
     private const val TIMEOUT_MS = 15_000
     private const val MAX_JSON = 64 * 1024
     private const val MAX_APK = 300L * 1024 * 1024
@@ -207,7 +209,8 @@ object Updater {
     private fun entry(o: JSONObject, pkg: String, beta: Boolean): UpdateInfo {
         val apk = o.optString("apk")
         // Only an APK of a release of the same repo (never the channel itself, never another host).
-        if (!apk.startsWith(RELEASES) || apk.startsWith(CHANNEL) || ".." in apk) throw IOException("Adresse de l'APK inattendue")
+        val base = listOf(RELEASES, FORMER_RELEASES).firstOrNull { apk.startsWith(it) }
+        if (base == null || apk.startsWith("${base}channel/") || ".." in apk) throw IOException("Adresse de l'APK inattendue")
         val sha = o.optString("sha256").lowercase()
         if (!SHA256.matches(sha)) throw IOException("Empreinte de l'APK invalide")
         val size = o.optLong("size")
