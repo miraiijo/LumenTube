@@ -1,5 +1,6 @@
 package dev.miraiijo.lumentube.update
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -80,7 +81,7 @@ object Updater {
     }
 
     /**
-     * One download at a time in this process (LumenTube's own update): two downloads at
+     * One download at a time in this process (Lumen itself and its companions): two downloads at
      * once would fight for the bandwidth and the cache. [download] refuses while this is held.
      */
     private val busy = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -175,11 +176,20 @@ object Updater {
     /** Android must allow this app to install apps (« Sources inconnues » for this app). */
     fun canInstall(context: Context): Boolean = context.packageManager.canRequestPackageInstalls()
 
-    fun openInstallPermissionSettings(context: Context) {
-        context.startActivity(
-            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    fun openInstallPermissionSettings(context: Context): Boolean {
+        val candidates = listOf(
+            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")),
+            Intent(Settings.ACTION_SECURITY_SETTINGS),
         )
+        for (intent in candidates) {
+            try {
+                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return true
+            } catch (_: ActivityNotFoundException) {
+            } catch (_: SecurityException) {
+            }
+        }
+        return false
     }
 
     /** Hands the APK to the system installer (the user confirms on screen). */

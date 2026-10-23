@@ -810,8 +810,13 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         if (current.busy || Updater.isDownloading()) return
         val app = getApplication<Application>()
         if (!runCatching { Updater.canInstall(app) }.getOrDefault(false)) {
-            runCatching { Updater.openInstallPermissionSettings(app) }
-            _state.update { it.copy(update = it.update.copy(message = "Autorise LumenTube à installer des applis, puis relance l’installation.")) }
+            val opened = Updater.openInstallPermissionSettings(app)
+            val msg = if (opened) {
+                "Autorise LumenTube à installer des applis, puis relance l’installation."
+            } else {
+                "Autorise l'installation d'applis pour LumenTube dans Paramètres Android › Sécurité"
+            }
+            _state.update { it.copy(update = it.update.copy(message = msg)) }
             return
         }
         _state.update { it.copy(update = it.update.copy(busy = true, progress = 0f, message = null)) }
