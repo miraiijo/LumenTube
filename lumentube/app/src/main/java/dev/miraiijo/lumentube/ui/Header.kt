@@ -32,12 +32,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -246,15 +247,27 @@ private fun HeaderClock(modifier: Modifier = Modifier) {
 
 /**
  * The redesign's background: the page color with two soft lights (warm top right, cool bottom
- * left), drawn once per size change — no layer, no animation.
+ * left). Painted once per size or look change into a half-size picture, then drawn as that picture:
+ * one opaque blit per frame instead of three full-screen gradients (two of them blended), which the
+ * Freebox Player POP's GPU paid on every frame the screen moved. Smooth gradients lose nothing at
+ * half size (960 × 540 on a 1080p box, 2 MB).
  */
-fun Modifier.lumenBackground(): Modifier = drawBehind {
+fun Modifier.lumenBackground(): Modifier = drawWithCache {
     val colors = Palette.colors
-    // Lumen's "Neutre" ambiance: a diagonal of three greys, a warm light from the top right corner
-    // and a cool one from the bottom left (Lumen's 1400 / 1200 px radii on a 1920 px screen).
-    drawRect(Brush.linearGradient(0f to colors.background, 0.55f to colors.backgroundMid, 1f to colors.backgroundEnd, start = Offset.Zero, end = Offset(size.width, size.height)))
-    drawRect(Brush.radialGradient(listOf(colors.glowWarm, Color.Transparent), center = Offset(size.width, 0f), radius = size.width * GLOW_WARM_RADIUS))
-    drawRect(Brush.radialGradient(listOf(colors.glowCool, Color.Transparent), center = Offset(0f, size.height), radius = size.width * GLOW_COOL_RADIUS))
+    val w = (size.width / BACKGROUND_SCALE).toInt().coerceAtLeast(1)
+    val h = (size.height / BACKGROUND_SCALE).toInt().coerceAtLeast(1)
+    val picture = androidx.compose.ui.graphics.ImageBitmap(w, h)
+    androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(
+        this, layoutDirection, androidx.compose.ui.graphics.Canvas(picture), Size(w.toFloat(), h.toFloat()),
+    ) {
+        // Lumen's "Neutre" ambiance: a diagonal of three greys, a warm light from the top right corner
+        // and a cool one from the bottom left (Lumen's 1400 / 1200 px radii on a 1920 px screen).
+        drawRect(Brush.linearGradient(0f to colors.background, 0.55f to colors.backgroundMid, 1f to colors.backgroundEnd, start = Offset.Zero, end = Offset(size.width, size.height)))
+        drawRect(Brush.radialGradient(listOf(colors.glowWarm, Color.Transparent), center = Offset(size.width, 0f), radius = size.width * GLOW_WARM_RADIUS))
+        drawRect(Brush.radialGradient(listOf(colors.glowCool, Color.Transparent), center = Offset(0f, size.height), radius = size.width * GLOW_COOL_RADIUS))
+    }
+    val target = androidx.compose.ui.unit.IntSize(size.width.toInt(), size.height.toInt())
+    onDrawBehind { drawImage(picture, dstSize = target, filterQuality = androidx.compose.ui.graphics.FilterQuality.Low) }
 }
 
 /** Lumen's bar: 30 dp round glass buttons, 14 dp icons, 10 dp apart (Dimens.PillGap). */
@@ -268,6 +281,8 @@ private val TAB_BAR = 3.dp
 private val TAB_MARGIN = 24.dp
 private const val GLOW_WARM_RADIUS = 0.73f
 private const val GLOW_COOL_RADIUS = 0.625f
+/** The background is painted at 1 / this of the screen, then stretched (smooth gradients only). */
+private const val BACKGROUND_SCALE = 2f
 
 /** By day, the header's white buttons get a soft shadow (none at night, on the dark page). */
 @Composable

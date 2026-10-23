@@ -54,6 +54,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.em
 import androidx.tv.material3.Border
@@ -73,6 +75,8 @@ import androidx.compose.runtime.snapshotFlow
 
 /** The row title's line (16 sp text). */
 private val ROW_TITLE_LINE = 20.sp
+/** The hairline between two rows (Palette.Divider: 8 % white at night, 8 % black by day). */
+private val ROW_DIVIDER = 1.dp
 /** Default card width; on a page it follows the screen (as many cards as fit at ~[CARD_SLOT] fill the width). */
 private val CARD_WIDTH = 204.dp
 /** Width per card used to count the cards of a row: 4 at 100 %, 5 at 80 %, 6 at 60 %, 3 at 120 %. */
@@ -217,6 +221,7 @@ fun BrowsePage(
                                 cardWidth = cardWidth,
                                 firstRequester = if (index == targetRow) first else null,
                                 firstIndex = if (index == targetRow) targetItem else 0,
+                                divider = index > 0,
                                 onSelect = onSelect,
                                 onLoadMore = onLoadMore,
                                 onLongPress = onLongPress,
@@ -238,12 +243,21 @@ private fun VideoRowView(
     onSelect: (Video) -> Unit,
     onLoadMore: (VideoRow) -> Unit,
     onLongPress: (Video) -> Unit,
+    /** A hairline above the row (every row but the first), inside the side margins. */
+    divider: Boolean = false,
 ) {
     val rowState = androidx.compose.foundation.lazy.rememberLazyListState()
     LaunchedEffect(firstRequester, firstIndex) {
         if (firstRequester != null && firstIndex > 0) rowState.scrollToItem(firstIndex)
     }
-    Column {
+    val gutter = Dimens.Gutter
+    val line = Palette.Divider
+    Column(
+        if (!divider) Modifier else Modifier.drawBehind {
+            val inset = gutter.toPx()
+            drawLine(line, Offset(inset, 0f), Offset(size.width - inset, 0f), strokeWidth = ROW_DIVIDER.toPx())
+        },
+    ) {
         Text(
             row.title,
             fontSize = 16.sp,
@@ -321,7 +335,7 @@ fun VideoCard(
             colors = ClickableSurfaceDefaults.colors(containerColor = Palette.Tile, focusedContainerColor = Palette.TileFocused),
         ) {
             Box(Modifier.fillMaxSize()) {
-                Thumbnail(video.videoId, video.thumbnail, Modifier.fillMaxSize(), custom = video.customThumbnail, small = true)
+                Thumbnail(video.videoId, video.thumbnail, Modifier.fillMaxSize(), custom = video.customThumbnail, small = true, width = width)
                 val badge = when {
                     video.live -> "EN DIRECT"
                     video.upcoming -> "BIENTÔT"

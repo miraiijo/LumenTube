@@ -209,9 +209,26 @@ fun RowScroll(content: @Composable () -> Unit) {
  * the frame's size, so a small card costs no more memory than before.
  */
 @Composable
-fun Thumbnail(videoId: String?, fallback: String?, modifier: Modifier = Modifier, custom: String? = null, small: Boolean = false) {
-    // Cards (~460 px wide on the TV): YouTube's 640 px picture is enough and much lighter than 1280.
-    val hd = custom ?: videoId?.let { "https://i.ytimg.com/vi/$it/${if (small) "sddefault" else "maxresdefault"}.jpg" }
+fun Thumbnail(
+    videoId: String?,
+    fallback: String?,
+    modifier: Modifier = Modifier,
+    custom: String? = null,
+    small: Boolean = false,
+    /** The frame's width when known: a small one takes YouTube's 480 px picture. */
+    width: Dp = Dp.Unspecified,
+) {
+    // Cards: YouTube's 640 px picture (sddefault), or its 480 px one (hqdefault) when the frame is
+    // no wider than that — the usual card on a 1080p box. hqdefault exists for every video (no 404
+    // then a second request, as sddefault often does) and weighs about half: less to download and
+    // decode on the Freebox Player POP.
+    val px = if (width == Dp.Unspecified) Float.MAX_VALUE else with(LocalDensity.current) { width.toPx() }
+    val name = when {
+        !small -> "maxresdefault"
+        px <= HQ_PX -> "hqdefault"
+        else -> "sddefault"
+    }
+    val hd = custom ?: videoId?.let { "https://i.ytimg.com/vi/$it/$name.jpg" }
     GlideImage(
         model = hd ?: fallback,
         contentDescription = null,
@@ -226,6 +243,9 @@ fun Thumbnail(videoId: String?, fallback: String?, modifier: Modifier = Modifier
  * "=s88-…" asked as "=s256-…" gives a sharp picture at the same address.
  */
 fun avatarUrl(url: String?): String? = url?.replace(AVATAR_SIZE, "=s$AVATAR_PX")?.let { if (it.startsWith("//")) "https:$it" else it }
+
+/** Width of YouTube's hqdefault picture (480 × 360, the 16:9 frame inside it is 480 × 270). */
+private const val HQ_PX = 480f
 
 private val AVATAR_SIZE = Regex("=s\\d+")
 
