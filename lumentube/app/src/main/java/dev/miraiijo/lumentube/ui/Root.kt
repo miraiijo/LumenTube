@@ -198,7 +198,7 @@ fun Root(vm: MainViewModel) {
             // showed the incoming page's rows, or "Rien à afficher", for the 220 ms), and only the
             // incoming one gets new focus ticks.
             val view = PageView(state.section, state.opened, page, state.query, state.suggestions, state.searchOptions, pageFocusTick, state.focusKey)
-            val pageKey = state.section to state.opened?.title
+            val pageKey = state.section to state.opened?.key
             Crossfade(targetState = pageKey, animationSpec = tween(220), label = "pages") { layerKey ->
                 // The current page follows the state; the one fading out keeps the last view it
                 // had while it was current (a plain holder: no recomposition when it's written).

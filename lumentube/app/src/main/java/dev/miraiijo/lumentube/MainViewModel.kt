@@ -33,6 +33,7 @@ data class Page(val rows: List<VideoRow> = emptyList(), val loading: Boolean = t
 /** A channel or playlist opened from a card, shown over the section. [channel]: a channel page's header. */
 @androidx.compose.runtime.Immutable
 data class Opened(
+    val key: String,
     val title: String,
     val page: Page,
     val channel: ChannelHeader? = null,
@@ -451,7 +452,8 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
             openChannel(channelId, video.title, video.thumbnail, from = video)
             return
         }
-        val entry = Opened(title = video.title, page = Page(), from = video)
+        val openKey = video.raw.playlistId ?: video.key
+        val entry = Opened(key = openKey, title = video.title, page = Page(), from = video)
         _state.update { s -> s.copy(openedStack = s.openedStack.pushOrReplace(entry), focusKey = null) }
         viewModelScope.launch {
             val page = runCatching { YouTube.open(video) }.fold(
@@ -460,7 +462,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
             )
             _state.update { s ->
                 val top = s.opened ?: return@update s
-                if (top.channel != null || top.from?.key != video.key) return@update s
+                if (top.key != openKey) return@update s
                 s.copy(openedStack = s.openedStack.dropLast(1) + top.copy(page = page))
             }
             fetchDeArrow(page.rows)
@@ -482,7 +484,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         channelJob?.cancel()
         val prev = _state.value.opened?.takeIf { it.channel?.id == channelId }
         val header = ChannelHeader(channelId, name.ifBlank { "Chaîne" }, avatar ?: prev?.channel?.avatar)
-        val entry = Opened(title = header.name, page = Page(), channel = header, from = from ?: prev?.from)
+        val entry = Opened(key = channelId, title = header.name, page = Page(), channel = header, from = from ?: prev?.from)
         _state.update { s -> s.copy(openedStack = s.openedStack.pushOrReplace(entry), focusKey = null, cardMenu = null) }
         channelJob = viewModelScope.launch {
             launch {
@@ -512,11 +514,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
 
     private fun List<Opened>.pushOrReplace(entry: Opened): List<Opened> {
         val top = lastOrNull()
-        val same = top != null && when {
-            entry.channel != null -> top.channel?.id == entry.channel.id
-            else -> top.channel == null && ((entry.from != null && top.from?.key == entry.from.key) || top.title == entry.title)
-        }
-        return if (same) dropLast(1) + entry else this + entry
+        return if (top != null && top.key == entry.key) dropLast(1) + entry else this + entry
     }
 
     private fun updateChannelEntry(channelId: String, change: (Opened) -> Opened) = _state.update { s ->
