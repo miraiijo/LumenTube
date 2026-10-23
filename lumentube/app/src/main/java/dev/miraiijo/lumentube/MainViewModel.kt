@@ -217,10 +217,11 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
             // A Lumen launch cut short (process killed while playing as another account): back home.
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { YouTube.restoreHome() } }
             val accounts = YouTube.accounts()
-            // Several accounts: "Qui regarde ?" first, Accueil loads for the one picked (not when
-            // Lumen launched a video and asked to skip it, nor when it was answered before the
-            // process was killed).
-            val ask = if (restored) saved.get<Boolean>(KEY_PICKED) == false else accounts.size >= 2
+            val guest = accounts.isNotEmpty() && !kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { YouTube.signedIn }
+            // Several accounts, or "Invité" left on last time: "Qui regarde ?" first, Accueil loads
+            // for the one picked (not when Lumen launched a video and asked to skip it, nor when it
+            // was answered before the process was killed).
+            val ask = if (restored) saved.get<Boolean>(KEY_PICKED) == false else accounts.size >= 2 || guest
             if (ask && !skipPicker) {
                 _state.update { it.copy(accounts = accounts, choosingAccount = true) }
             } else {
@@ -943,6 +944,22 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
             // Playing as another account for Lumen: the new home loads when that video stops.
             if (playingAs) {
                 _state.update { it.copy(choosingAccount = false, accountsOpen = false, settingsOpen = false) }
+                refreshAccount()
+                return@launch
+            }
+            cancelLoads()
+            channelJob?.cancel()
+            _state.update { it.copy(choosingAccount = false, accountsOpen = false, settingsOpen = false, pages = emptyMap(), resume = null, search = null, section = Section.HOME, openedStack = emptyList(), focusKey = null) }
+            refreshAccount()
+            show(Section.HOME)
+        }
+    }
+
+    /** "Invité" in "Qui regarde ?": signed-out YouTube, the linked accounts kept. */
+    fun chooseGuest() {
+        viewModelScope.launch {
+            if (!YouTube.useGuest()) {
+                _state.update { it.copy(choosingAccount = false, accountsOpen = false) }
                 refreshAccount()
                 return@launch
             }

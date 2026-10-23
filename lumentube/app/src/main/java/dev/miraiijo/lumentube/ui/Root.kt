@@ -122,6 +122,9 @@ fun Root(vm: MainViewModel) {
         }
     }
 
+    // Time of the last held-arrow step let through (event clock, ms): see HOLD_STEP_MS.
+    val heldStep = remember { LongArray(1) }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -130,6 +133,14 @@ fun Root(vm: MainViewModel) {
             .onPreviewKeyEvent { event ->
                 val native = event.nativeKeyEvent
                 if (native.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
+                // An arrow held down (like YouTube's TV app): the focus walks on at a steady pace,
+                // one card every HOLD_STEP_MS, each scroll done before the next. The remote's own
+                // repeat (~20 a second) piled up scrolls the Freebox Player POP couldn't keep up
+                // with. Not over the full-screen video: there, a held arrow seeks faster and faster.
+                if (native.repeatCount > 0 && native.keyCode in ARROW_KEYS && !fullScreenPlayer) {
+                    if (native.eventTime - heldStep[0] < HOLD_STEP_MS) return@onPreviewKeyEvent true
+                    heldStep[0] = native.eventTime
+                }
                 // Search key (gamepad Select): straight to Rechercher, from any page (not over the video).
                 // The remote's mic (SEARCH or VOICE_ASSIST): Rechercher, and the dictation right away.
                 val voice = native.keyCode == android.view.KeyEvent.KEYCODE_VOICE_ASSIST
@@ -256,6 +267,8 @@ fun Root(vm: MainViewModel) {
                 accounts = state.accounts,
                 onChoose = vm::chooseAccount,
                 onAdd = vm::startSignIn,
+                onGuest = vm::chooseGuest,
+                guest = !state.signedIn,
                 onDismiss = { if (state.choosingAccount) vm.skipAccountChoice() else vm.closeAccounts() },
                 signingIn = state.signingIn,
             )
@@ -379,6 +392,16 @@ fun Root(vm: MainViewModel) {
 
 /** Width of the in-app picture-in-picture window (16:9), a share of the screen's. */
 private const val MINI_FRACTION = 0.33f
+
+/** A held arrow's pace: one step every 130 ms (about 8 cards a second). */
+private const val HOLD_STEP_MS = 130L
+
+private val ARROW_KEYS = setOf(
+    android.view.KeyEvent.KEYCODE_DPAD_UP,
+    android.view.KeyEvent.KEYCODE_DPAD_DOWN,
+    android.view.KeyEvent.KEYCODE_DPAD_LEFT,
+    android.view.KeyEvent.KEYCODE_DPAD_RIGHT,
+)
 
 /** What a page of the fade shows: a snapshot, so the page leaving keeps its own data. */
 private data class PageView(

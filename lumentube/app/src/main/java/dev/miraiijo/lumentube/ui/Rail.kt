@@ -220,6 +220,10 @@ fun ProfileDialog(
     onChoose: (Account) -> Unit,
     onAdd: () -> Unit,
     onDismiss: () -> Unit,
+    /** "Invité" (signed out): offered once an account is linked; null hides it. */
+    onGuest: (() -> Unit)? = null,
+    /** Accounts linked but none selected: "Invité" is the current one. */
+    guest: Boolean = false,
     /** The sign-in dialog is open over this one: when it closes, the focus goes back to "Ajouter". */
     signingIn: Boolean = false,
 ) {
@@ -248,8 +252,8 @@ fun ProfileDialog(
                 Modifier.widthIn(max = 880.dp).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(40.dp),
             ) {
-                // The current account first takes the focus.
-                val focusIndex = accounts.indexOfFirst { it.selected }.coerceAtLeast(0)
+                // The current account first takes the focus ("Invité" when it's the current one).
+                val focusIndex = if (guest) -1 else accounts.indexOfFirst { it.selected }.coerceAtLeast(0)
                 accounts.forEachIndexed { index, account ->
                     ProfileTile(
                         name = account.name,
@@ -257,6 +261,16 @@ fun ProfileDialog(
                         modifier = if (index == focusIndex) Modifier.focusRequester(first) else Modifier,
                         onClick = { onChoose(account) },
                     ) { AvatarPicture(account.avatar, account.name, PROFILE_AVATAR, 46.sp) }
+                }
+                if (onGuest != null && accounts.isNotEmpty()) {
+                    ProfileTile(
+                        name = "Invité",
+                        caption = if (guest) "Compte actuel" else "Sans compte",
+                        modifier = if (guest) Modifier.focusRequester(first) else Modifier,
+                        onClick = onGuest,
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Icon(LumenIcon.USER, size = 40.dp) }
+                    }
                 }
                 ProfileTile(
                     name = "Ajouter",
