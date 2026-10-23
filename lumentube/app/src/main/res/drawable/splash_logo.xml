@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splash screen: Mirazuki Tube's mark (ic_launcher without its tile), on the banners' night background like
+     Mirazuki IPTV's. The mark stays inside the central 2/3, the circle Android keeps on screen. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M87.48,48.1A34,34 0 1 1 59.82,20.5"
+        android:strokeColor="#FFFF5F52"
+        android:strokeWidth="3.5"
+        android:strokeAlpha="0.75"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M30,54a24,24 0 1 1 48,0a24,24 0 1 1 -48,0z"
+        android:fillColor="#FFFF5F52"
+        android:fillAlpha="0.16" />
+    <path
+        android:pathData="M56.06,30.09A24,24 0 1 0 74.37,66.7A21,21 0 1 1 56.06,30.09z"
+        android:fillColor="#FFFF5F52" />
+    <path
+        android:pathData="M53.25,42.75L70.75,51.5L53.25,60.25z"
+        android:fillColor="#FFF5F5F7"
+        android:strokeColor="#FFF5F5F7"
+        android:strokeWidth="3"
+        android:strokeLineJoin="round" />
+</vector>

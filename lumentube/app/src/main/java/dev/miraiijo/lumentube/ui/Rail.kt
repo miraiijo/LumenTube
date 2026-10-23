@@ -327,10 +327,10 @@ private fun ProfileTile(name: String, caption: String?, modifier: Modifier, onCl
                 shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
                 scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
                 colors = ClickableSurfaceDefaults.colors(
-                    containerColor = if (Palette.colors.isLight) Color.White else Palette.ControlIdle,
+                    containerColor = if (Palette.colors.isLight) Palette.Panel else Palette.ControlIdle,
                     contentColor = Palette.TextPrimary,
                     // The ring shows the focus: the tile itself doesn't change ("Ajouter" included).
-                    focusedContainerColor = if (Palette.colors.isLight) Color.White else Palette.ControlIdle,
+                    focusedContainerColor = if (Palette.colors.isLight) Palette.Panel else Palette.ControlIdle,
                     focusedContentColor = Palette.TextPrimary,
                 ),
             ) { picture() }
