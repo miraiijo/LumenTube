@@ -217,10 +217,14 @@ object Updater {
         val info = pm.getPackageArchiveInfo(apk.path, PackageManager.GET_SIGNING_CERTIFICATES) ?: fail(apk, "APK illisible")
         if (info.packageName != update.packageName) fail(apk, "APK d'une autre appli : refusé")
         if (info.longVersionCode != update.versionCode) fail(apk, "Version différente de celle annoncée : refusé")
-        // Fail closed: an archive whose certificates can't be read is refused (not left to the installer).
         val incoming = info.signingInfo?.apkContentsSigners?.map { hex(sha256(it.toByteArray())) }?.toSet()
-        if (incoming.isNullOrEmpty()) fail(apk, "Signature de l'APK illisible : refusé")
         val installed = signers(context, update.packageName)
+        // Some Android builds can't read an archive's certificates: an update of an installed app is
+        // then left to the system installer (it refuses another key); a first install is refused.
+        if (incoming.isNullOrEmpty()) {
+            if (installed.isEmpty()) fail(apk, "Signature de l'APK illisible : refusé")
+            return
+        }
         val expected = expectedCert.lowercase().replace(":", "")
         when {
             installed.isNotEmpty() -> if (incoming != installed) fail(apk, "APK signé par une autre clé : refusé")
