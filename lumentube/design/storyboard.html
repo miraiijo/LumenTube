@@ -540,7 +540,7 @@ V.who=()=>`<div class="who"><h3>Qui regarde ?</h3><div class="ptiles">
  ${codeDlg('si','Connecter un compte YouTube','Scanne le QR code avec ton téléphone, ou ouvre youtube.com/activate et saisis ce code :','LumenTube reste connecté ensuite. Tu peux lier plusieurs comptes et choisir lequel à l’ouverture.',cbtn('si-0','','Annuler'),7)}`;
 const HINT='Les bêtas arrivent plus tôt mais peuvent planter ou contenir des bugs. Sans elles, seules les versions stables sont proposées.';
 V.set=()=>`<div class="stitle">Réglages</div>
- <div class="snav" data-grp="sn">${['Lecture','Affichage','Téléphone','Compte','Mises à jour'].map((l,i)=>`<div class="sitem ${i===0?'sel':''}" data-id="sn-${i}">${l}</div>`).join('')}</div>
+ <div class="snav" data-grp="sn">${['Lecture','Affichage','Téléphone','Compte','Mises à jour','À propos'].map((l,i)=>`<div class="sitem ${i===0?'sel':''}" data-id="sn-${i}">${l}</div>`).join('')}</div>
  <div class="spage" data-id="sp-0">
   ${scard('Lecture automatique',choice('la',['Activée','Désactivée'],0,'la'),'À la fin d’une vidéo, la suivante démarre après un court compte à rebours.')}
   ${scard('Passer les sponsors (SponsorBlock)',choice('lb',['Activé','Désactivé'],0,'lb'),'Sponsors, autopromo et rappels d’abonnement sautés automatiquement.')}
@@ -558,6 +558,10 @@ V.set=()=>`<div class="stitle">Réglages</div>
   ${scard('Version installée · 1.0 bêta 2 (bêta)',`<div class="btn c" data-id="u-chk">${I.refresh}<span data-id="u-chk-l">Vérifier</span></div>`,'LumenTube vérifie une fois par jour, au démarrage.',{hid:'u-msg'})}
   ${scard('Recevoir les versions bêta',choice('ub',['Activé','Désactivé'],0,'ub'),HINT,{hid:'u-hint'})}
   ${scard('BÊTA · 1.0 bêta 3',`<div class="btn c" data-id="u-inst"><span data-id="u-inst-l">Installer 1.0 bêta 3</span></div>`,'Lecteur : reprise plus rapide après une pause · corrections.',{cls:'hide',id:'u-found',tid:'u-ft',hid:'u-notes'})}</div>
+ <div class="spage" data-id="sp-5" style="opacity:0">
+  ${scard('Basé sur SmartTube','','LumenTube est un fork de SmartTube (github.com/yuliskov/SmartTube) et utilise son moteur : MediaServiceCore, SharedModules et son ExoPlayer modifié. Appli non officielle, sans lien avec SmartTube, YouTube ou Google.')}
+  ${scard('Licence de SmartTube','','MIT License · Copyright (c) 2020-present yuliskov · Permission is hereby granted, free of charge, to any person obtaining a copy of this software… (texte complet)')}
+  ${scard('Autres composants','','ExoPlayer, AndroidX, Cronet, OkHttp, RxJava et ZXing : licence Apache 2.0. Glide : licences BSD, MIT et Apache 2.0. Police Inter : SIL Open Font License 1.1. Les textes complets sont dans l’APK (assets/licenses).')}</div>
  ${codeDlg('pa','Lier un téléphone','Scanne le QR code avec le téléphone. Ou dans l’app YouTube : photo de profil › Paramètres › Regarder sur la TV › Saisir le code TV, puis tape ce code :','Ensuite, le bouton Caster du téléphone envoie les vidéos ici (quand LumenTube est ouvert) et le téléphone sert de télécommande.',cbtn('pa-1','','Fermer'),11)}`;
 V.lumen=()=>`<div class="hdr"><div class="lft"><div class="tabs"><div class="tin">${['Accueil','Bibliothèque','Ma liste','Jeux','Applications'].map((t,i)=>`<div class="tab ${i===0?'sel':''}" data-id="lt-${i}">${t}</div>`).join('')}</div></div><div class="rb">${I.search}</div></div><div class="right"><div class="rb av">${av('Moi',30,13)}</div><div class="rb">${I.gear}</div><div class="clock">20:45</div></div></div>
  <div class="rows"><div class="rin">${rowsOf([['À reprendre',R_RESUME],['Abonnements',R_SUBS]],'l')}</div></div>`;
@@ -730,7 +734,7 @@ const SCREENS=[
  {k:'OK',t:'Alex',view:'home',f:'h0-0',txt:{hav:'A'},st:{hav:{background:grad('Alex')}},n:'Compte choisi : l’Accueil, les abonnements, l’historique et le flux de Lumen suivent ce compte.'},
  ]},
 {id:'reglages',title:'Réglages',desc:'Bouton rond Réglages de l’en-tête. Plein écran : « Réglages » en grand, les catégories à gauche (celle qui a le focus montre sa page), une carte en verre par réglage à droite, les choix en pastilles (l’actuel coché). OK applique tout de suite.',
- notes:['Catégories : Lecture, Affichage, Téléphone, Compte (seulement connecté), Mises à jour.','Chaque page a son propre défilement.'],
+ notes:['Catégories : Lecture, Affichage, Téléphone, Compte (seulement connecté), Enfant (si le profil existe), Mises à jour, À propos.','À propos : fork de SmartTube, son avis de licence MIT en entier et les licences des autres composants. Rien à sélectionner : la page s’affiche quand « À propos » a le focus.','Chaque page a son propre défilement.'],
  steps:[
  {view:'home',f:'btn-set',on:['udot'],k:'▶',t:'En-tête'},
  {k:'OK',t:'Réglages',view:'set',f:'sn-0',n:'Lecture : lecture automatique, SponsorBlock, volume stable.'},
@@ -742,6 +746,7 @@ const SCREENS=[
  {k:'▶▼▶',t:'Plus grand',f:'sz-1'},
  {k:'OK',t:'Valider',txt:{'sz-t':'Taille de l’interface · 105 %'},sel:{szd:''},n:'Appliqué tout de suite ; le pourcentage est dans le titre, les pastilles ne bougent pas sous le focus. La zone sûre reste la même en dp de la TV : les marges suivent la taille. (Ce storyboard reste dessiné à 100 %.)'},
  {k:'◀▼▼',t:'Compte',f:'sn-3',sel:{sn:'sn-3'},st:{'sp-1':{opacity:'0'},'sp-3':{opacity:'1'}},n:'Compte : se déconnecter ; les autres comptes liés restent sur la box.'},
+ {k:'▼▼',t:'À propos',f:'sn-5',sel:{sn:'sn-5'},st:{'sp-3':{opacity:'0'},'sp-5':{opacity:'1'}},n:'À propos : LumenTube est un fork de SmartTube ; avis de licence MIT et licences des composants.'},
  {k:'B',t:'Retour',view:'home',f:'btn-set',n:'Retour ferme les Réglages.'},
  ]},
 {id:'telephone',title:'Lier un téléphone',desc:'Réglages › Téléphone. « Regarder sur la TV » : l’app YouTube du téléphone, liée par un code TV, envoie ses vidéos ici et sert de télécommande (lecture, pause, position, suivante, arrêt, volume), quand LumenTube est ouvert.',
