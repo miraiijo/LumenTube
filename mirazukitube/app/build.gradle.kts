@@ -24,7 +24,7 @@ android {
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
         // Upstream modules have SmartTube's build flavors: use the "stable" one.
         missingDimensionStrategy("default", "ststable")
-        // mirazuki-link v3: signing certificates of the Mirazuki apps (public SHA-256, see gradle.properties,
+        // mirazuki-link v3: signing certificates of the miryo apps (public SHA-256, see gradle.properties,
         // written by mirazuki-keys init). Empty = no link with that app (FeedProvider answers nobody).
         fun cert(app: String) = (project.findProperty("mirazuki.cert.$app") as String?).orEmpty().trim().lowercase().replace(":", "")
         buildConfigField("String", "CERT_MIRAZUKI", "\"${cert("mirazuki")}\"")
@@ -89,7 +89,7 @@ dependencies {
     implementation("io.reactivex.rxjava2:rxandroid:2.1.1")
     implementation("com.squareup.okhttp3:okhttp:3.12.13")
 
-    // UI: same stack as Mirazuki.
+    // UI: same stack as miryo.
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
     implementation("androidx.core:core-ktx:1.19.1")
@@ -100,9 +100,9 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.tv:tv-material:1.1.0")
     // Installs the Baseline Profiles (AndroidX/Compose libraries' + src/main/baseline-prof.txt) on a
-    // sideloaded APK too (no Play Store): faster cold start and first scrolls. Same version as Mirazuki.
+    // sideloaded APK too (no Play Store): faster cold start and first scrolls. Same version as miryo.
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
-    // Splash screen at launch (Mirazuki's logo), the same on Android 9 to 11 as on 12+.
+    // Splash screen at launch (miryo's logo), the same on Android 9 to 11 as on 12+.
     implementation("androidx.core:core-splashscreen:1.0.1")
     // Thumbnails: Glide (no OkHttp 4, which Coil needs and the engine can't use).
     implementation("com.github.bumptech.glide:glide:5.0.9")

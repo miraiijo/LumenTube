@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="mirazukitube_background">#FF070707</color>
-    <!-- The Mirazuki banners' night background (the same in Mirazuki IPTV). -->
+    <!-- The miryo banners' night background (the same in miryo iptv). -->
     <color name="splash_background">#FF10121A</color>
 
     <style name="Theme.MirazukiTube" parent="android:Theme.Material.NoActionBar">

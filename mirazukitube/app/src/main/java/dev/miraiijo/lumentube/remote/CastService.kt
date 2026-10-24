@@ -20,7 +20,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * "Recevoir même MirazukiTube fermé" (off by default): keeps the phone link listening while MirazukiTube
+ * "Recevoir même miryo tube fermé" (off by default): keeps the phone link listening while miryo tube
  * is not on screen, and opens it when the phone sends a video. A foreground service (it would be
  * killed otherwise), only the engine's remote loop: no UI, no player (~50–80 MB on the box).
  *
@@ -46,12 +46,12 @@ class CastService : Service() {
     override fun onDestroy() {
         running = false
         scope.cancel()
-        // MirazukiTube on screen keeps its own listening.
+        // miryo tube on screen keeps its own listening.
         if (!RemoteControl.uiForeground) RemoteControl.stop()
         super.onDestroy()
     }
 
-    /** On screen, the view model handles everything; here only what needs MirazukiTube to come back. */
+    /** On screen, the view model handles everything; here only what needs miryo tube to come back. */
     private fun onEvent(event: RemoteControl.Event) {
         if (RemoteControl.uiForeground) return
         when (event) {
@@ -81,7 +81,7 @@ class CastService : Service() {
         )
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle("Mirazuki Tube attend le téléphone")
+            .setContentTitle("miryo tube attend le téléphone")
             .setOngoing(true)
             .build()
     }
@@ -94,7 +94,7 @@ class CastService : Service() {
         var running = false
             private set
 
-        /** Starts or stops the service to match "Regarder sur la TV" + "Recevoir même MirazukiTube fermé". */
+        /** Starts or stops the service to match "Regarder sur la TV" + "Recevoir même miryo tube fermé". */
         fun sync(context: Context, settings: Settings) {
             val want = settings.remote && settings.backgroundCast
             val intent = Intent(context, CastService::class.java)

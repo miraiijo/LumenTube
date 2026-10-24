@@ -223,7 +223,7 @@ private fun SearchBar(
             // The pill only opens the keyboard: moving across it with the remote never pops it up.
             onClick = { editing = true },
             // Down: the chips right under the bar (the 2D search sometimes picked the side menu).
-            // The redesign's big pill (Mirazuki's search): light by day, translucent at night.
+            // The redesign's big pill (miryo's search): light by day, translucent at night.
             modifier = Modifier.weight(1f).height(56.dp).focusRequester(requester).focusProperties { down = below },
             shape = ClickableSurfaceDefaults.shape(shape = androidx.compose.foundation.shape.CircleShape),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),

@@ -4,7 +4,7 @@ import android.content.Context
 import dev.miraiijo.lumentube.Settings
 import dev.miraiijo.lumentube.ui.UI_SCALE_DEFAULT
 
-/** MirazukiTube's own preferences (not SmartTube's): player choices and the app's switches. */
+/** miryo tube's own preferences (not SmartTube's): player choices and the app's switches. */
 class PlayerPrefs(context: Context) {
     private val prefs = context.getSharedPreferences("player", Context.MODE_PRIVATE)
 
@@ -68,7 +68,7 @@ class PlayerPrefs(context: Context) {
             else if (prefs.getBoolean(KEY_LARGE_UI, false)) 100 else UI_SCALE_DEFAULT
         set(value) = prefs.edit().putInt(KEY_UI_SCALE, value).remove(KEY_LARGE_UI).apply()
 
-    /** "Recevoir même MirazukiTube fermé" (off by default: ~50–80 MB kept in memory). */
+    /** "Recevoir même miryo tube fermé" (off by default: ~50–80 MB kept in memory). */
     var backgroundCast: Boolean
         get() = prefs.getBoolean(KEY_BACKGROUND_CAST, false)
         set(value) = prefs.edit().putBoolean(KEY_BACKGROUND_CAST, value).apply()

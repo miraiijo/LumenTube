@@ -1,12 +1,12 @@
-# Mirazuki Tube
+# miryo tube
 
-YouTube sans pubs pour Android TV, avec l'interface de Mirazuki. C'est un fork de
+YouTube sans pubs pour Android TV, avec l'interface de miryo. C'est un fork de
 [SmartTube](https://github.com/yuliskov/SmartTube) (licence MIT, conservée dans `../LICENSE`).
 
 ## Principe
-- Le dépôt est un fork de SmartTube. **Aucun fichier de SmartTube n'est modifié.** Tout est dans `mirazukitube/`, avec en plus `.github/workflows/mirazukitube.yml`. Seule exception : le README de la racine présente Mirazuki Tube, et celui de SmartTube est déplacé dans `README-SmartTube.md`. Si un `git merge upstream/master` signale un conflit sur `README.md`, garde la version de Mirazuki Tube et reporte au besoin les changements dans `README-SmartTube.md`.
+- Le dépôt est un fork de SmartTube. **Aucun fichier de SmartTube n'est modifié.** Tout est dans `mirazukitube/`, avec en plus `.github/workflows/mirazukitube.yml`. Seule exception : le README de la racine présente miryo tube, et celui de SmartTube est déplacé dans `README-SmartTube.md`. Si un `git merge upstream/master` signale un conflit sur `README.md`, garde la version de miryo tube et reporte au besoin les changements dans `README-SmartTube.md`.
 - Licence : l'avis MIT de SmartTube doit suivre chaque copie. Il est affiché dans Réglages › À propos, et les textes des licences sont dans l'APK (`app/src/main/assets/licenses/`).
-- `mirazukitube/` est un build Gradle autonome (AGP 8.7, Kotlin 2, Compose TV, comme Mirazuki). Il compile depuis les dossiers parents le moteur de SmartTube, tel quel :
+- `mirazukitube/` est un build Gradle autonome (AGP 8.7, Kotlin 2, Compose TV, comme miryo). Il compile depuis les dossiers parents le moteur de SmartTube, tel quel :
   - `MediaServiceCore` : API YouTube, compte, abonnements, historique ;
   - `SharedModules` ;
   - l'ExoPlayer modifié avec **SABR**.
@@ -30,9 +30,9 @@ YouTube sans pubs pour Android TV, avec l'interface de Mirazuki. C'est un fork d
 - Avant l'installation, l'appli vérifie la taille, l'empreinte SHA-256, le paquet, la version et le certificat de l'APK ; Android refuse de son côté toute mise à jour signée par une autre clé.
 - Les versions de travail s'appellent « 1.0 bêta N » ; une version stable n'a pas le mot « bêta ».
 
-## Applis Mirazuki (mirazuki-link v3)
-- Mirazuki Tube marche seul, sans Mirazuki.
-- Avec le launcher Mirazuki installé, `FeedProvider` lui donne les rangées « À reprendre » et « Abonnements » (contrat de données v2), **seulement** si l'appelant est `dev.miraiijo.lumen` signé avec le certificat attendu.
+## Applis miryo (mirazuki-link v3)
+- miryo tube marche seul, sans miryo.
+- Avec le launcher miryo installé, `FeedProvider` lui donne les rangées « À reprendre » et « Abonnements » (contrat de données v2), **seulement** si l'appelant est `dev.miraiijo.lumen` signé avec le certificat attendu.
 - Les certificats attendus (empreintes SHA-256, publiques) sont dans `gradle.properties` (`mirazuki.cert.*`), écrits par `mirazuki-keys init`. Vides : aucun lien.
 - Le contrat est décrit dans `app/src/main/java/dev/miraiijo/lumentube/link/MirazukiLink.kt` (même fichier dans les trois applis).
 
@@ -51,22 +51,22 @@ Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTub
 - Identifiant `dev.miraiijo.lumentube` : nouvelle appli pour Android, à réinstaller une fois (compte YouTube à reconnecter).
 - Réglages › Mises à jour : versions stables par défaut, bêtas en option.
 - CI sans signature ni secret ; signature sur le Mac.
-- Lien avec Mirazuki vérifié par mirazuki-link v3.
+- Lien avec miryo vérifié par mirazuki-link v3.
 
 ### 0.16.0
-- **Thème Opale de Mirazuki** :
+- **Thème Opale de miryo** :
   - une seule barre en haut : les sections à gauche (texte, barre sous le mot au focus, barre discrète sous la section en cours), à droite « Lecture en cours » si une vidéo est réduite, les boutons ronds en verre (Rechercher, compte, Réglages) et l'heure ; plus de grand titre de section ;
-  - couleurs de Mirazuki : gris neutres sans teinte bleue, fond « Neutre » (diagonale de gris, halo chaud en haut à droite, froid en bas à gauche), verre translucide au liseré fin ; même chose en Jour ;
-  - cartes à coins de 13 dp ; au focus : soulevées (×1.05), anneau doux sur le bord, ombre portée et reflet lumineux, comme dans Mirazuki ;
+  - couleurs de miryo : gris neutres sans teinte bleue, fond « Neutre » (diagonale de gris, halo chaud en haut à droite, froid en bas à gauche), verre translucide au liseré fin ; même chose en Jour ;
+  - cartes à coins de 13 dp ; au focus : soulevées (×1.05), anneau doux sur le bord, ombre portée et reflet lumineux, comme dans miryo ;
   - panneaux des Réglages en verre.
 
 ### 0.15.0
-- **Contrat v2 avec Mirazuki** :
-  - le feed (`/continue`, `/subscriptions`, `/search`) accepte `contract=2&account=<account_id>` : les données de ce compte, quel que soit le compte de Mirazuki Tube, sans le changer ; compte inconnu (ou id de plus de 128 caractères) : liste vide ; sans `account` : le compte de Mirazuki Tube, comme avant ;
-  - lancement depuis Mirazuki avec `dev.miraiijo.lumen.extra.ACCOUNT_ID` et `SKIP_PICKER` : la vidéo démarre tout de suite avec ce compte (historique et position crédités à ce compte), sans « Qui regarde ? » ; à l'arrêt de la vidéo, Mirazuki Tube revient à son propre compte et recharge ses pages ; compte inconnu : compte de Mirazuki Tube ;
-  - pour lire un autre compte, le moteur bascule silencieusement le temps de la requête puis revient : une bascule à la fois (les lectures sans bascule passent en parallèle), jamais tant que Mirazuki Tube est à l'écran ni dans les 10 s après l'avoir quitté (ses requêtes en cours finissent d'abord ; Mirazuki reçoit alors le cache du compte) ; ni l'app ni Mirazuki ne voient ces bascules, et un cache n'est écrit que si aucune bascule n'a eu lieu pendant la requête ;
-  - la dernière position d'une vidéo est enregistrée sur le compte qui la regardait avant de revenir au compte de Mirazuki Tube ; une bascule interrompue (app tuée) revient au bon compte au démarrage suivant ;
-  - changer de compte (Mirazuki ou « Qui regarde ? ») pendant une vidéo lancée avec un autre compte change le compte de Mirazuki Tube, la vidéo continue sur le sien.
+- **Contrat v2 avec miryo** :
+  - le feed (`/continue`, `/subscriptions`, `/search`) accepte `contract=2&account=<account_id>` : les données de ce compte, quel que soit le compte de miryo tube, sans le changer ; compte inconnu (ou id de plus de 128 caractères) : liste vide ; sans `account` : le compte de miryo tube, comme avant ;
+  - lancement depuis miryo avec `dev.miraiijo.lumen.extra.ACCOUNT_ID` et `SKIP_PICKER` : la vidéo démarre tout de suite avec ce compte (historique et position crédités à ce compte), sans « Qui regarde ? » ; à l'arrêt de la vidéo, miryo tube revient à son propre compte et recharge ses pages ; compte inconnu : compte de miryo tube ;
+  - pour lire un autre compte, le moteur bascule silencieusement le temps de la requête puis revient : une bascule à la fois (les lectures sans bascule passent en parallèle), jamais tant que miryo tube est à l'écran ni dans les 10 s après l'avoir quitté (ses requêtes en cours finissent d'abord ; miryo reçoit alors le cache du compte) ; ni l'app ni miryo ne voient ces bascules, et un cache n'est écrit que si aucune bascule n'a eu lieu pendant la requête ;
+  - la dernière position d'une vidéo est enregistrée sur le compte qui la regardait avant de revenir au compte de miryo tube ; une bascule interrompue (app tuée) revient au bon compte au démarrage suivant ;
+  - changer de compte (miryo ou « Qui regarde ? ») pendant une vidéo lancée avec un autre compte change le compte de miryo tube, la vidéo continue sur le sien.
 
 ### 0.14.4
 - **DualSense corrigée** (box sans pilote PlayStation : Android 10 / 11) : les boutons sont lus d'après leur code brut. Croix = OK, Rond = Retour, Triangle / Options = Menu, Carré = lecture / pause, L1 / R1 = −10 / +10 s, L2 / R2 = chapitre précédent / suivant, Create = Rechercher ; L3 / R3 ne font rien, PS reste au système. Chaque appui est noté dans `adb logcat -s MirazukiTube.Pad` (pour vérifier).
@@ -83,8 +83,8 @@ Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTub
 
 ### 0.14.0
 - **Onglets** : OK sur un onglet (Gaming…) charge la section mais laisse le focus sur l'onglet : on peut encore changer d'avis (Actus…) ; Bas descend ensuite sur la première vidéo. Retour depuis les onglets revient sur Accueil, focus sur « Pour toi ».
-- **Recevoir même Mirazuki Tube fermé** (Réglages › Téléphone, désactivé par défaut) : un service garde le lien avec le téléphone en arrière-plan, redémarre avec la box, et ouvre Mirazuki Tube quand le téléphone envoie une vidéo. Coût : environ 50 à 80 Mo de mémoire en permanence.
-  - Autorisation à donner une fois (Android TV n'a pas d'écran pour ça) : `adb shell appops set dev.miraiijo.lumentube SYSTEM_ALERT_WINDOW allow`. Sans elle, le téléphone voit la TV mais Mirazuki Tube ne s'ouvre pas tout seul.
+- **Recevoir même miryo tube fermé** (Réglages › Téléphone, désactivé par défaut) : un service garde le lien avec le téléphone en arrière-plan, redémarre avec la box, et ouvre miryo tube quand le téléphone envoie une vidéo. Coût : environ 50 à 80 Mo de mémoire en permanence.
+  - Autorisation à donner une fois (Android TV n'a pas d'écran pour ça) : `adb shell appops set dev.miraiijo.lumentube SYSTEM_ALERT_WINDOW allow`. Sans elle, le téléphone voit la TV mais miryo tube ne s'ouvre pas tout seul.
 
 ### 0.13.5
 - **Lier un téléphone par QR code** : Réglages › Téléphone › Lier un téléphone affiche un QR code à côté du code TV. Scanné avec le téléphone, il ouvre la page d'appairage de YouTube avec le code déjà rempli. Le QR est dessiné sur la box (aucun service web), et le code à taper reste affiché.
@@ -152,12 +152,12 @@ Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTub
 - **Interface plus compacte et aérée** : tout est dessiné 20 % plus petit (textes, boutons, cartes, panneaux, dialogues), et les rangées montrent 5 cartes au lieu de 4. Pensé pour les TV 4K où les éléments paraissaient énormes. Réglages › Affichage › « Taille de l'interface » : Compacte (par défaut) ou Grande (la taille d'avant).
 
 ### 0.12.0
-- **Refonte graphique, sur le modèle de celle de Mirazuki** :
+- **Refonte graphique, sur le modèle de celle de miryo** :
   - thèmes **Jour** et **Nuit**, et **Auto** (clair de 7 h 30 à 19 h 30) : Réglages › Affichage › Apparence ; fond aux deux halos (chaud en haut à droite, froid en bas à gauche) ;
   - **en-tête à onglets** à la place du menu latéral : nom de la section en grand, sections en onglets (OK pour ouvrir), boutons ronds Rechercher, compte (« Qui regarde ? ») et Réglages, heure, et « Lecture en cours » avec une vidéo en petite fenêtre ;
   - focus : aplat plein (blanc la nuit, noir le jour) sur les boutons et pastilles, anneau détaché autour des cartes et des avatars, zoom plus léger ;
   - cartes : titre et chaîne dessous, plus d'image de fond ni de fiche en haut de page ; largeur calculée d'après l'écran (4 cartes par ligne sur toute TV, box ou densité) ;
-  - **Rechercher** : grande barre en pilule ; **chaîne** : en-tête façon fiche Mirazuki (« CHAÎNE », avatar, nom en grand, S'abonner, tris) ;
+  - **Rechercher** : grande barre en pilule ; **chaîne** : en-tête façon fiche miryo (« CHAÎNE », avatar, nom en grand, S'abonner, tris) ;
   - **« Qui regarde ? »** et **Réglages** en plein écran ; Réglages en deux colonnes (Lecture, Affichage, Téléphone, Compte) avec des choix en pastilles ;
   - lecteur : boutons ronds translucides, panneaux (réglages, commentaires) aux couleurs du thème.
 - **Défilement plus calme** : les rangées ne bougent plus à chaque Haut / Bas ; la page ne défile que si la carte visée sortirait de l'écran (titre de rangée et légende gardés visibles).
@@ -210,7 +210,7 @@ Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTub
 - Le script d'installation compile l'appli en natif (AOT, `cmd package compile -m speed`) après l'installation.
 
 ### 0.9.2
-- **Focus audio** : le lecteur demande `AUDIOFOCUS_GAIN` au démarrage de la lecture (et à chaque reprise) et se met en pause sur `AUDIOFOCUS_LOSS` (sans reprise automatique) ou `AUDIOFOCUS_LOSS_TRANSIENT` (reprise automatique au retour du focus, sauf si la lecture a été relancée à la main entre-temps). « Peut baisser le son » : le système baisse le volume lui-même, la lecture continue. Le focus est rendu à la fermeture du lecteur. Géré par Mirazuki Tube et non par ExoPlayer, dont la gestion laissait parfois la vidéo prête mais en pause sur la box : une demande refusée ou différée ne bloque jamais la lecture.
+- **Focus audio** : le lecteur demande `AUDIOFOCUS_GAIN` au démarrage de la lecture (et à chaque reprise) et se met en pause sur `AUDIOFOCUS_LOSS` (sans reprise automatique) ou `AUDIOFOCUS_LOSS_TRANSIENT` (reprise automatique au retour du focus, sauf si la lecture a été relancée à la main entre-temps). « Peut baisser le son » : le système baisse le volume lui-même, la lecture continue. Le focus est rendu à la fermeture du lecteur. Géré par miryo tube et non par ExoPlayer, dont la gestion laissait parfois la vidéo prête mais en pause sur la box : une demande refusée ou différée ne bloque jamais la lecture.
 - Arrière-plan (bouton Accueil, autre appli) : inchangé, déjà en place : pause et sauvegarde de la position (`updateHistoryPosition`) dans `onStop`, et au retour la vidéo attend en pause, à la même position, commandes affichées.
 
 ### 0.9.1
@@ -241,25 +241,25 @@ Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTub
 - **Petite fenêtre** : Retour depuis la page place le focus directement sur « Lecture en cours » dans le menu ; OK remet la vidéo en plein écran (Retour puis OK, quel que soit le nombre de rangées).
 
 ### 0.7.2
-- **Flux Mirazuki, recherche** : `query content://dev.miraiijo.lumentube.feed/search?q=<texte>` (même contrôle de l'appelant, mêmes colonnes que `/continue`). Renvoie les 20 premiers résultats vidéo de YouTube, sans chaînes, playlists ni Shorts. `q` est coupé à 200 caractères ; une requête vide, une erreur ou plus de 8 s sans réponse renvoient un curseur vide. Les recherches tournent sur leurs propres threads (deux au plus en même temps), jamais derrière un rafraîchissement du flux.
+- **Flux miryo, recherche** : `query content://dev.miraiijo.lumentube.feed/search?q=<texte>` (même contrôle de l'appelant, mêmes colonnes que `/continue`). Renvoie les 20 premiers résultats vidéo de YouTube, sans chaînes, playlists ni Shorts. `q` est coupé à 200 caractères ; une requête vide, une erreur ou plus de 8 s sans réponse renvoient un curseur vide. Les recherches tournent sur leurs propres threads (deux au plus en même temps), jamais derrière un rafraîchissement du flux.
 
 ### 0.7.1
 - Lecteur : Retour depuis le panneau des sous-titres remet le focus sur le bouton Sous-titres (et non plus sur Réglages).
 
 ### 0.7.0
-- **Regarder sur la TV** : Réglages › « Lier un téléphone » affiche un code TV à saisir dans l'app YouTube du téléphone (photo de profil › Paramètres › Regarder sur la TV › Saisir le code TV). Le bouton Caster du téléphone envoie alors la vidéo ici, et le téléphone sert de télécommande (lecture, pause, position, suivante, arrêt, volume). Écoute uniquement quand Mirazuki Tube est à l'écran, et désactivable (« Commande depuis le téléphone »). Désactivé tant qu'aucun téléphone n'a été lié.
+- **Regarder sur la TV** : Réglages › « Lier un téléphone » affiche un code TV à saisir dans l'app YouTube du téléphone (photo de profil › Paramètres › Regarder sur la TV › Saisir le code TV). Le bouton Caster du téléphone envoie alors la vidéo ici, et le téléphone sert de télécommande (lecture, pause, position, suivante, arrêt, volume). Écoute uniquement quand miryo tube est à l'écran, et désactivable (« Commande depuis le téléphone »). Désactivé tant qu'aucun téléphone n'a été lié.
 - **Menu d'une carte** : appui long sur OK (ou touche Menu) : Lire, À regarder plus tard, Ouvrir la chaîne, Pas intéressé, Ne pas recommander cette chaîne. La carte disparaît des rangées tout de suite.
 - **Pages de chaîne** : avatar, nom, bouton « S'abonner » / « Abonné », et les tris de la chaîne (Accueil, Plus récentes, Populaires…). Accessible depuis une carte de chaîne, le menu d'une carte, ou « Voir la chaîne » dans les réglages du lecteur (la vidéo passe en petite fenêtre).
 - **Recherche** : suggestions de YouTube pendant la saisie (sous la barre, Bas pour y aller), et filtres Date, Durée, Type (vidéos, chaînes, playlists, en direct) et Tri (pertinence, date, vues, note) ; OK sur un filtre passe au choix suivant.
 - **Statistiques pour les curieux** (réglages du lecteur) : résolution, i/s, codec, débits vidéo et audio, images perdues, tampon, débit de la connexion, volume, type de flux et client YouTube, temps de démarrage (formats et première image).
 
 ### 0.6.0
-- **Flux Mirazuki, plusieurs comptes** (contrat figé, utilisé par Mirazuki 3.6.0) :
+- **Flux miryo, plusieurs comptes** (contrat figé, utilisé par miryo 3.6.0) :
   - `query /accounts` : une ligne par compte lié, avec `account_id`, `name`, `avatar_url` (https ou null) et `selected` (`"1"` ou `"0"`). `account_id` est un HMAC-SHA256 (64 caractères hexadécimaux) de l'identité du compte, calculé avec une clé aléatoire propre au Player : il est stable d'un redémarrage à l'autre, et on ne peut pas remonter à l'e-mail. Aucun e-mail, jeton ou cookie n'est exposé ;
   - `call(content://dev.miraiijo.lumentube.feed/, "select_account", account_id)` sélectionne le compte, marque son flux comme périmé (son dernier contenu reste affiché tout de suite) et rafraîchit `/continue` et `/subscriptions` sur un thread à part. Il renvoie `ok` = true, ou false si le compte est inconnu, et `null` pour une méthode inconnue ;
   - un cache par compte (`mirazuki_feed_<account_id>.json`) : un changement de profil affiche tout de suite le bon contenu, et un chargement lancé avant un changement ne peut écrire que dans le cache de son compte ; la déconnexion supprime le cache du compte ;
-  - `notifyChange` sur `content://dev.miraiijo.lumentube.feed/` et ses chemins à chaque rafraîchissement et à chaque changement de compte, y compris depuis Mirazuki Tube ;
-  - Mirazuki Tube suit un changement de compte fait depuis Mirazuki : ses pages se rechargent pour le nouveau compte.
+  - `notifyChange` sur `content://dev.miraiijo.lumentube.feed/` et ses chemins à chaque rafraîchissement et à chaque changement de compte, y compris depuis miryo tube ;
+  - miryo tube suit un changement de compte fait depuis miryo : ses pages se rechargent pour le nouveau compte.
 - **Lecteur réduit** : la petite fenêtre prend le focus comme une carte (Bas ou Droite depuis la page, cadre blanc) et OK la remet en plein écran. Indispensable pour les télécommandes sans touche lecture/pause.
 
 ### 0.5.3
@@ -268,25 +268,25 @@ Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTub
 - Sous-titres centrés aussi sur la vidéo suivante (« À suivre ») : chaque vidéo a maintenant son propre écran de lecteur.
 - Audit sécurité et performances :
   - liens entrants : seul un vrai identifiant de vidéo (11 caractères) est accepté, le moteur l'insérant tel quel dans ses requêtes connectées ; le paramètre `t` est plafonné à 24 h, plus de plantage sur une valeur énorme ;
-  - flux Mirazuki : l'appelant est vérifié avant tout le reste, et le certificat par le système (`hasSigningCertificate`, rotation de clé comprise) ; un chargement lancé avant un changement de compte n'écrit plus dans le cache ; fichier écrit avec `AtomicFile`, qui résiste aux coupures de courant ;
+  - flux miryo : l'appelant est vérifié avant tout le reste, et le certificat par le système (`hasSigningCertificate`, rotation de clé comprise) ; un chargement lancé avant un changement de compte n'écrit plus dans le cache ; fichier écrit avec `AtomicFile`, qui résiste aux coupures de courant ;
   - CI : jeton en lecture seule, plus de release publique (l'APK reste un artefact du build), keystore limité à l'étape qui le restaure puis supprimé, jeton non conservé dans `.git`, actions épinglées par commit ;
   - lecture : la source vidéo (analyse du manifeste DASH/SABR, création de Cronet) est construite hors du thread principal ;
   - Accueil : les flux limités à deux rangées sont arrêtés au lieu de continuer à charger des pages inutiles ;
   - aperçus de la barre : chaque planche est décodée une seule fois (trois gardées en mémoire), et la vignette est découpée selon la taille réelle de l'image ;
   - cartes : miniatures en 640 px (`sddefault`), le 1280 px reste réservé à l'image en haut à droite et au lecteur ;
   - DeArrow : chaque vidéo n'est demandée qu'une fois ;
-  - la préparation du moteur YouTube se fait à l'ouverture de l'écran, plus quand Mirazuki interroge le flux ;
+  - la préparation du moteur YouTube se fait à l'ouverture de l'écran, plus quand miryo interroge le flux ;
   - sauvegarde de position dans une portée de coroutines unique, propre à l'app.
 
 ### 0.5.2
 - Sous-titres centrés en bas de l'image : les positions envoyées par YouTube (souvent « à gauche, 0 % » pour les sous-titres automatiques) sont ignorées, comme dans SmartTube. Les lignes répétées des sous-titres automatiques défilants ne s'affichent plus qu'une fois.
 
 ### 0.5.1
-- Flux pour Mirazuki : Mirazuki Tube garde sa propre clé de signature. La permission `READ_FEED` passe au niveau `normal` et ne verrouille plus rien ; c'est le fournisseur qui vérifie l'appelant : le paquet `dev.miraiijo.lumen`, fourni par le système, et l'empreinte SHA-256 de son certificat, réglée dans `gradle.properties` (`mirazuki.certSha256`, remplaçable par la variable d'environnement `MIRAZUKI_CERT_SHA256`). Toute autre app reçoit une `SecurityException`. Si Mirazuki change de clé, il suffit de mettre à jour l'empreinte.
+- Flux pour miryo : miryo tube garde sa propre clé de signature. La permission `READ_FEED` passe au niveau `normal` et ne verrouille plus rien ; c'est le fournisseur qui vérifie l'appelant : le paquet `dev.miraiijo.lumen`, fourni par le système, et l'empreinte SHA-256 de son certificat, réglée dans `gradle.properties` (`mirazuki.certSha256`, remplaçable par la variable d'environnement `MIRAZUKI_CERT_SHA256`). Toute autre app reçoit une `SecurityException`. Si miryo change de clé, il suffit de mettre à jour l'empreinte.
 - Sous-titres plus petits (4,2 % de la hauteur de l'image au lieu de 6 %).
 
 ### 0.5.0
-- **Flux pour Mirazuki** : un fournisseur de contenu en lecture seule, `dev.miraiijo.lumentube.feed`, protégé par la permission `dev.miraiijo.lumentube.permission.READ_FEED` (niveau signature : Mirazuki doit être signé avec la même clé de release) :
+- **Flux pour miryo** : un fournisseur de contenu en lecture seule, `dev.miraiijo.lumentube.feed`, protégé par la permission `dev.miraiijo.lumentube.permission.READ_FEED` (niveau signature : miryo doit être signé avec la même clé de release) :
   - `/continue` : vidéos commencées et non finies (historique, progression de 1 à 94 %), de la plus récente à la plus ancienne ;
   - `/subscriptions` : dernières vidéos des abonnements, sans les Shorts ;
   - 20 lignes au plus ; colonnes `video_id`, `title`, `channel`, `thumbnail_url` (https), `duration_ms`, `watched_percent`, `position_s`, `published_ms` (0 si inconnu), `live` (0/1) ;
@@ -365,7 +365,7 @@ Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTub
 - Miniatures en HD (1280×720, maxresdefault) sur les cartes, la fiche et l'écran de chargement du lecteur. Si une vidéo n'en a pas, la miniature du flux est utilisée.
 
 ### 0.1.2
-- CI : la validation du wrapper Gradle ne porte plus que sur celui de Mirazuki Tube, comparé à la somme publiée par Gradle. Celle de setup-gradle analysait tout le dépôt et rejetait les wrappers de SmartTube (racine et ExoPlayer), que ce build n'exécute jamais.
+- CI : la validation du wrapper Gradle ne porte plus que sur celui de miryo tube, comparé à la somme publiée par Gradle. Celle de setup-gradle analysait tout le dépôt et rejetait les wrappers de SmartTube (racine et ExoPlayer), que ce build n'exécute jamais.
 
 ### 0.1.1
 - Build : les versions partagées de SmartTube (`SharedModules/constants.gradle`) sont chargées sur le projet racine, comme dans SmartTube. Sans elles, les modules ExoPlayer n'avaient ni minSdk ni compileSdk.
@@ -378,7 +378,7 @@ Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTub
 ### 0.1.0
 - Build et CI.
 - Connexion au compte avec un code à saisir sur youtube.com/activate.
-- Menu latéral façon Mirazuki : Accueil, Abonnements, Tendances, Musique, Gaming, Actus, Sport, Direct, Historique, Playlists.
+- Menu latéral façon miryo : Accueil, Abonnements, Tendances, Musique, Gaming, Actus, Sport, Direct, Historique, Playlists.
 - Rangées de vidéos 16:9, avec une fiche de la vidéo sélectionnée au-dessus et une page suivante chargée au bout de chaque rangée. Les chaînes et playlists s'ouvrent.
 - Lecteur façon Nuvio :
   - titre et chaîne, barre de progression, boutons ronds, heure ;
@@ -388,5 +388,5 @@ Ensuite, regarde si les fichiers de `player/upstream/` ont changé chez SmartTub
 - Erreur de lecture : nouvelle tentative avec un autre client YouTube, comme SmartTube.
 
 ## Prochaine étape
-- Rangée ou tuile dans Mirazuki.
+- Rangée ou tuile dans miryo.
 - Signature avec la vraie clé (secrets de la CI).

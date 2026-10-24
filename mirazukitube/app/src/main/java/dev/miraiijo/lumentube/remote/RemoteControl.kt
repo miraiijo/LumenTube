@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
 /**
  * "Regarder sur la TV": the YouTube app on a phone, linked with a TV code, sends videos here and
  * drives the player (play, pause, seek, next, stop, volume). The engine's remote control (as in
- * SmartTube), listened to while MirazukiTube is on screen. Events go to the view model (open, stop)
+ * SmartTube), listened to while miryo tube is on screen. Events go to the view model (open, stop)
  * and to the player screen (the rest); the player reports its state back so the phone follows.
  */
 object RemoteControl {
@@ -33,7 +33,7 @@ object RemoteControl {
         data object Disconnected : Event
     }
 
-    /** MirazukiTube's screen exists (its view model handles the events) / is on screen. */
+    /** miryo tube's screen exists (its view model handles the events) / is on screen. */
     @Volatile
     var uiAttached = false
     @Volatile
@@ -43,12 +43,12 @@ object RemoteControl {
             if (!value) backgroundSinceMs = android.os.SystemClock.elapsedRealtime()
         }
 
-    /** When MirazukiTube last left the screen (elapsedRealtime; 0: never shown in this process). */
+    /** When miryo tube last left the screen (elapsedRealtime; 0: never shown in this process). */
     @Volatile
     private var backgroundSinceMs = 0L
 
     /**
-     * Mirazuki may switch the engine's account for one of its reads: MirazukiTube not on screen, and
+     * miryo may switch the engine's account for one of its reads: miryo tube not on screen, and
      * left for at least [SWITCH_GRACE_MS] (its requests still running when it left have finished).
      */
     val accountSwitchAllowed: Boolean
@@ -64,7 +64,7 @@ object RemoteControl {
     private var context: Context? = null
     private val VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")
 
-    /** MirazukiTube on screen: commands are listened to (the loop restarts by itself after an error). */
+    /** miryo tube on screen: commands are listened to (the loop restarts by itself after an error). */
     fun start(context: Context) {
         this.context = context.applicationContext
         if (listening?.isDisposed == false) return
@@ -75,7 +75,7 @@ object RemoteControl {
             .subscribe({ handle(it) }, { /* retried above; an error here only ends this session */ })
     }
 
-    /** MirazukiTube left: no more listening (a video can't be opened in the background anyway). */
+    /** miryo tube left: no more listening (a video can't be opened in the background anyway). */
     fun stop() {
         listening?.dispose()
         listening = null

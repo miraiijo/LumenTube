@@ -56,7 +56,7 @@ import dev.miraiijo.lumentube.update.Updater
 import kotlinx.coroutines.delay
 
 /**
- * The redesign's header (Mirazuki's bar): the sections as tabs with Recherche right after them, and
+ * The redesign's header (miryo's bar): the sections as tabs with Recherche right after them, and
  * on the right ("Lecture en cours" with a video in the small window) the account, the appearance
  * (Jour / Nuit / Auto: OK goes to the next one), Réglages (a red dot: an update is available) and
  * the time right-most. Replaces the side menu. OK on a tab opens that section.
@@ -105,7 +105,7 @@ fun TopHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Opale: one bar, as in Mirazuki. The sections on the left (no big title) and Recherche right
+        // Opale: one bar, as in miryo. The sections on the left (no big title) and Recherche right
         // after them; the round glass buttons and the time right-most, all on one line.
         Row(Modifier.weight(1f, fill = false), horizontalArrangement = Arrangement.spacedBy(TAB_GAP), verticalAlignment = Alignment.CenterVertically) {
             // The tabs scroll when they don't fit (signed in, 9 tabs, from ~95 %): before, the last
@@ -149,14 +149,14 @@ fun TopHeader(
                     else -> Text("A", fontSize = Dimens.TextMin, fontWeight = FontWeight.SemiBold)
                 }
             }
-            // Réglages, with Mirazuki's red dot when an update is waiting (drawn over the button's corner).
+            // Réglages, with miryo's red dot when an update is waiting (drawn over the button's corner).
             if (!kids) Box(Modifier.size(HEADER_BUTTON)) {
                 RoundButton(onClick = onSettings) { Icon(MirazukiIcon.SETTINGS, size = HEADER_ICON) }
                 if (updateFound != null) {
                     Box(Modifier.align(Alignment.TopEnd).size(UPDATE_DOT).background(Palette.Live, CircleShape))
                 }
             }
-            // The time right-most, as in Mirazuki.
+            // The time right-most, as in miryo.
             HeaderClock(Modifier.padding(start = 2.dp))
         }
     }
@@ -204,7 +204,7 @@ private fun Tab(label: String, current: Boolean, modifier: Modifier, onClick: ()
     }
 }
 
-/** Mirazuki's round header button (white by day, translucent at night; solid focus color when focused). */
+/** miryo's round header button (white by day, translucent at night; solid focus color when focused). */
 @Composable
 private fun RoundButton(onClick: () -> Unit, filled: Boolean = true, content: @Composable () -> Unit) {
     Surface(
@@ -262,8 +262,8 @@ fun Modifier.mirazukiBackground(): Modifier = drawWithCache {
     androidx.compose.ui.graphics.drawscope.CanvasDrawScope().draw(
         this, layoutDirection, androidx.compose.ui.graphics.Canvas(picture), Size(w.toFloat(), h.toFloat()),
     ) {
-        // Mirazuki's "Neutre" ambiance: a diagonal of three greys, a warm light from the top right corner
-        // and a cool one from the bottom left (Mirazuki's 1400 / 1200 px radii on a 1920 px screen).
+        // miryo's "Neutre" ambiance: a diagonal of three greys, a warm light from the top right corner
+        // and a cool one from the bottom left (miryo's 1400 / 1200 px radii on a 1920 px screen).
         drawRect(Brush.linearGradient(0f to colors.background, 0.55f to colors.backgroundMid, 1f to colors.backgroundEnd, start = Offset.Zero, end = Offset(size.width, size.height)))
         drawRect(Brush.radialGradient(listOf(colors.glowWarm, Color.Transparent), center = Offset(size.width, 0f), radius = size.width * GLOW_WARM_RADIUS))
         drawRect(Brush.radialGradient(listOf(colors.glowCool, Color.Transparent), center = Offset(0f, size.height), radius = size.width * GLOW_COOL_RADIUS))
@@ -272,7 +272,7 @@ fun Modifier.mirazukiBackground(): Modifier = drawWithCache {
     onDrawBehind { drawImage(picture, dstSize = target, filterQuality = androidx.compose.ui.graphics.FilterQuality.Low) }
 }
 
-/** Mirazuki's bar: 30 dp round glass buttons, 14 dp icons, 10 dp apart (Dimens.PillGap). */
+/** miryo's bar: 30 dp round glass buttons, 14 dp icons, 10 dp apart (Dimens.PillGap). */
 private val HEADER_BUTTON = 30.dp
 private val HEADER_ICON = 14.dp
 private val UPDATE_DOT = 7.dp

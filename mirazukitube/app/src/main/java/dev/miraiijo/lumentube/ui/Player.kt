@@ -127,7 +127,7 @@ private const val UP_NEXT_SECONDS = 10
 private const val SEEK_LINE_MS = 1_500L
 /** Pause after the last Left/Right before seeking (the presses in between add up). */
 private const val SEEK_COMMIT_MS = 600L
-/** adb logcat -s MirazukiTube.Timing: how long a video takes to start, step by step. */
+/** adb logcat -s miryo tube.Timing: how long a video takes to start, step by step. */
 private const val TIMING_TAG = "MirazukiTube.Timing"
 /** First frame (or a new size) to display switch: Auto's first quality change has passed. */
 private const val AFR_SETTLE_MS = 1_500L
@@ -261,7 +261,7 @@ fun PlayerScreen(
     val chaptersButton = remember { FocusRequester() }
     var subscribed by remember(videoId) { mutableStateOf(false) }
     /**
-     * The account the details (like, subscription) were read for: the actions only go to it. Mirazuki
+     * The account the details (like, subscription) were read for: the actions only go to it. miryo
      * switching the account meanwhile drops them with a message instead of acting as the other one.
      */
     var actionAccount by remember(videoId) { mutableStateOf<String?>(null) }

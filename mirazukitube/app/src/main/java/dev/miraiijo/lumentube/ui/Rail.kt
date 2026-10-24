@@ -140,7 +140,7 @@ fun SignInDialog(code: String?, error: String?, onRetry: () -> Unit, onDismiss: 
                         else -> CodeText(code)
                     }
                 }
-                Text("Mirazuki Tube reste connecté ensuite. Tu peux lier plusieurs comptes et choisir lequel à l’ouverture.", color = Palette.TextSecondary, fontSize = 13.sp)
+                Text("miryo tube reste connecté ensuite. Tu peux lier plusieurs comptes et choisir lequel à l’ouverture.", color = Palette.TextSecondary, fontSize = 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PillGap)) {
                     if (error != null) MirazukiButton("Réessayer", icon = MirazukiIcon.REFRESH, onClick = onRetry)
                     MirazukiButton("Annuler", modifier = Modifier.focusRequester(button), onClick = onDismiss)
@@ -210,7 +210,7 @@ internal fun QrCode(content: String, modifier: Modifier) {
 }
 
 /**
- * "Qui regarde ?" (the redesign: full screen, like Mirazuki's): the linked accounts as large round
+ * "Qui regarde ?" (the redesign: full screen, like miryo's): the linked accounts as large round
  * avatars, and "Ajouter". Opened by the avatar of the header, and at launch when several accounts
  * are linked. OK switches account.
  */
@@ -295,7 +295,7 @@ fun ProfileDialog(
                 }
             }
             Spacer(Modifier.height(36.dp))
-            Text("Le compte change ton Accueil, tes abonnements, ton historique et le flux de Mirazuki.", fontSize = Dimens.TextMin, color = Palette.TextSecondary)
+            Text("Le compte change ton Accueil, tes abonnements, ton historique et le flux de miryo.", fontSize = Dimens.TextMin, color = Palette.TextSecondary)
         }
         LaunchedEffect(Unit) {
             withFrameNanos { }
@@ -353,7 +353,7 @@ private fun ProfileTile(name: String, caption: String?, modifier: Modifier, onCl
 private enum class SettingsPage(val label: String) { PLAYBACK("Lecture"), DISPLAY("Affichage"), PHONE("Téléphone"), ACCOUNT("Compte"), KIDS("Enfant"), UPDATES("Mises à jour"), ABOUT("À propos") }
 
 /**
- * Réglages (the redesign: full screen, like Mirazuki's): the categories on the left (the one focused
+ * Réglages (the redesign: full screen, like miryo's): the categories on the left (the one focused
  * shows its settings), and on the right one card per setting with its choices as pills (the
  * current one checked). OK on a pill applies it.
  */
@@ -455,20 +455,20 @@ fun SettingsDialog(
                             }
                         }
                         SettingsPage.PHONE -> {
-                            SettingCard("Regarder sur la TV", "L’app YouTube du téléphone, liée avec un code TV, envoie ses vidéos ici et sert de télécommande, quand Mirazuki Tube est ouvert.") {
+                            SettingCard("Regarder sur la TV", "L’app YouTube du téléphone, liée avec un code TV, envoie ses vidéos ici et sert de télécommande, quand miryo tube est ouvert.") {
                                 Choice("Activé", settings.remote) { onSettings(settings.copy(remote = true)) }
                                 Choice("Désactivé", !settings.remote) { onSettings(settings.copy(remote = false)) }
                                 MirazukiButton("Lier un téléphone", modifier = Modifier.focusRequester(pair), icon = MirazukiIcon.PLUS, onClick = onPair)
                             }
-                            // Opening MirazukiTube from the background needs the overlay permission (adb, once).
+                            // Opening miryo tube from the background needs the overlay permission (adb, once).
                             val context = androidx.compose.ui.platform.LocalContext.current
                             val canOpen = remember(settings.backgroundCast) { android.provider.Settings.canDrawOverlays(context) }
                             SettingCard(
-                                "Recevoir même Mirazuki Tube fermé",
+                                "Recevoir même miryo tube fermé",
                                 if (settings.backgroundCast && !canOpen) {
                                     "Autorisation à donner une fois depuis l’ordinateur : adb shell appops set dev.miraiijo.lumentube SYSTEM_ALERT_WINDOW allow"
                                 } else {
-                                    "Mirazuki Tube reste prêt en arrière-plan et s’ouvre quand le téléphone envoie une vidéo. Garde environ 50 à 80 Mo de mémoire."
+                                    "miryo tube reste prêt en arrière-plan et s’ouvre quand le téléphone envoie une vidéo. Garde environ 50 à 80 Mo de mémoire."
                                 },
                             ) {
                                 Choice("Activé", settings.backgroundCast) { onSettings(settings.copy(backgroundCast = true, remote = true)) }
@@ -495,7 +495,7 @@ fun SettingsDialog(
                                     }
                                 }
                             }
-                            SettingCard("Code parent", "Demandé pour quitter le profil enfant. Le profil enfant de Mirazuki se quitte dans Mirazuki.") {
+                            SettingCard("Code parent", "Demandé pour quitter le profil enfant. Le profil enfant de miryo se quitte dans miryo.") {
                                 MirazukiButton("Changer le code", contentColor = Palette.ChipText, onClick = onChangeKidsPin)
                                 MirazukiButton("Supprimer le profil enfant", icon = MirazukiIcon.CLOSE, onClick = onDeleteKids)
                             }
@@ -505,7 +505,7 @@ fun SettingsDialog(
                             BrandLogo(Modifier.height(40.dp))
                             SettingCard(
                                 "Version installée · ${update.installed}${if (installedBeta) " (bêta)" else ""}",
-                                update.message ?: "Mirazuki Tube vérifie une fois par jour, au démarrage.",
+                                update.message ?: "miryo tube vérifie une fois par jour, au démarrage.",
                             ) {
                                 MirazukiButton(
                                     if (update.busy && update.progress == null) "Vérification…" else "Vérifier",
@@ -542,7 +542,7 @@ fun SettingsDialog(
                             val mit = remember { readLicence(context, "SmartTube-MIT.txt") }
                             SettingCard(
                                 "Basé sur SmartTube",
-                                "Mirazuki Tube est un fork de SmartTube (github.com/yuliskov/SmartTube) et utilise son moteur : MediaServiceCore, SharedModules et son ExoPlayer modifié. Appli non officielle, sans lien avec SmartTube, YouTube ou Google.",
+                                "miryo tube est un fork de SmartTube (github.com/yuliskov/SmartTube) et utilise son moteur : MediaServiceCore, SharedModules et son ExoPlayer modifié. Appli non officielle, sans lien avec SmartTube, YouTube ou Google.",
                             ) {}
                             SettingCard("Licence de SmartTube", mit) {}
                             SettingCard(

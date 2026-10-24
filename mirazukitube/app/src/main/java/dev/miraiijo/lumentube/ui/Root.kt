@@ -36,7 +36,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import dev.miraiijo.lumentube.MainViewModel
 
 /**
- * The redesign's layout (Mirazuki's): a header with the section's name, the sections as tabs and the
+ * The redesign's layout (miryo's): a header with the section's name, the sections as tabs and the
  * round buttons (search, account, settings), the section's rows under it. Search and opened
  * channels / playlists take the whole screen. A video plays full screen, or in a small window.
  */

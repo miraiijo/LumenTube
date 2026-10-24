@@ -32,7 +32,7 @@ import androidx.tv.material3.Text
 import kotlinx.coroutines.launch
 
 /**
- * Parental code (kids profile), as in Mirazuki: 4 digits typed with the remote's number keys, or
+ * Parental code (kids profile), as in miryo: 4 digits typed with the remote's number keys, or
  * chosen with Up / Down (0→9) and validated with Right / OK (Left goes back one). Back erases the
  * last digit, then cancels. [submit] gets the 4 digits: an error to show (the boxes empty again),
  * or null once accepted (the caller closes the dialog). [key] restarts the boxes empty (the same

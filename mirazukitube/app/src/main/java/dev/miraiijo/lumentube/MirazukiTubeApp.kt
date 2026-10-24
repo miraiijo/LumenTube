@@ -26,7 +26,7 @@ class MirazukiTubeApp : Application() {
                 .setDefaultRequestOptions(com.bumptech.glide.request.RequestOptions().format(com.bumptech.glide.load.DecodeFormat.PREFER_RGB_565)),
         )
         FeedCache.attach(this)
-        // Account changes made in MirazukiTube reach Mirazuki (content://dev.miraiijo.lumentube.feed/).
+        // Account changes made in miryo tube reach miryo (content://dev.miraiijo.lumentube.feed/).
         dev.miraiijo.lumentube.data.YouTube.watchAccountChanges()
     }
 }

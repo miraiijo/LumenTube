@@ -22,10 +22,10 @@ import androidx.tv.material3.Typography
 import androidx.tv.material3.darkColorScheme
 import dev.miraiijo.lumentube.R
 
-/* Mirazuki's design tokens (same palettes, radii, Inter typography): MirazukiTube looks like Mirazuki. */
+/* miryo's design tokens (same palettes, radii, Inter typography): miryo tube looks like miryo. */
 
 /**
- * The two looks of the redesign (Mirazuki's): Nuit (dark) and Jour (light). Colors are read from the
+ * The two looks of the redesign (miryo's): Nuit (dark) and Jour (light). Colors are read from the
  * current one, a snapshot state: switching the appearance recomposes everything that uses them.
  */
 class MirazukiColors(
@@ -49,7 +49,7 @@ class MirazukiColors(
     val glowWarm: Color,
     val glowCool: Color,
     val isLight: Boolean,
-    /** Mirazuki's Opale: the background's diagonal ("Neutre" ambiance), from [background] to these. */
+    /** miryo's Opale: the background's diagonal ("Neutre" ambiance), from [background] to these. */
     val backgroundMid: Color,
     val backgroundEnd: Color,
     /** Glass surfaces (round buttons, panels) and their thin edge; drop shadow of lifted elements. */
@@ -58,7 +58,7 @@ class MirazukiColors(
     val shadow: Color,
 )
 
-// Mirazuki's Opale charter (Mirazuki Common.kt / Backdrop.kt, "Neutre" ambiance): neutral greys, no blue tint.
+// miryo's Opale charter (miryo Common.kt / Backdrop.kt, "Neutre" ambiance): neutral greys, no blue tint.
 val NightColors = MirazukiColors(
     background = Color(0xFF0A0B0E), panel = Color(0xFF161618), tile = Color(0xFF1C1C1E), tileFocused = Color(0xFF2C2C2E),
     textPrimary = Color(0xFFF5F5F7), textSecondary = Color(0xFF98989D),
@@ -72,7 +72,7 @@ val NightColors = MirazukiColors(
 
 /**
  * Jour's lightest color: the logo's "blanc lune", not pure white, which dazzles on a TV in a dark
- * room. Backgrounds are a shade under it (the same warm greys as Mirazuki), panels and the focused card are it.
+ * room. Backgrounds are a shade under it (the same warm greys as miryo), panels and the focused card are it.
  */
 private val MOONLIGHT = Color(0xFFF3EEE1)
 
@@ -130,7 +130,7 @@ object FocusScale {
     const val Card = 1.08f
     /** A card with the focus ring (the redesign): a lighter zoom, the ring already shows it. */
     const val CardRing = 1.04f
-    /** Mirazuki's Opale cards: a 1.05 lift (with its soft ring and shadow). */
+    /** miryo's Opale cards: a 1.05 lift (with its soft ring and shadow). */
     const val CardOpale = 1.05f
     const val Avatar = 1.1f
 }

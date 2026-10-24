@@ -83,7 +83,7 @@ private val CARD_WIDTH = 204.dp
 private val CARD_SLOT = 232.dp
 
 /**
- * A section (or an opened channel / playlist), like Mirazuki's Bibliothèque in the side-menu layout:
+ * A section (or an opened channel / playlist), like miryo's Bibliothèque in the side-menu layout:
  * the focused video's sheet (title, channel, duration) over its picture, and the rows below it,
  * the active row pinned under the sheet.
  */
@@ -325,7 +325,7 @@ fun VideoCard(
                     if (it.isFocused) onFocus()
                 },
             shape = ClickableSurfaceDefaults.shape(shape = CardShape),
-            // Mirazuki's Opale focus: lifted (1.05) with a soft ring on its edge and a deep shadow.
+            // miryo's Opale focus: lifted (1.05) with a soft ring on its edge and a deep shadow.
             scale = ClickableSurfaceDefaults.scale(focusedScale = FocusScale.CardOpale, pressedScale = FocusScale.CardOpale),
             border = ClickableSurfaceDefaults.border(
                 focusedBorder = Border(androidx.compose.foundation.BorderStroke(3.dp, Palette.FocusRing.copy(alpha = OPALE_RING_ALPHA)), shape = CardShape),
@@ -371,7 +371,7 @@ fun VideoCard(
                         Box(Modifier.fillMaxWidth(video.watchedPercent / 100f).fillMaxHeight().background(Color.White))
                     }
                 }
-                // Mirazuki's shine: one light sweep across the card when it gets the focus.
+                // miryo's shine: one light sweep across the card when it gets the focus.
                 CardShine(isFocused)
             }
         }
@@ -405,7 +405,7 @@ private const val OPALE_RING_ALPHA = 0.35f
 private const val SHINE_MS = 600
 private const val SHINE_ALPHA = 0.16f
 
-/** One soft light sweep across a card when it gains the focus (Mirazuki's shine), nothing otherwise. */
+/** One soft light sweep across a card when it gains the focus (miryo's shine), nothing otherwise. */
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.CardShine(focused: Boolean) {
     val sweep = remember { androidx.compose.animation.core.Animatable(0f) }
@@ -444,7 +444,7 @@ private fun Modifier.menuKey(action: (() -> Unit)?): Modifier = if (action == nu
 }
 
 /**
- * A channel page's header, like Mirazuki's detail page: "CHAÎNE" above its round avatar and name in
+ * A channel page's header, like miryo's detail page: "CHAÎNE" above its round avatar and name in
  * large, then "S’abonner" / "Abonné" and its orders (Accueil, Plus récentes, Populaires…).
  */
 @Composable

@@ -117,7 +117,7 @@ fun PairingDialog(pairing: Pairing, onRetry: () -> Unit, onDismiss: () -> Unit) 
                     }
                 }
                 Text(
-                    "Ensuite, le bouton Caster du téléphone envoie les vidéos ici (quand Mirazuki Tube est ouvert) et le téléphone sert de télécommande.",
+                    "Ensuite, le bouton Caster du téléphone envoie les vidéos ici (quand miryo tube est ouvert) et le téléphone sert de télécommande.",
                     color = Palette.TextSecondary,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,

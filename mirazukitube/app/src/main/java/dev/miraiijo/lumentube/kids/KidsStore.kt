@@ -16,7 +16,7 @@ sealed interface PinResult {
 }
 
 /**
- * MirazukiTube's kids profile (one per box): no YouTube account, only the channels a parent allowed,
+ * miryo tube's kids profile (one per box): no YouTube account, only the channels a parent allowed,
  * no search, no comments, no YouTube suggestions; leaving it asks for the parental code. Exists
  * once a code is set. [active] survives restarts: a kid closing the app comes back to the profile.
  * Only the code's salted hash is stored ([PinHash]); wrong codes are counted on disk, and after
@@ -31,7 +31,7 @@ class KidsStore(context: Context) {
         get() = prefs.getBoolean(KEY_ACTIVE, false)
         set(value) = prefs.edit().putBoolean(KEY_ACTIVE, value).apply()
 
-    /** Turned on because Mirazuki's current profile is a kids one (off again when Mirazuki's isn't). */
+    /** Turned on because miryo's current profile is a kids one (off again when miryo's isn't). */
     var fromMirazuki: Boolean
         get() = prefs.getBoolean(KEY_FROM_MIRAZUKI, false)
         set(value) = prefs.edit().putBoolean(KEY_FROM_MIRAZUKI, value).apply()

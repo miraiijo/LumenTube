@@ -7,12 +7,17 @@ import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import dev.miraiijo.lumentube.link.MirazukiLink
 import dev.miraiijo.lumentube.ui.Appearance
+import dev.miraiijo.lumentube.ui.BrandIntro
 import dev.miraiijo.lumentube.ui.DayColors
 import dev.miraiijo.lumentube.ui.MirazukiTubeTheme
 import dev.miraiijo.lumentube.ui.NightColors
@@ -23,16 +28,21 @@ import dev.miraiijo.lumentube.ui.windowBackground
 class MainActivity : ComponentActivity() {
     private val vm: MainViewModel by viewModels()
 
+    /** The logo animation over the first frames of a fresh start (see onCreate). */
+    private val intro = mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Mirazuki's logo while Accueil loads behind it: off as soon as there's something to show
-        // (rows, an error, "Qui regarde ?", a video opened from a link), at most SPLASH_MAX_MS.
+        // A fresh start shows the logo animation (BrandIntro) over Accueil while it loads. A video
+        // opened from a link (miryo, a browser…) skips it: the system splash (the mark) stays until
+        // there's something to show (rows, an error, "Qui regarde ?", the video), at most SPLASH_MAX_MS.
+        intro.value = savedInstanceState == null && intent?.data == null
         val splash = installSplashScreen()
         val shownAt = android.os.SystemClock.uptimeMillis()
-        splash.setKeepOnScreenCondition { android.os.SystemClock.uptimeMillis() - shownAt < SPLASH_MAX_MS && !vm.state.value.readyToShow() }
+        splash.setKeepOnScreenCondition { !intro.value && android.os.SystemClock.uptimeMillis() - shownAt < SPLASH_MAX_MS && !vm.state.value.readyToShow() }
         super.onCreate(savedInstanceState)
         // Warm-up, like SmartTube's splash: YouTube's player script and the signature engine load now
         // (in the background) instead of during the first video's start. Here rather than in the
-        // Application: a feed query from Mirazuki starts the process without needing all that.
+        // Application: a feed query from miryo starts the process without needing all that.
         com.liskovsoft.youtubeapi.service.YouTubeServiceManager.instance().refreshCacheIfNeeded()
         // The theme's color behind the first frame (Jour: no black flash before the pages).
         val initialBackground = windowBackground(vm.state.value.settings.appearance)
@@ -44,13 +54,16 @@ class MainActivity : ComponentActivity() {
                 // And when the look changes (Auto at 7:30 / 19:30, the header's button).
                 val background = Palette.Background
                 LaunchedEffect(background) { window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(background.toArgb())) }
-                Root(vm)
+                Box(Modifier.fillMaxSize()) {
+                    Root(vm)
+                    if (intro.value) BrandIntro(ready = { vm.state.value.readyToShow() }, maxMs = SPLASH_MAX_MS, onDone = { intro.value = false })
+                }
             }
         }
         if (savedInstanceState == null) handleLink(intent)
     }
 
-    // "Regarder sur la TV": listened to only while MirazukiTube is on screen (Android 10 doesn't let a
+    // "Regarder sur la TV": listened to only while miryo tube is on screen (Android 10 doesn't let a
     // background app bring itself up anyway).
     override fun onStart() {
         super.onStart()
@@ -97,8 +110,8 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * youtube.com/watch?v=…&t=… or youtu.be/…?t=… from another app (Mirazuki, a browser…): played from
-     * t when given (Mirazuki's "continue" passes the saved position). A malformed link or extras
+     * youtube.com/watch?v=…&t=… or youtu.be/…?t=… from another app (miryo, a browser…): played from
+     * t when given (miryo's "continue" passes the saved position). A malformed link or extras
      * (opaque URI, bad parcel) are ignored, never a crash.
      */
     private fun handleLink(intent: Intent?) {
@@ -108,7 +121,7 @@ class MainActivity : ComponentActivity() {
             val id = uri.getQueryParameter("v") ?: uri.takeIf { it.host == "youtu.be" }?.lastPathSegment
             // Only a real video id (11 characters): the engine puts it as is in its signed-in requests.
             if (id == null || !VIDEO_ID.matches(id)) return
-            // Mirazuki's contract v2 (the account to play as, no "Qui regarde ?"): from Mirazuki only.
+            // miryo's contract v2 (the account to play as, no "Qui regarde ?"): from miryo only.
             val mirazuki = fromMirazuki(intent)
             val account = if (mirazuki) intent.getStringExtra(EXTRA_ACCOUNT_ID)?.takeIf { it.length in 1..MAX_ACCOUNT_ID } else null
             // An account asked for (even invalid: then the selected one plays) never shows the picker.
@@ -118,7 +131,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * The link comes from Mirazuki (mirazuki-link v3: package and signing certificate). The caller is
+     * The link comes from miryo (mirazuki-link v3: package and signing certificate). The caller is
      * the system's referrer (the launching package); a caller-set referrer extra, which any app can
      * forge, makes it untrusted. Best effort on Android 10 (no launching uid before Android 14).
      */
@@ -146,7 +159,7 @@ class MainActivity : ComponentActivity() {
     private companion object {
         /**
          * The splash never stays longer than this, whatever is still loading (Accueil comes from
-         * the network: longer than Mirazuki IPTV's 1.5 s, its rows usually arrive within it).
+         * the network: longer than miryo iptv's 1.5 s, its rows usually arrive within it).
          */
         const val SPLASH_MAX_MS = 3_000L
         val VIDEO_ID = Regex("[A-Za-z0-9_-]{11}")

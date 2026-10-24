@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Start-up animation layer: the mark of the miryo tube. logo (night). All intro_* layers share this viewport, so they stack exactly. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="230dp"
+    android:height="64dp"
+    android:viewportWidth="230"
+    android:viewportHeight="64">
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="0.56"
+        android:scaleY="0.56"
+        android:translateX="-22"
+        android:translateY="-22">
+        <path
+            android:pathData="M87.48,48.1A34,34 0 1 1 59.82,20.5"
+            android:strokeColor="#FFFF5F52"
+            android:strokeWidth="3.5"
+            android:strokeAlpha="0.75"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M30,54a24,24 0 1 1 48,0a24,24 0 1 1 -48,0z"
+            android:fillColor="#FFFF5F52"
+            android:fillAlpha="0.16" />
+        <path
+            android:pathData="M56.06,30.09A24,24 0 1 0 74.37,66.7A21,21 0 1 1 56.06,30.09z"
+            android:fillColor="#FFFF5F52" />
+    </group>
+</vector>
