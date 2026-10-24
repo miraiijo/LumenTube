@@ -2,7 +2,12 @@ package dev.miraiijo.lumentube.ui
 
 import android.view.KeyEvent
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 
 /**
  * A long OK never clicks twice. The long press fires on the key's first repeat (≈ 0.5 s) and
@@ -43,9 +48,9 @@ object OkRelease {
  * In a window of its own (a Dialog opened by a long OK): only OK presses that started here count.
  * The release (and repeats) of the press that opened it would otherwise click its first button.
  */
-fun androidx.compose.ui.Modifier.okPressStartsHere(): androidx.compose.ui.Modifier = androidx.compose.ui.composed {
-    var pressed by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    androidx.compose.ui.input.key.onPreviewKeyEvent { event ->
+fun Modifier.okPressStartsHere(): Modifier = composed {
+    var pressed by remember { mutableStateOf(false) }
+    onPreviewKeyEvent { event ->
         val code = event.nativeKeyEvent.keyCode
         if (code != KeyEvent.KEYCODE_DPAD_CENTER && code != KeyEvent.KEYCODE_ENTER && code != KeyEvent.KEYCODE_NUMPAD_ENTER && code != KeyEvent.KEYCODE_BUTTON_A) return@onPreviewKeyEvent false
         when (event.nativeKeyEvent.action) {
