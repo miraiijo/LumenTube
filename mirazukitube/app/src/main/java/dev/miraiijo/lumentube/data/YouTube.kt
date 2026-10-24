@@ -118,7 +118,7 @@ data class DeArrow(val title: String?, val thumbnail: String?)
 enum class ActionResult {
     DONE,
     FAILED,
-    /** The engine is no longer on the account the screen showed (switched by Mirazuki): nothing sent. */
+    /** The engine is no longer on the account the screen showed (switched by miryo): nothing sent. */
     ACCOUNT_CHANGED,
 }
 
@@ -234,9 +234,9 @@ object YouTube {
     const val HOME_EXTRA = "HOME-x-"
     private const val HOME_EXTRA_ROWS = 2
 
-    // ---- Mirazuki's feed (FeedProvider) -----------------------------------------------------------
+    // ---- miryo's feed (FeedProvider) -----------------------------------------------------------
 
-    /** The account's subscriptions feed, also written to Mirazuki's feed cache. Blocking. */
+    /** The account's subscriptions feed, also written to miryo's feed cache. Blocking. */
     private fun subscriptionsForFeed(): MediaGroup? {
         // The account it's fetched for, taken before: a switch meanwhile never mixes accounts.
         val epoch = switchEpoch
@@ -244,14 +244,14 @@ object YouTube {
         return service.contentService.subscriptions?.also { storeIfSameEpoch(FeedCache.SUBSCRIPTIONS, it.mediaItems.orEmpty(), accountId, epoch) }
     }
 
-    /** The account's history, also written to Mirazuki's feed cache ("continue"). Blocking. */
+    /** The account's history, also written to miryo's feed cache ("continue"). Blocking. */
     private fun historyForFeed(): MediaGroup? {
         val epoch = switchEpoch
         val accountId = currentAccountId()
         return service.contentService.history?.also { storeIfSameEpoch(FeedCache.CONTINUE, it.mediaItems.orEmpty(), accountId, epoch) }
     }
 
-    /** An account as Mirazuki sees it: opaque id, display name, https avatar. */
+    /** An account as miryo sees it: opaque id, display name, https avatar. */
     data class FeedAccount(val id: String, val name: String, val avatarUrl: String?, val selected: Boolean)
 
     /**
@@ -271,7 +271,7 @@ object YouTube {
     }.getOrNull()
 
     fun feedAccounts(): List<FeedAccount> {
-        // "Selected" = MirazukiTube's own account, even while the engine plays as another one for Mirazuki.
+        // "Selected" = miryo tube's own account, even while the engine plays as another one for miryo.
         val home = homeAccountId()
         return runCatching { service.signInService.accounts }.getOrNull().orEmpty()
             .filterNotNull()
@@ -282,14 +282,14 @@ object YouTube {
             }
     }
 
-    // ---- Mirazuki contract v2: an account's data without switching MirazukiTube's ------------------
+    // ---- miryo contract v2: an account's data without switching miryo tube's ------------------
     //
     // The engine has one active account for all its requests. To read (or play as) another one, it
     // is switched for the time of the request, then put back. Rules:
     //  - switches take the write lock; reads made for an account the engine is already on take the
     //    read lock (several at once), so the engine never changes under a request made through here;
     //  - the engine tells its listeners asynchronously (main thread): each real switch is counted
-    //    and its notification swallowed, so neither the app nor Mirazuki reloads for it;
+    //    and its notification swallowed, so neither the app nor miryo reloads for it;
     //  - the account to come back to is written on disk before any switch: a process killed
     //    meanwhile goes back to it at the next start ([restoreHome]);
     //  - feed caches are only written when no switch happened during the fetch ([switchEpoch]).
@@ -303,15 +303,15 @@ object YouTube {
     @Volatile
     private var switchEpoch = 0
 
-    /** MirazukiTube's own account while the engine plays a Mirazuki launch as another one ([beginPlayAs]). */
+    /** miryo tube's own account while the engine plays a miryo launch as another one ([beginPlayAs]). */
     @Volatile
     private var playAsHome: String? = null
 
-    /** The account to come back to during one of Mirazuki's read switches (in memory). */
+    /** The account to come back to during one of miryo's read switches (in memory). */
     @Volatile
     private var swapHomeMem: String? = null
 
-    /** MirazukiTube's own account (what its screens and Mirazuki's "selected" mean). Blocking. */
+    /** miryo tube's own account (what its screens and miryo's "selected" mean). Blocking. */
     fun homeAccountId(): String? = playAsHome ?: swapHomeMem ?: currentAccountId()
 
     /** A linked account's opaque id (unknown ids are never acted on). */
@@ -351,7 +351,7 @@ object YouTube {
     /**
      * Runs [block] with the engine on account [id]: as it is when it's already there (read lock),
      * else switched for the time of [block] and put back (write lock). Without [allowSwitch]
-     * (MirazukiTube on screen: its own requests would go out as that account), only the first case.
+     * (miryo tube on screen: its own requests would go out as that account), only the first case.
      * Null: unknown account, not run, or the engine busy for more than [waitS] s. Blocking.
      */
     fun <T> asAccount(id: String, allowSwitch: Boolean, waitS: Long = LOCK_WAIT_S, block: () -> T): T? {
@@ -387,10 +387,10 @@ object YouTube {
     }
 
     /**
-     * A video launched from Mirazuki with an account: the engine plays as it (history and position
-     * go to it) until [endPlayAs]; MirazukiTube's own account stays its home. False: same account as
-     * MirazukiTube's, unknown, or signed out — then any play-as in progress ends too (the video plays
-     * with MirazukiTube's account). Blocking.
+     * A video launched from miryo with an account: the engine plays as it (history and position
+     * go to it) until [endPlayAs]; miryo tube's own account stays its home. False: same account as
+     * miryo tube's, unknown, or signed out — then any play-as in progress ends too (the video plays
+     * with miryo tube's account). Blocking.
      */
     fun beginPlayAs(id: String?): Boolean {
         val write = accountLock.writeLock()
@@ -417,7 +417,7 @@ object YouTube {
         }
     }
 
-    /** Back to MirazukiTube's own account after a Mirazuki launch. Blocking. */
+    /** Back to miryo tube's own account after a miryo launch. Blocking. */
     fun endPlayAs() {
         val write = accountLock.writeLock()
         write.lock()
@@ -436,10 +436,10 @@ object YouTube {
         subscribedChannels = null
     }
 
-    /** True while a Mirazuki launch plays as another account than MirazukiTube's. */
+    /** True while a miryo launch plays as another account than miryo tube's. */
     val playingAsOther: Boolean get() = playAsHome != null
 
-    /** A switch cut short (process killed): back to MirazukiTube's account at the next start. Blocking. */
+    /** A switch cut short (process killed): back to miryo tube's account at the next start. Blocking. */
     fun restoreHome() {
         // Nothing to restore (the usual case): no lock taken, every query of the provider goes on.
         if (playAsHome != null || (FeedCache.playAsHome == null && FeedCache.swapHome == null)) return
@@ -469,13 +469,13 @@ object YouTube {
     private const val LOCK_WAIT_S = 8L
     private const val MAX_ACCOUNT_ID = 128
 
-    /** Mirazuki's account switch: true when [accountId] is a linked account. */
+    /** miryo's account switch: true when [accountId] is a linked account. */
     fun selectFeedAccount(accountId: String): Boolean {
         val account = engineAccount(accountId) ?: return false
         val write = accountLock.writeLock()
         if (!write.tryLock(LOCK_WAIT_S, java.util.concurrent.TimeUnit.SECONDS)) return false
         try {
-            // A Mirazuki launch is playing as another account: MirazukiTube's own account (its home)
+            // A miryo launch is playing as another account: miryo tube's own account (its home)
             // changes, the engine stays on the one playing until the video stops.
             if (playAsHome != null) {
                 playAsHome = accountId
@@ -505,14 +505,14 @@ object YouTube {
     private val appAccountListeners = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
 
     /**
-     * Account switched, added or removed (in MirazukiTube or by Mirazuki): Mirazuki is told
+     * Account switched, added or removed (in miryo tube or by miryo): miryo is told
      * (content://…feed/ and its paths), and so is the app ([onAccountChanged]).
      */
     @Synchronized
     fun watchAccountChanges() {
         if (accountListener != null) return
         val listener = com.liskovsoft.mediaserviceinterfaces.SignInService.OnAccountChange {
-            // A switch made for Mirazuki (and undone right after): neither the app nor Mirazuki reloads.
+            // A switch made for miryo (and undone right after): neither the app nor miryo reloads.
             if (swallowSilent()) return@OnAccountChange
             subscribedChannels = null
             FeedCache.notifyReaders()
@@ -522,7 +522,7 @@ object YouTube {
         runCatching { service.signInService.addOnAccountChange(listener) }
     }
 
-    /** The app's own reaction to an account change made elsewhere (Mirazuki). */
+    /** The app's own reaction to an account change made elsewhere (miryo). */
     fun onAccountChanged(listener: () -> Unit): () -> Unit {
         watchAccountChanges()
         appAccountListeners += listener
@@ -588,7 +588,7 @@ object YouTube {
             .mapIndexedNotNull { index, group -> group.toRow("search-$index") }
     }
 
-    /** Mirazuki's /search: the engine's raw results (blocking, called off the main thread by the provider). */
+    /** miryo's /search: the engine's raw results (blocking, called off the main thread by the provider). */
     fun searchItems(query: String): List<MediaItem?> =
         service.contentService.getSearch(query).orEmpty().filterNotNull().flatMap { it.mediaItems.orEmpty() }
 
@@ -706,7 +706,7 @@ object YouTube {
     /**
      * An account-bound request ([block], blocking): under the same lock as every account switch
      * (read side: switches wait for it, it waits for them), and only if the engine is still on
-     * [expected] — the account the screen showed when the action was asked. Otherwise (Mirazuki
+     * [expected] — the account the screen showed when the action was asked. Otherwise (miryo
      * switched the account meanwhile, or the engine is busy for more than 8 s) nothing is sent.
      */
     private fun onAccount(expected: String?, block: () -> Unit): ActionResult {
@@ -815,7 +815,7 @@ object YouTube {
         historyWrites.incrementAndGet()
         val read = accountLock.readLock()
         try {
-            // Not during one of Mirazuki's read switches (it would go to that account): waits for it.
+            // Not during one of miryo's read switches (it would go to that account): waits for it.
             if (read.tryLock(LOCK_WAIT_S, TimeUnit.SECONDS)) {
                 try {
                     runCatching { service.mediaItemService.updateHistoryPosition(videoId, seconds) }
@@ -835,7 +835,7 @@ object YouTube {
 
     /** Accounts linked on this box (sign in again to add one). */
     suspend fun accounts(): List<Account> = withContext(Dispatchers.IO) {
-        // "Selected" = MirazukiTube's own account, even while a Mirazuki launch plays as another one.
+        // "Selected" = miryo tube's own account, even while a miryo launch plays as another one.
         val home = homeAccountId()
         runCatching { service.signInService.accounts }.getOrNull().orEmpty().filterNotNull()
             .filter { !it.isEmpty }
@@ -844,7 +844,7 @@ object YouTube {
 
     suspend fun selectAccount(account: Account) {
         withContext(Dispatchers.IO) {
-            // Through the same lock as Mirazuki's switches (and as its home while a Mirazuki launch plays).
+            // Through the same lock as miryo's switches (and as its home while a miryo launch plays).
             val id = feedId(account.raw)
             if (id != null) {
                 selectFeedAccount(id)
@@ -867,7 +867,7 @@ object YouTube {
     /**
      * Invité: no account selected (the linked ones stay on the box). YouTube then serves its
      * signed-out pages: nothing is added to anyone's history or recommendations. False while a
-     * Mirazuki launch plays as another account (the engine isn't MirazukiTube's to change then).
+     * miryo launch plays as another account (the engine isn't miryo tube's to change then).
      */
     suspend fun useGuest(): Boolean = withContext(Dispatchers.IO) {
         val write = accountLock.writeLock()
@@ -883,7 +883,7 @@ object YouTube {
         }
     }
 
-    /** MirazukiTube's own account (not the one a Mirazuki launch plays as). */
+    /** miryo tube's own account (not the one a miryo launch plays as). */
     private fun homeAccount(): com.liskovsoft.mediaserviceinterfaces.oauth.Account? =
         (playAsHome ?: swapHomeMem)?.let(::engineAccount) ?: runCatching { service.signInService.selectedAccount }.getOrNull()
 
@@ -915,7 +915,7 @@ object YouTube {
     }
 
     private fun signOutLocked() {
-        // A Mirazuki launch playing as another account: back to MirazukiTube's first, it's the one signed out.
+        // A miryo launch playing as another account: back to miryo tube's first, it's the one signed out.
         endPlayAsLocked()
         runCatching {
             val signIn = service.signInService

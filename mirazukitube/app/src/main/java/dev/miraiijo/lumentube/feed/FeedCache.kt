@@ -9,9 +9,9 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Feed read by the Mirazuki launcher (see FeedProvider): "continue" (videos started, not finished)
+ * Feed read by the miryo launcher (see FeedProvider): "continue" (videos started, not finished)
  * and "subscriptions" (latest videos), kept as a JSON file in filesDir. Written each time
- * MirazukiTube loads its history or its subscriptions, and by the provider when it refreshes them.
+ * miryo tube loads its history or its subscriptions, and by the provider when it refreshes them.
  * Only public video data is stored: no token, cookie or account id.
  */
 object FeedCache {
@@ -20,7 +20,7 @@ object FeedCache {
     const val SUBSCRIPTIONS = "subscriptions"
     const val MAX_ROWS = 20
 
-    /** Contract with Mirazuki (frozen): column names and order. */
+    /** Contract with miryo (frozen): column names and order. */
     val COLUMNS = arrayOf("video_id", "title", "channel", "thumbnail_url", "duration_ms", "watched_percent", "position_s", "published_ms", "live")
 
     data class Item(
@@ -43,7 +43,7 @@ object FeedCache {
     @Volatile
     private var context: Context? = null
 
-    /** Contract with Mirazuki (frozen): the /accounts columns. */
+    /** Contract with miryo (frozen): the /accounts columns. */
     val ACCOUNT_COLUMNS = arrayOf("account_id", "name", "avatar_url", "selected")
     const val ACCOUNTS = "accounts"
     private val ACCOUNT_ID = Regex("[0-9a-f]{64}")
@@ -55,11 +55,11 @@ object FeedCache {
 
     fun uri(list: String): Uri = Uri.parse("content://$AUTHORITY/$list")
 
-    /** content://dev.miraiijo.lumentube.feed/ — Mirazuki watches it with notifyForDescendants. */
+    /** content://dev.miraiijo.lumentube.feed/ — miryo watches it with notifyForDescendants. */
     val ROOT: Uri get() = Uri.parse("content://$AUTHORITY/")
 
     /**
-     * Tells Mirazuki something changed: the root (its observer has notifyForDescendants) and each path,
+     * Tells miryo something changed: the root (its observer has notifyForDescendants) and each path,
      * for observers registered on a single path.
      */
     fun notifyReaders() {
@@ -71,7 +71,7 @@ object FeedCache {
     }
 
     /**
-     * An account's opaque id for Mirazuki: HMAC-SHA256 of the engine's account identity with a random
+     * An account's opaque id for miryo: HMAC-SHA256 of the engine's account identity with a random
      * key kept on this box. Stable across restarts, 64 hex characters, and it gives away nothing
      * (no e-mail, not even a hash anyone could recompute from an e-mail).
      */
@@ -94,7 +94,7 @@ object FeedCache {
     private const val KEY_PLAY_AS_HOME = "play_as_home"
     private const val KEY_SWAP_HOME = "swap_home"
 
-    /** The account to come back to while the engine is switched for one of Mirazuki's reads. Opaque id only. */
+    /** The account to come back to while the engine is switched for one of miryo's reads. Opaque id only. */
     var swapHome: String?
         get() = context?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.getString(KEY_SWAP_HOME, null)
         set(value) {
@@ -102,7 +102,7 @@ object FeedCache {
         }
 
     /**
-     * MirazukiTube's own account while the engine plays as another one for Mirazuki (contract v2): kept
+     * miryo tube's own account while the engine plays as another one for miryo (contract v2): kept
      * on disk so a process killed meanwhile goes back to it at the next start. Opaque id only.
      */
     var playAsHome: String?
@@ -141,7 +141,7 @@ object FeedCache {
 
     /**
      * Replaces one list of [accountId]'s cache (the account the data was fetched for: a switch while
-     * it loaded never mixes accounts) and tells Mirazuki.
+     * it loaded never mixes accounts) and tells miryo.
      */
     fun store(list: String, items: List<Item>, accountId: String) {
         val ctx = context ?: return

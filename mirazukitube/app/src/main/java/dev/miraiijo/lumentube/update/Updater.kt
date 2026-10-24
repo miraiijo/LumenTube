@@ -15,7 +15,7 @@ import java.net.URL
 import java.security.MessageDigest
 
 /**
- * Self-update of the Mirazuki apps. Same file in Mirazuki, MirazukiTube and MirazukiIPTV (only the package line
+ * Self-update of the miryo apps. Same file in miryo, miryo tube and miryo iptv (only the package line
  * differs): fix it in the three.
  *
  * Channel: the public repo miraiijo/mirazuki-releases (formerly lumen-releases), release « channel », one `<app>.json` per app,
@@ -23,7 +23,7 @@ import java.security.MessageDigest
  *   {"format":1,"package":"dev.miraiijo.<app>","stable":{…}|null,"beta":{…}|null}
  *   entry: {"versionCode","versionName","apk","sha256","size","notes","date"}
  * Stable versions only by default; with « Recevoir les versions bêta », the newest of the two.
- * Mirazuki also installs and updates its companions with it ([checkFor] / [download] of another package).
+ * miryo also installs and updates its companions with it ([checkFor] / [download] of another package).
  * No account and no token: public files over HTTPS. Before the system installer gets the APK, its
  * size, SHA-256, package, version and signing certificate are checked (the installer itself also
  * refuses an APK signed with another key). Blocking calls: IO dispatcher only.
@@ -44,7 +44,7 @@ object Updater {
 
     /** One version offered by the channel. [beta]: published as a beta (may crash or have bugs). */
     data class UpdateInfo(
-        /** The app this APK is (this app, or a companion Mirazuki installs). */
+        /** The app this APK is (this app, or a companion miryo installs). */
         val packageName: String,
         val versionCode: Long,
         val versionName: String,
@@ -83,7 +83,7 @@ object Updater {
     }
 
     /**
-     * One download at a time in this process (Mirazuki itself and its companions): two downloads at
+     * One download at a time in this process (miryo itself and its companions): two downloads at
      * once would fight for the bandwidth and the cache. [download] refuses while this is held.
      */
     private val busy = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -99,7 +99,7 @@ object Updater {
     fun check(context: Context, app: String): UpdateInfo? = checkFor(context, app, context.packageName, wantsBeta(context))
 
     /**
-     * Same for any Mirazuki app [pkg] (« mirazukitube » / dev.miraiijo.lumentube…): the version to install
+     * Same for any miryo app [pkg] (« mirazukitube » / dev.miraiijo.lumentube…): the version to install
      * when it isn't installed, or one newer than the installed one; null otherwise or when nothing
      * is published.
      */
@@ -289,7 +289,7 @@ object Updater {
                 connectTimeout = TIMEOUT_MS
                 readTimeout = TIMEOUT_MS
                 instanceFollowRedirects = false
-                setRequestProperty("User-Agent", "Mirazuki-Updater")
+                setRequestProperty("User-Agent", "miryo-Updater")
             }
             when (val code = connection.responseCode) {
                 in 200..299 -> return connection

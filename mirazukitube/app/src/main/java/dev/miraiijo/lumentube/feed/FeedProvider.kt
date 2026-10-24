@@ -15,21 +15,21 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
- * Feed for the Mirazuki launcher (frozen contract):
+ * Feed for the miryo launcher (frozen contract):
  *  - query /continue: videos started and not finished;
  *  - query /subscriptions: latest videos of the subscriptions;
- *  - query /accounts: the accounts linked in MirazukiTube (opaque id, name, avatar, selected);
+ *  - query /accounts: the accounts linked in miryo tube (opaque id, name, avatar, selected);
  *  - query /search?q=…: the first 20 videos YouTube finds (same columns as /continue);
  *  - call "select_account" (arg = account_id): switches account, its feed is refreshed.
  * Contract v2 (contract=2&account=<account_id> on /continue, /subscriptions and /search): that
- * account's data, whatever account MirazukiTube shows, without switching it; an unknown account (or
- * an id longer than 128 characters) gets an empty list. Without account: MirazukiTube's account.
- * Trust (mirazuki-link v3, see link/MirazukiLink.kt): only answers Mirazuki, the calling package must be
+ * account's data, whatever account miryo tube shows, without switching it; an unknown account (or
+ * an id longer than 128 characters) gets an empty list. Without account: miryo tube's account.
+ * Trust (mirazuki-link v3, see link/MirazukiLink.kt): only answers miryo, the calling package must be
  * dev.miraiijo.lumen signed with the certificate in BuildConfig.CERT_MIRAZUKI (gradle.properties).
- * Not a signature permission: the two apps have their own keys. MirazukiTube also works without Mirazuki.
+ * Not a signature permission: the two apps have their own keys. miryo tube also works without miryo.
  * Each account has its own cache (FeedCache), always answered at once; older than 30 min and
  * signed in, it's refreshed in the background (one refresh per account and list at a time, not
- * retried within a minute) and Mirazuki is notified when the new one is written. Signed out: empty.
+ * retried within a minute) and miryo is notified when the new one is written. Signed out: empty.
  * No e-mail, token or cookie, ever.
  */
 class FeedProvider : ContentProvider() {
@@ -71,7 +71,7 @@ class FeedProvider : ContentProvider() {
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor {
         val ctx = context ?: throw SecurityException("Not ready")
         // Who asks comes first: anything else is refused before the URI is even looked at.
-        if (!isMirazuki(ctx)) throw SecurityException("This feed is only readable by the Mirazuki launcher")
+        if (!isMirazuki(ctx)) throw SecurityException("This feed is only readable by the miryo launcher")
         val code = matcher.match(uri)
         if (code == UriMatcher.NO_MATCH) throw IllegalArgumentException("Unknown feed: $uri")
         ready(ctx)
@@ -105,7 +105,7 @@ class FeedProvider : ContentProvider() {
         val cursor = MatrixCursor(FeedCache.COLUMNS)
         if (accountId == null) return cursor
         val (updatedMs, items) = FeedCache.load(list, accountId)
-        // The cache now, never a wait on YouTube; stale: refreshed behind (Mirazuki is notified).
+        // The cache now, never a wait on YouTube; stale: refreshed behind (miryo is notified).
         if (System.currentTimeMillis() - updatedMs > MAX_AGE_MS) refreshLater(accountId, listOf(list))
         items.take(FeedCache.MAX_ROWS).forEach { cursor.addRow(it.toRow()) }
         return cursor
@@ -113,7 +113,7 @@ class FeedProvider : ContentProvider() {
 
     /**
      * Refreshes [lists] of [accountId] on the worker, as that account (the engine switches back
-     * right after; MirazukiTube on screen: only if it's the engine's account). Single flight: a list
+     * right after; miryo tube on screen: only if it's the engine's account). Single flight: a list
      * already queued or running, or started less than a minute ago, isn't asked again.
      */
     private fun refreshLater(accountId: String, lists: List<String>, force: Boolean = false) {
@@ -159,7 +159,7 @@ class FeedProvider : ContentProvider() {
             val items = if (accountId == null) {
                 YouTube.searchItems(text) // signed out
             } else {
-                // As that account. MirazukiTube on screen on another account (no switch then): an account
+                // As that account. miryo tube on screen on another account (no switch then): an account
                 // asked for gets nothing rather than another account's results; none asked: its own.
                 YouTube.asAccount(accountId, allowSwitch = RemoteControl.accountSwitchAllowed) { YouTube.searchItems(text) }
                     ?: if (accountAsked || YouTube.playingAsOther) emptyList() else YouTube.searchItems(text)
@@ -182,13 +182,13 @@ class FeedProvider : ContentProvider() {
      */
     override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
         val ctx = context ?: throw SecurityException("Not ready")
-        if (!isMirazuki(ctx)) throw SecurityException("This feed is only readable by the Mirazuki launcher")
+        if (!isMirazuki(ctx)) throw SecurityException("This feed is only readable by the miryo launcher")
         if (method != METHOD_SELECT_ACCOUNT) return null
         ready(ctx)
         val selected = arg != null && YouTube.selectFeedAccount(arg)
         if (selected && arg != null) {
             FeedCache.markStale(arg)
-            // As that account (during a Mirazuki launch played as another one, the engine isn't on it);
+            // As that account (during a miryo launch played as another one, the engine isn't on it);
             // the same single flight as the queries' refreshes.
             refreshLater(arg, listOf(FeedCache.CONTINUE, FeedCache.SUBSCRIPTIONS), force = true)
         }
@@ -200,14 +200,14 @@ class FeedProvider : ContentProvider() {
         GlobalPreferences.instance(ctx.applicationContext)
         FeedCache.attach(ctx)
         YouTube.watchAccountChanges()
-        // A Mirazuki launch cut short (process killed while playing as another account): back home.
+        // A miryo launch cut short (process killed while playing as another account): back home.
         YouTube.restoreHome()
     }
 
     /**
-     * The caller is Mirazuki (mirazuki-link v3): its package name, given by the system and not by the
+     * The caller is miryo (mirazuki-link v3): its package name, given by the system and not by the
      * caller, and its signing certificate, the one this build expects (BuildConfig.CERT_MIRAZUKI). Any
-     * other app, Mirazuki signed with another key, or a build without that certificate, is refused.
+     * other app, miryo signed with another key, or a build without that certificate, is refused.
      */
     private fun isMirazuki(ctx: android.content.Context): Boolean =
         callingPackage == MirazukiLink.MIRAZUKI && runCatching { MirazukiLink.callerIsOneOf(ctx, MirazukiLink.MIRAZUKI) }.getOrDefault(false)

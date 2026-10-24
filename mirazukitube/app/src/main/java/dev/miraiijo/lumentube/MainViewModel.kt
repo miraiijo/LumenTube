@@ -95,7 +95,7 @@ data class Settings(
     val appearance: Int = 0,
     /** "Taille de l'interface", in % (ui.UI_SCALE_MIN..UI_SCALE_MAX). */
     val uiScale: Int = UI_SCALE_DEFAULT,
-    /** "Recevoir même MirazukiTube fermé": the phone link listens in the background (remote.CastService). */
+    /** "Recevoir même miryo tube fermé": the phone link listens in the background (remote.CastService). */
     val backgroundCast: Boolean = false,
 )
 
@@ -170,8 +170,8 @@ data class UiState(
     val update: UpdateUi = UpdateUi(),
     /**
      * Kids profile on: no account, only the allowed channels (Accueil, one row each), no search,
-     * comments, card menus, Réglages, phone or links. [kidsLocked]: Mirazuki's current profile is a
-     * kids one, the way out is in Mirazuki (no parental code here).
+     * comments, card menus, Réglages, phone or links. [kidsLocked]: miryo's current profile is a
+     * kids one, the way out is in miryo (no parental code here).
      */
     val kids: Boolean = false,
     val kidsLocked: Boolean = false,
@@ -222,7 +222,7 @@ data class UiState(
 class MainViewModel(application: Application, private val saved: SavedStateHandle) : AndroidViewModel(application) {
     private val prefs = PlayerPrefs(application)
     private val kidsStore = KidsStore(application)
-    /** One kids profile change at a time (start, Mirazuki's profile, the parental code). */
+    /** One kids profile change at a time (start, miryo's profile, the parental code). */
     private val kidsMutex = kotlinx.coroutines.sync.Mutex()
     private val _state = MutableStateFlow(UiState(settings = prefs.settings()))
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -230,10 +230,10 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     /** Accueil's extra rows being loaded (declared before init, which may use it). */
     private var homeExtrasJob: Job? = null
 
-    /** Mirazuki asked to skip "Qui regarde ?" (contract v2): the start doesn't show it. */
+    /** miryo asked to skip "Qui regarde ?" (contract v2): the start doesn't show it. */
     private var skipPicker = false
 
-    /** The video plays as another account than MirazukiTube's (a Mirazuki launch): undone when it stops. */
+    /** The video plays as another account than miryo tube's (a miryo launch): undone when it stops. */
     private var playingAs = false
     private var signIn: Disposable? = null
     /** Rows whose next page is being fetched (one request at a time per row). */
@@ -244,7 +244,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     init {
         RemoteControl.uiAttached = true
         dev.miraiijo.lumentube.remote.CastService.sync(getApplication(), _state.value.settings)
-        // Account switched from Mirazuki (or anywhere else): the pages reload for the new account.
+        // Account switched from miryo (or anywhere else): the pages reload for the new account.
         accountListener = YouTube.onAccountChanged {
             viewModelScope.launch {
                 // By id, not by name (two accounts can share a name): the pages are another account's.
@@ -259,18 +259,18 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         }
         viewModelScope.launch { RemoteControl.events.collect(::onRemote) }
         // Back after the process was killed in the background: the section, the video and the
-        // answer to "Qui regarde ?" come back (not a video played as another account for Mirazuki).
+        // answer to "Qui regarde ?" come back (not a video played as another account for miryo).
         val restored = saved.get<Boolean>(KEY_PICKED) != null
         val savedSection = saved.get<String>(KEY_SECTION)?.let { name -> Section.entries.firstOrNull { it.name == name } } ?: Section.HOME
         saved.get<String>(KEY_VIDEO)?.takeIf { VIDEO_ID.matches(it) }?.let { id ->
             _state.update { it.copy(playingId = id, playingStart = saved.get<Int>(KEY_POSITION) ?: 0) }
         }
         viewModelScope.launch {
-            // A Mirazuki launch cut short (process killed while playing as another account): back home.
+            // A miryo launch cut short (process killed while playing as another account): back home.
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { YouTube.restoreHome() } }
             kidsUi()
-            // Kids profile: Mirazuki's current profile is a kids one, or it was left on (a kid closing
-            // the app comes back to it). Turned on by Mirazuki and Mirazuki back on an adult: off again.
+            // Kids profile: miryo's current profile is a kids one, or it was left on (a kid closing
+            // the app comes back to it). Turned on by miryo and miryo back on an adult: off again.
             if (startKids()) {
                 _state.update { it.copy(accounts = YouTube.accounts()) }
                 keepSavedState()
@@ -279,7 +279,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
             val accounts = YouTube.accounts()
             val guest = accounts.isNotEmpty() && !kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { YouTube.signedIn }
             // Several accounts, or "Invité" left on last time: "Qui regarde ?" first, Accueil loads
-            // for the one picked (not when Mirazuki launched a video and asked to skip it, nor when it
+            // for the one picked (not when miryo launched a video and asked to skip it, nor when it
             // was answered before the process was killed).
             val ask = if (restored) saved.get<Boolean>(KEY_PICKED) == false else accounts.size >= 2 || guest
             if (ask && !skipPicker) {
@@ -742,7 +742,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
                 if (current == event.videoId) {
                     if (s.minimized) restore()
                 } else if (playingAs) {
-                    // A Mirazuki launch was playing as another account: the phone's video plays with MirazukiTube's.
+                    // A miryo launch was playing as another account: the phone's video plays with miryo tube's.
                     playLink(event.videoId, (event.startMs / 1000).toInt())
                 } else {
                     closeDialogs()
@@ -773,8 +773,8 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     }
 
     /**
-     * [accountId] (Mirazuki, contract v2): play as that account, for this playback only (history and
-     * position go to it); MirazukiTube's own account comes back when the video stops. Unknown or the
+     * [accountId] (miryo, contract v2): play as that account, for this playback only (history and
+     * position go to it); miryo tube's own account comes back when the video stops. Unknown or the
      * same: the selected account. [skipPickerAsked]: no "Qui regarde ?".
      */
     fun playLink(videoId: String, startSeconds: Int = 0, accountId: String? = null, skipPickerAsked: Boolean = false) {
@@ -802,7 +802,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
             playAsMutex.withLock {
                 val was = playingAs
                 if (was || hadVideo) awaitHistoryWrites()
-                // An account given: play as it; none (or unknown, or MirazukiTube's own): back to MirazukiTube's.
+                // An account given: play as it; none (or unknown, or miryo tube's own): back to miryo tube's.
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { YouTube.beginPlayAs(accountId) } }
                 playingAs = YouTube.playingAsOther
                 if (was && !playingAs) reloadHome()
@@ -824,7 +824,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         }
     }
 
-    /** After a Mirazuki launch played as another account: MirazukiTube's own account and pages again. */
+    /** After a miryo launch played as another account: miryo tube's own account and pages again. */
     private fun endPlayingAs() {
         if (!playingAs) return
         viewModelScope.launch {
@@ -834,13 +834,13 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { YouTube.endPlayAs() } }
                 playingAs = false
                 reloadHome()
-                // "Reprendre" of MirazukiTube's account (not the one just played as).
+                // "Reprendre" of miryo tube's account (not the one just played as).
                 loadResume()
             }
         }
     }
 
-    /** Pages loaded meanwhile may be the other account's: reloaded for MirazukiTube's own. */
+    /** Pages loaded meanwhile may be the other account's: reloaded for miryo tube's own. */
     private fun reloadHome() {
         cancelLoads()
         channelJob?.cancel()
@@ -868,7 +868,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
 
     fun stopPlaying() {
         _state.update { it.copy(playing = null, playingId = null, minimized = false) }
-        // A Mirazuki launch played as another account: its end reloads MirazukiTube's (Reprendre included).
+        // A miryo launch played as another account: its end reloads miryo tube's (Reprendre included).
         if (playingAs) {
             endPlayingAs()
             return
@@ -886,13 +886,13 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
 
     private fun kidsUi() = _state.update { it.copy(kidsExists = kidsStore.exists, kidChannels = kidsStore.channels) }
 
-    /** At start: true when the kids profile is on (Mirazuki's current profile, or left on here). */
+    /** At start: true when the kids profile is on (miryo's current profile, or left on here). */
     private suspend fun startKids(): Boolean {
         val mirazukiKids = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { MirazukiProfile.currentIsKids(getApplication()) }
         return kidsMutex.withLock {
             when {
                 mirazukiKids == true -> beginKids(fromMirazuki = true)
-                // Turned on by Mirazuki, and Mirazuki is on an adult profile now: off, without a code.
+                // Turned on by miryo, and miryo is on an adult profile now: off, without a code.
                 kidsStore.active && kidsStore.fromMirazuki && mirazukiKids == false -> {
                     endKidsLocked()
                     return@withLock false
@@ -904,7 +904,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         }
     }
 
-    /** Back on screen: Mirazuki's profile may have changed meanwhile (kids ↔ adult). */
+    /** Back on screen: miryo's profile may have changed meanwhile (kids ↔ adult). */
     private fun checkMirazukiProfile() {
         viewModelScope.launch {
             val mirazukiKids = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { MirazukiProfile.currentIsKids(getApplication()) } ?: return@launch
@@ -926,8 +926,8 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
      */
     private suspend fun beginKids(fromMirazuki: Boolean) {
         if (!_state.value.kids) {
-            // A Mirazuki launch playing as another account: that account goes first (the engine is
-            // MirazukiTube's again), then no account at all.
+            // A miryo launch playing as another account: that account goes first (the engine is
+            // miryo tube's again), then no account at all.
             if (playingAs) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { YouTube.endPlayAs() } }
                 playingAs = false
@@ -1132,7 +1132,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
                         busy = false,
                         found = result.getOrNull(),
                         message = result.fold(
-                            { found -> if (found == null) "Mirazuki Tube est à jour." else "Nouvelle version : ${found.versionName}." },
+                            { found -> if (found == null) "miryo tube est à jour." else "Nouvelle version : ${found.versionName}." },
                             { e -> e.message ?: "Vérification impossible." },
                         ),
                     ),
@@ -1149,9 +1149,9 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         if (!runCatching { Updater.canInstall(app) }.getOrDefault(false)) {
             val opened = Updater.openInstallPermissionSettings(app)
             val msg = if (opened) {
-                "Autorise Mirazuki Tube à installer des applis, puis relance l’installation."
+                "Autorise miryo tube à installer des applis, puis relance l’installation."
             } else {
-                "Autorise l'installation d'applis pour Mirazuki Tube dans Paramètres Android › Sécurité"
+                "Autorise l'installation d'applis pour miryo tube dans Paramètres Android › Sécurité"
             }
             _state.update { it.copy(update = it.update.copy(message = msg)) }
             return
@@ -1190,9 +1190,9 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
     fun openAccounts() {
         val s = _state.value
         when {
-            // Mirazuki's kids profile: the way out is in Mirazuki, behind its own parental code.
-            s.kidsLocked -> showNotice("Profil enfant de Mirazuki : change de profil dans Mirazuki.")
-            // MirazukiTube's kids profile: the parental code first.
+            // miryo's kids profile: the way out is in miryo, behind its own parental code.
+            s.kidsLocked -> showNotice("Profil enfant de miryo : change de profil dans miryo.")
+            // miryo tube's kids profile: the parental code first.
             s.kids -> _state.update { it.copy(pin = PinPrompt(PinStep.UNLOCK)) }
             else -> {
                 _state.update { it.copy(accountsOpen = true) }
@@ -1249,7 +1249,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         if (_state.value.kids) return
         viewModelScope.launch {
             if (!account.selected) YouTube.selectAccount(account)
-            // Playing as another account for Mirazuki: the new home loads when that video stops.
+            // Playing as another account for miryo: the new home loads when that video stops.
             if (playingAs) {
                 _state.update { it.copy(choosingAccount = false, accountsOpen = false, settingsOpen = false) }
                 refreshAccount()
@@ -1305,7 +1305,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val signed = YouTube.signedIn
             val accounts = YouTube.accounts()
-            // MirazukiTube's own account (its pages), not one a Mirazuki launch plays as.
+            // miryo tube's own account (its pages), not one a miryo launch plays as.
             val id = if (signed) YouTube.homeAccountId() else null
             _state.update {
                 it.copy(
@@ -1336,7 +1336,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
         const val UPDATE_APP = "lumentube"
         /** After a play-as video stops: the player's last position save starts (dispose)… */
         const val HISTORY_SETTLE_MS = 400L
-        /** …and is waited for, at most this long, before MirazukiTube's account comes back. */
+        /** …and is waited for, at most this long, before miryo tube's account comes back. */
         const val HISTORY_WAIT_MS = 5_000L
         /** Kids profile: Accueil's rows' keys, and channels read at once (the Freebox Player POP is slow). */
         const val KIDS_ROW = "kids-"
@@ -1346,7 +1346,7 @@ class MainViewModel(application: Application, private val saved: SavedStateHandl
 
     override fun onCleared() {
         RemoteControl.uiAttached = false
-        // Leaving while a Mirazuki launch played as another account: MirazukiTube's own one again.
+        // Leaving while a miryo launch played as another account: miryo tube's own one again.
         if (playingAs) {
             AppScope.launch {
                 delay(HISTORY_SETTLE_MS)

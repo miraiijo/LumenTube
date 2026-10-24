@@ -8,8 +8,8 @@ import javax.crypto.spec.PBEKeySpec
 
 /**
  * The parental code (4 digits) is never stored: only PBKDF2-HMAC-SHA256 of it, with a random
- * 16-byte salt, as « pbkdf2-sha256$<iterations>$<salt>$<hash> » (Base64). Copied from Mirazuki's
- * (same format as MirazukiIPTV's): fix it in the three. 20 000 iterations: tens of ms on the player's
+ * 16-byte salt, as « pbkdf2-sha256$<iterations>$<salt>$<hash> » (Base64). Copied from miryo's
+ * (same format as miryo iptv's): fix it in the three. 20 000 iterations: tens of ms on the player's
  * weak ARM cores (always run off the main thread), while a copy of the prefs alone no longer shows
  * the code. Only 10 000 codes exist, so the real protection stays the persistent try limiter.
  * Comparison in constant time. Pure JVM.

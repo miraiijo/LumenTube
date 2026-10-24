@@ -1,6 +1,6 @@
 // Copied from SmartTube (common/exoplayer/ExoMediaSourceFactory.java) at upstream commit 03b6625.
 // Re-sync this file when SmartTube changes it (diff the upstream file since that commit).
-// MirazukiTube changes: data source = Cronet, else OkHttp (no PlayerTweaksData); no TrackErrorFixer.
+// miryo tube changes: data source = Cronet, else OkHttp (no PlayerTweaksData); no TrackErrorFixer.
 package dev.miraiijo.lumentube.player.upstream;
 
 import android.annotation.SuppressLint;
@@ -128,7 +128,7 @@ public class ExoMediaSourceFactory {
      *                          DataSource factory.
      * @return A new HttpDataSource factory.
      */
-    // MirazukiTube: SmartTube's default choice (Utils.getFasterDataSource) without its settings:
+    // miryo tube: SmartTube's default choice (Utils.getFasterDataSource) without its settings:
     // Cronet when its engine loads, else OkHttp.
     private HttpDataSource.Factory buildHttpDataSourceFactory(boolean useBandwidthMeter, int readTimeoutMs) {
         DefaultBandwidthMeter bandwidthMeter = useBandwidthMeter ? BANDWIDTH_METER : null;

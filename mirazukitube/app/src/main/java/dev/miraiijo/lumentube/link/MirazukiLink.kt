@@ -6,7 +6,7 @@ import dev.miraiijo.lumentube.BuildConfig
 import dev.miraiijo.lumentube.update.Updater
 
 /**
- * mirazuki-link v3: how the Mirazuki apps find each other. Same file in Mirazuki, MirazukiTube and MirazukiIPTV
+ * mirazuki-link v3: how the miryo apps find each other. Same file in miryo, miryo tube and miryo iptv
  * (only the package lines differ): fix it in the three.
  *
  * Each app works alone. A partner is used only when it is installed, when the provider belongs to
@@ -16,10 +16,10 @@ import dev.miraiijo.lumentube.update.Updater
  * Empty = linking off for that app (safe default: nothing is read, nothing is answered).
  *
  * Providers (read-only, every query checks the caller):
- *  - Mirazuki      content://dev.miraiijo.lumen.profiles/profiles
+ *  - miryo      content://dev.miraiijo.lumen.profiles/profiles
  *               profile_id, name, color (ARGB long), avatar, kids ("1"/"0"), current ("1"/"0")
- *  - MirazukiTube  content://dev.miraiijo.lumentube.feed/…  (feed contract v2, see FeedProvider)
- *  - MirazukiIPTV  content://dev.miraiijo.lumeniptv.rows/channels?profile=<profile_id>
+ *  - miryo tube  content://dev.miraiijo.lumentube.feed/…  (feed contract v2, see FeedProvider)
+ *  - miryo iptv  content://dev.miraiijo.lumeniptv.rows/channels?profile=<profile_id>
  *               channel_id, name, number, logo_url (https or null), kind ("recent"/"favorite"),
  *               now_title, now_start_ms, now_end_ms — never a stream address, a host or an account
  * Each provider notifies its root URI when its data changes. Unknown columns are ignored and
@@ -36,7 +36,7 @@ object MirazukiLink {
     const val TUBE_AUTHORITY = "$MIRAZUKITUBE.feed"
     const val IPTV_AUTHORITY = "$MIRAZUKIIPTV.rows"
 
-    /** Opens a channel in Mirazuki IPTV: data lumeniptv://channel/<channel_id>, this extra = the Mirazuki profile. */
+    /** Opens a channel in miryo iptv: data lumeniptv://channel/<channel_id>, this extra = the miryo profile. */
     const val IPTV_SCHEME = "lumeniptv"
     const val EXTRA_PROFILE = "dev.miraiijo.link.extra.PROFILE_ID"
 

@@ -54,7 +54,7 @@ import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
 import androidx.compose.ui.layout.ContentScale
 
-/* Mirazuki's controls and focus scrolling, shared by every MirazukiTube screen. */
+/* miryo's controls and focus scrolling, shared by every miryo tube screen. */
 
 fun FocusRequester.tryRequestFocus(): Boolean = try {
     requestFocus(FocusDirection.Enter)
@@ -62,7 +62,7 @@ fun FocusRequester.tryRequestFocus(): Boolean = try {
     false
 }
 
-/** Primary button, as in Mirazuki: filled pill, white when focused. */
+/** Primary button, as in miryo: filled pill, white when focused. */
 @Composable
 fun MirazukiButton(
     text: String,
@@ -298,14 +298,14 @@ fun formatDuration(ms: Long): String {
     return if (h > 0) "$h:${two(m)}:${two(s)}" else "$m:${two(s)}"
 }
 
-/** The Mirazuki Tube logo (mark + wordmark), in the version drawn for the current appearance. */
+/** The miryo tube logo (mark + wordmark), in the version drawn for the current appearance. */
 @Composable
 fun BrandLogo(modifier: Modifier = Modifier) {
     androidx.compose.foundation.Image(
         androidx.compose.ui.res.painterResource(
             if (Palette.colors.isLight) dev.miraiijo.lumentube.R.drawable.brand_logo_light else dev.miraiijo.lumentube.R.drawable.brand_logo_dark,
         ),
-        contentDescription = "Mirazuki Tube",
+        contentDescription = "miryo tube",
         modifier = modifier,
     )
 }
