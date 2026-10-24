@@ -559,7 +559,7 @@ object YouTube {
         if (!signedIn) return@withContext null
         val history = runCatching { historyForFeed() }.getOrNull() ?: return@withContext null
         val started = history.mediaItems.orEmpty().filterNotNull()
-            .filter { !it.isShorts && !it.isLive && it.videoId != null && it.percentWatched in 3..94 }
+            .filter { !it.isShorts && !it.isLive && it.videoId != null && it.percentWatched in 3..94 && it.isAvailableVideo() }
             .map { it.toVideo() }
             .distinctBy { it.key }
             .take(20)
@@ -1043,3 +1043,20 @@ object YouTube {
         raw = this,
     )
 }
+
+/**
+ * Still watchable: a video deleted or made private since it was watched stays in the history,
+ * with no picture, no channel, and a title like « [Vidéo privée] »; it played « vidéo
+ * indisponible ». Used by Reprendre here and by the rows given to miryo (FeedCache).
+ */
+internal fun MediaItem.isAvailableVideo(): Boolean {
+    val name = title?.trim().orEmpty()
+    if (name.isEmpty() || UNAVAILABLE_TITLES.any { name.equals(it, ignoreCase = true) }) return false
+    if (cardImageUrl.isNullOrBlank() && backgroundImageUrl.isNullOrBlank()) return false
+    return !(author.isNullOrBlank() && secondTitle.isNullOrBlank())
+}
+
+private val UNAVAILABLE_TITLES = listOf(
+    "[Vidéo privée]", "[Vidéo supprimée]", "Vidéo privée", "Vidéo supprimée", "Vidéo non disponible",
+    "[Private video]", "[Deleted video]", "Private video", "Deleted video", "Video unavailable",
+)
